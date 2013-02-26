@@ -1,0 +1,13 @@
+{
+    // This file can be edited while the service is running; changes will
+    // be picked up on the next iteration
+
+    "wait_time" : 30,               // Amount of time to wait between gather reports, in seconds
+    "folder" : "/logrepo",          // Path to store the report archives in
+    "username" : "script_user",     // Cluster username to use to gather reports
+    "password" : "password",       // Cluster password to use to gather reports
+    "purge_threshold" : 30,     	// Delete reports more than this many days old
+    "mvips" : [                     // List of MVIPs for clusters to gather reports from
+        "172.25.104.200"
+    ]
+}

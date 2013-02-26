@@ -1,0 +1,41 @@
+#! /bin/expect
+
+#exp_internal 1
+set timeout 20
+log_user 0
+
+set host [lindex $argv 0]
+set user [lindex $argv 1]
+set password [lindex $argv 2]
+set command [lindex $argv 3]
+
+spawn -noecho ssh $user@$host "$command"
+match_max 32000
+expect {
+    
+    # Password prompt
+    -nocase -re "word:" {
+        exp_send "$password\r"
+        exp_continue
+    }
+    
+    # Prompt to add RSA yes if this is the first time connecting to this host
+    -nocase -re "\(yes/no\)" {
+        exp_send "yes\r"
+        exp_continue
+    }
+    
+    # If you have X11 forwarding on
+    "X11 forwarding request failed on channel 0" {
+        exp_continue
+    }
+    
+    # Command completed
+    eof {
+        puts $expect_out(buffer)
+    }
+}
+
+# Exit with the same return code as the ssh process
+catch wait result
+exit [lindex $result 3]

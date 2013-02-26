@@ -1,0 +1,56 @@
+#! /bin/expect
+
+#exp_internal 1
+set timeout 20
+log_user 0
+
+set host [lindex $argv 0]
+set user [lindex $argv 1]
+set password [lindex $argv 2]
+set command [lindex $argv 3]
+
+#set prompt "\>\ *$|#\ *$|\\$\ *$"
+set prompt "(%|#|\\$|%\]) *"
+
+eval spawn ssh $user@$host
+expect {
+    
+    # Username prompt
+    -nocase -re "name:|^login:" {
+        exp_send "$user\r"
+        exp_continue
+    }
+    
+    # Password prompt
+    -nocase -re "word:" {
+        exp_send "$password\r"
+        exp_continue
+    }
+    
+    # Prompt to add RSA yes if this is the first time connecting to this host
+    -nocase -re "\(yes/no\)" {
+        exp_send "yes\r"
+        exp_continue
+    }
+    
+    # Something failed during connection
+    eof {
+        puts "ERROR: Connection to host failed: $expect_out(buffer)"
+        return 1
+    }
+    
+    # Connected and got a prompt
+    -nocase -re "$prompt" {
+    }
+}
+
+#set command "ls -l\r"
+exp_send "$command\r"
+expect "$command\r\n"
+expect -nocase -re "(.*)\r\n.*$prompt"
+
+puts $expect_out(1,string)
+#puts "\n\n-------------------------------------\n\n"
+#puts $expect_out(buffer)
+
+send "exit\r"

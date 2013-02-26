@@ -1,0 +1,10 @@
+{
+    // This file can be edited while the service is running; changes will
+    // be picked up on the next iteration
+
+    // The name of the 'group' to put this client into
+    "group" : "ESX"
+//    "group" : "HyperV"
+//    "group" : "Xen"
+//    "group" : "KVM"
+}

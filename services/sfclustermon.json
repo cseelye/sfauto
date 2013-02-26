@@ -1,0 +1,25 @@
+{
+    // This file can be edited while the service is running; changes will
+    // be picked up on the next iteration
+    
+    "monitor_interval": 10,             // How often to check the status of the cluster(s), in seconds
+    
+    "clusters" : {                     // List of clusters to monitor
+
+        // Example -
+        //
+        // "1.2.3.4" : {
+        //     "username" : "admin",                                        // The cluster admin username
+        //     "password" : "password",                                    // The cluster admin password
+        //     "ignore_faults" : [ "clusterIOPSAreOverProvisioned" ],       // The list of cluster faults to ignore
+        // }
+        
+        // The CFT cluster
+        "192.168.154.1" : {
+            "username" : "admin",
+            "password" : "password",
+            "ignore_faults" : [ "clusterIOPSAreOverProvisioned", "clusterFull" ]
+        }
+
+    }
+}
