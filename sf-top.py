@@ -1324,7 +1324,8 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
                 nic_name = name
                 break
         if nic_name:
-            current_line += 1
+            #current_line += 1
+            current_line = pCellHeight
             screen.gotoXY(startx + 1, starty + current_line)
             screen.set_color(ConsoleColors.WhiteFore)
             print "              %7s  RX:" % (nic_name),
@@ -2002,7 +2003,7 @@ if __name__ == '__main__':
             for node_ip in node_ips:
                 if (node_results[node_ip] == None): continue
                 if compact:
-                    node_cell_height = 4 + 1 + (len(node_results[node_ip].Processes.keys()) - 2)
+                    node_cell_height = 4 + 1 + (len(node_results[node_ip].Processes.keys()) - 2) + 1
                 else:
                     node_cell_height = 4 + 1 + len(node_results[node_ip].Processes.keys()) + 1 + (len(node_results[node_ip].Nics.keys()) - 4) - 1
                 if (node_cell_height > cell_height):
