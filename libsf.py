@@ -413,6 +413,123 @@ def TimestampToStr(pTimestamp, pFormatString = "%Y-%m-%d %H:%M:%S", pTimeZone = 
     display_time = datetime.datetime.fromtimestamp(pTimestamp, pTimeZone)
     return display_time.strftime(pFormatString)
 
+def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, ExitOnError=True, ApiVersion=5.0):
+    rpc_url = 'https://' + NodeIp + ':442/json-rpc/' + ("%1.1f" % ApiVersion)
+    password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+    password_mgr.add_password(None, rpc_url, Username, Password)
+    handler = urllib2.HTTPBasicAuthHandler(password_mgr)
+    opener = urllib2.build_opener(handler)
+    urllib2.install_opener(opener)
+
+    api_call = json.dumps( { 'method': MethodName, 'params': MethodParams, 'id': random.randint(100, 1000) } )
+    retry = 5
+    last_error_code = ""
+    last_error_mess = ""
+    while(True):
+        
+        if retry <= 0:
+            mylog.error("Could not call API method " + MethodName)
+            if ExitOnError:
+                sys.exit(1)
+            else:
+                raise SfApiError(last_error_code, last_error_message)
+
+        # First try to get a valid HTTP reply to the web service call
+        http_retry = 5
+        while True:
+            api_resp = None
+            mylog.debug("Calling API on " + rpc_url + ": " + api_call)
+            try:
+                api_resp = urllib2.urlopen(rpc_url, api_call)
+                break
+            except urllib2.HTTPError as e:
+                if (e.code == 401):
+                    if ExitOnError:
+                        mylog.error("Invalid username/password")
+                        exit(1)
+                    else:
+                        raise SfApiError("HTTP error 404", "Invalid username/password")
+                else:
+                    last_error_code = str(e.code)
+                    if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
+                        mylog.warning("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
+                        last_error_message = str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code])
+                    else:
+                        mylog.warning("HTTPError: " + str(e.code))
+            except urllib2.URLError as e:
+                mylog.warning("URLError on " + rpc_url + " : " + str(e.reason))
+                last_error_code = "URLError"
+                last_error_mess = str(e.reason)
+            except httplib.BadStatusLine as e:
+                mylog.warning("httplib.BadStatusLine: " + str(e))
+                last_error_code = "httplib.BadStatusLine"
+                last_error_mess = str(e)
+            except httplib.HTTPException as e:
+                mylog.warning("HTTPException: " + str(e))
+                last_error_code = "HTTPException"
+                last_error_mess = str(e)
+            
+            http_retry -= 1
+            if http_retry <= 0:
+                if ExitOnError:
+                    mylog.error("Could not call API method " + pMethodName)
+                    exit(1)
+                raise SfApiError(last_error_code, last_error_mess)
+
+            mylog.info("Waiting 60 seconds before trying API again...")
+            time.sleep(60)
+        
+        # At this point we got a good HTTP response code from the MVIP
+        
+        # Read the raw text content of the response
+        response_str = api_resp.read().decode('ascii')
+        #print "Raw response = ------------------------------------------------------"
+        #print response_str
+        #print "---------------------------------------------------------------------"
+
+        # Make sure the response is the expected length
+        expected_len = int(api_resp.headers['content-length'])
+        actual_len = len(response_str)
+        if (expected_len != actual_len):
+            mylog.warning("API response: expected " + str(expected_len) + " bytes (content-length) but received " + str(actual_len) + " bytes")
+        
+        # Try to parse the response into JSON
+        try:
+            response_obj = json.loads(response_str)
+        except ValueError:
+            mylog.warning("Invalid JSON received from " + pMvip)
+            last_error_code = "Unknown"
+            last_error_mess = "Invalid JSON"
+            if (not response_str.endswith("}")):
+                mylog.warning("JSON appears truncated")
+                last_error_mess = "Truncated JSON"
+                retry -= 1
+                continue # go back to the beginning and try to get a better response from the cluster
+
+        # At this point we have a valid JSON object back from the cluster
+
+        # If there was no error on the cluster side, return the response back to the caller
+        if "error" not in response_obj:
+            return response_obj["result"]
+
+        # Record the error
+        mylog.debug("Error response from " + str(pMvip) + ": " + str(response_str))
+        last_error_code = response_obj["error"]["name"]
+        last_error_mess = response_obj["error"]["message"]
+
+        # See if it is an error we should retry
+        if response_obj["error"]["name"] == "xDBConnectionLoss" and (pMethodName.startswith("List") or pMethodName.startswith("Get")):
+            mylog.warning("Retrying because of xDBConnectionLoss")
+            retry -= 1
+            continue # go back to the beginning and try to get a better response from the cluster
+        
+        # Any other errors, fail
+        if ExitOnError:
+            mylog.error("Error " + response_obj['error']['name'] + " - " + response_obj['error']['message'])
+            sys.exit(1)
+        else:
+            raise SfApiError(response_obj["error"]["name"], response_obj['error']['message'])
+
 # Function for calling solidfire API methods
 def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitOnError=True, ApiVersion=1.0):
     rpc_url = 'https://' + pMvip + '/json-rpc/' + ("%1.1f" % ApiVersion)
