@@ -277,7 +277,6 @@ class mylog:
         lines = mylog._split_message(message)
         for line in lines:
             mylog.sftestlog.log(MyLogLevels.RAW, line)
-        
 
 class ColorTerm:
     try:
@@ -348,7 +347,6 @@ class ColorTerm:
         else:
             YellowFore = 11
 
-
 class LocalTimezone(datetime.tzinfo):
     STDOFFSET = datetime.timedelta(seconds = -time.timezone)
     if time.daylight:
@@ -416,8 +414,8 @@ def TimestampToStr(pTimestamp, pFormatString = "%Y-%m-%d %H:%M:%S", pTimeZone = 
     return display_time.strftime(pFormatString)
 
 # Function for calling solidfire API methods
-def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitOnError=True):
-    rpc_url = 'https://' + pMvip + '/json-rpc/1.0'
+def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitOnError=True, ApiVersion=1.0):
+    rpc_url = 'https://' + pMvip + '/json-rpc/' + ("%1.1f" % ApiVersion)
 
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
     password_mgr.add_password(None, rpc_url, pUsername, pPassword)
