@@ -97,6 +97,8 @@ def main():
         env_name = "SF" + vname.upper()
         if os.environ.get(env_name):
             globals()[vname] = os.environ[env_name]
+    if isinstance(client_ips, basestring):
+        client_ips = client_ips.split(",")
 
     # Parse command line arguments
     parser = OptionParser()

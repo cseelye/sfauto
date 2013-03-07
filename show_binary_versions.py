@@ -37,6 +37,9 @@ def main():
         env_name = "SF" + vname.upper()
         if os.environ.get(env_name):
             globals()[vname] = os.environ[env_name]
+    if isinstance(node_ips, basestring):
+        node_ips = node_ips.split(",")
+
 
     # Parse command line arguments
     parser = OptionParser()

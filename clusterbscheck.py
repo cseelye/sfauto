@@ -18,7 +18,7 @@ password = "solidfire"              # Admin password for the cluster
 ssh_user = "root"               # The username for the nodes
                                 # --ssh_user
 
-ssh_pass = "sf.9012182"          # The password for the nodes
+ssh_pass = "password"          # The password for the nodes
                                 # --ssh_pass
 
 timeout = 90                    # How long to wait for ClusterBSCheck to finish, in min

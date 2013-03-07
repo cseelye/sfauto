@@ -76,6 +76,8 @@ def main():
         env_name = "SF" + vname.upper()
         if os.environ.get(env_name):
             globals()[vname] = os.environ[env_name]
+    if isinstance(client_ips, basestring):
+        client_ips = client_ips.split(",")
 
     # Parse command line arguments
     parser = OptionParser()
@@ -154,6 +156,7 @@ def main():
             outfile.write("hd=hd" + str(host_number) + ",system=" + client_ip + ",vdbench=C:\\vdbench,shell=vdbench\n")
         else:
             outfile.write("hd=hd" + str(host_number) + ",system=" + client_ip + ",vdbench=/opt/vdbench,user=root,shell=ssh\n")
+        outfile.flush()
         host_number += 1
 
     # Connect to each client and build the list of SDs
@@ -173,12 +176,14 @@ def main():
                 outfile.write(",lun=" + device + "\n")
             else:
                 outfile.write(",lun=" + device + ",openflags=o_direct\n")
+            outfile.flush()
         host_number += 1
 
     outfile.write("wd=default," + workload + ",sd=sd*\n")
     host_number = 1
     for client_ip in client_ips:
         outfile.write("wd=wd" + str(host_number) + ",host=hd" + str(host_number) + "\n")
+        outfile.flush()
         host_number += 1
 
     outfile.write("rd=default,iorate=max,elapsed=" + run_time + ",interval=" + str(interval) + ",threads=" + str(threads) + "\n")
