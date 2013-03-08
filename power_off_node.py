@@ -1,21 +1,21 @@
 #!/usr/bin/python
 
-# This script will power cycle a cluster node
+# This script will power off a cluster node
 
 # ----------------------------------------------------------------------------
 # Configuration
 #  These may also be set on the command line
 
-node_ip = "192.168.000.000"     # The management IP of the node to power cycle
+node_ip = "192.168.000.000"     # The management IP of the node to power off
                                 # --node_ip
 
 ssh_user = "root"               # The username for the nodes
                                 # --ssh_user
 
-ssh_pass = "password"         # The password for the nodes
+ssh_pass = "sf.9012182"         # The password for the nodes
                                 # --ssh_pass
 
-ipmi_ip = None                  # The IPMI IP address of the node to power cycle
+ipmi_ip = None                  # The IPMI IP address of the node to power off
                                 # If None, the script will determine the IP itself
                                 # --ipmi_ip
 
@@ -43,10 +43,10 @@ def main():
 
     # Parse command line arguments
     parser = OptionParser()
-    parser.add_option("--node_ip", type="string", dest="node_ip", default=node_ip, help="the management IP of the node to power cycle")
+    parser.add_option("--node_ip", type="string", dest="node_ip", default=node_ip, help="the management IP of the node to power off")
     parser.add_option("--ssh_user", type="string", dest="ssh_user", default=ssh_user, help="the SSH username for the nodes.  Only used if you do not have SSH keys set up. [%default]")
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes.  Only used if you do not have SSH keys set up, [%default]")
-    parser.add_option("--ipmi_ip", type="string", dest="ipmi_ip", default=ipmi_ip, help="the IPMI IP of the node to power cycle. If not specified, the script will determine the IP")
+    parser.add_option("--ipmi_ip", type="string", dest="ipmi_ip", default=ipmi_ip, help="the IPMI IP of the node to power off. If not specified, the script will determine the IP")
     parser.add_option("--ipmi_user", type="string", dest="ipmi_user", default=ipmi_user, help="the IPMI username for the nodes [%default]")
     parser.add_option("--ipmi_pass", type="string", dest="ipmi_pass", default=ipmi_pass, help="the IPMI password for the nodes [%default]")
     parser.add_option("--nowait", action="store_true", dest="nowait", help="do not wait for the node to come back up")
@@ -68,25 +68,18 @@ def main():
     if not ipmi_ip:
         mylog.info("Determining IPMI IP address for " + node_ip)
         ipmi_ip = libsf.GetIpmiIp(node_ip, ssh_user, ssh_pass)
-    
+
     if not libsf.IsValidIpv4Address(ipmi_ip):
         mylog.error("'" + ipmi_ip + "' does not appear to be a valid IPMI IP")
         sys.exit(1)
-
-    mylog.info("Power cycling node " + node_ip)
-    libsf.IpmiCommand(ipmi_ip, ipmi_user, ipmi_pass, "chassis power reset")
+    
+    mylog.info("Powering off node " + node_ip)
+    libsf.IpmiCommand(ipmi_ip, ipmi_user, ipmi_pass, "chassis power off")
     
     mylog.info("Waiting for " + node_ip + " to go down")
     while (libsf.Ping(node_ip)): time.sleep(1)
 
-    mylog.info("Waiting for " + node_ip + " to come up")
-    time.sleep(120)
-    while (not libsf.Ping(node_ip)): time.sleep(1)
-
-    # Wait a couple extra seconds for services to be starting up
-    time.sleep(10)
-
-    mylog.passed(node_ip + " power cycled successfully")
+    mylog.passed(node_ip + " powered off successfully")
 
 
 if __name__ == '__main__':
