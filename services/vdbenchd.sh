@@ -10,16 +10,16 @@ stopme()
     echo "0" > /opt/vdbench/last_vdbench_exit
     logger -s -i -t vdbenchd "Killing vdbench"
     echo "Killing vdbench"
-    killall java
-    killall vdbench
-    for pid in $(ps -ef | grep java | grep -v grep | awk '{print $2}'); do kill -9 $pid; done
+    killall -9 vdbench
+    killall -9 java
+    #for pid in $(ps -ef | grep java | grep -v grep | awk '{print $2}'); do kill -9 $pid; done
     exit 0
 }
-trap "stopme" TERM
+trap "stopme" TERM INT
 
 logger -i -t vdbenchd "Starting vdbench"
 
-# Wait a short while before starting
+# Wait a short while before starting, to make sure the system is mostly done booting
 UPTIME=$(awk '{print $1}' /proc/uptime)
 while [ "$UPTIME" -lt "120" ]; do
 	sleep 5
@@ -27,7 +27,8 @@ while [ "$UPTIME" -lt "120" ]; do
 done
 
 while true; do
-    # Start vdbench and record its PID
+    # Start vdbench and record its PID and start time
+    START_TIME=$(date +"%Y-%m-%d-%H-%M-%S")
     /opt/vdbench/vdbench -o $OUT_PATH -f $PARM_PATH &
     PID=$!
     echo "$PID" > /opt/vdbench/last_vdbench_pid
@@ -35,22 +36,36 @@ while true; do
     # Wait for vdbench to finish and record its exit status
     wait $PID
     STATUS=$?
-    COUNT=`grep -c "start time greater than end time" /root/vdbench/logfile.html`
+    
+    
+    # Look for known issues caused by clock skew - ntpdate runs at startup and often moves the clock after vdbench has started, which causes vdbench to fail
+    
+    COUNT=`grep -c "start time greater than end time" $OUT_PATH/logfile.html`
     if [ "$COUNT" -gt "0" ]; then
         logger -i -t vdbenchd "vdbench failed due to clock skew; restarting"
         sleep 10
         continue
     fi
-    COUNT=`grep -c "Unable to find bucket" /root/vdbench/localhost-0.stdout.html`
-    if [ "$COUNT" -gt "0" ]; then
-        logger -i -t vdbenchd "vdbench failed due to clock skew; restarting"
-        sleep 10
-        continue
-    fi
-        
+    RESTART=0
+    for outfile in `ls $OUT_PATH/*.stdout.html`; do
+        COUNT=`grep -c "Unable to find bucket" $outfile`
+        if [ "$COUNT" -gt "0" ]; then
+            logger -i -t vdbenchd "vdbench failed due to clock skew; restarting"
+            sleep 10
+            RESTART=1
+            break
+        fi
+    done
+    if [ "$RESTART" -gt "0" ]; then continue; fi
+    
     break
 done
+
 echo "$STATUS" > /opt/vdbench/last_vdbench_exit
+# Keep a copy of the output files if vdbench failed
+if [ "$STATUS" -ne "0" ]; then
+    mv $OUT_PATH $OUT_PATH.$START_TIME
+fi
 logger -i -t vdbenchd "vdbench exited with status $STATUS"
 exit $STATUS
 
