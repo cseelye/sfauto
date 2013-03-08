@@ -33,13 +33,13 @@ dedupratio = 1                  # the dedup ratio to use
 dedupunit = 4096                # the dedup unit to use
                                 # --dedupratio
 
-workload = "rdpct=80,seekpct=0,xfersize=4k"    # The workload specification
+workload = "rdpct=80,seekpct=100,xfersize=4k"    # The workload specification
                                 # --workload
 
 run_time = "8h"               # Run time (how long to run IO)
                                 # --run_time
 
-interval = 60                   # How often to report results to the screen
+interval = 10                   # How often to report results to the screen
                                 # --interval
 
 threads = 4                     # How many threads per sd (queue depth)
