@@ -1302,5 +1302,15 @@ def GetIpmiIp(NodeIp, Username, Password):
     
     return ipmi_ip
 
+def IpmiCommand(IpmiIp, IpmiUsername, IpmiPassword, IpmiCommand):
+    retry = 3
+    status = None
+    output = ""
+    while retry > 0:
+        status, output = commands.getstatusoutput("ipmitool -Ilanplus -U" + str(IpmiUsername) + " -P" + str(IpmiPassword) + " -H" + str(IpmiIp) + " -E " + str(IpmiCommand))
+        if status == 0:
+            break
+        retry -= 1
+        time.sleep(3)
 
 
