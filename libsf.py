@@ -1273,3 +1273,34 @@ def Which(pExeName):
         if os.path.isdir(search_path) and pExeName in os.listdir(search_path):
             return os.path.join(search_path, pExeName)
 
+def GetIpmiIp(NodeIp, Username, Password):
+    ssh = None
+    stdout_lines = None
+    try:
+        ssh = ConnectSsh(NodeIp, Username, Password)
+        stdin, stdout, stderr = ExecSshCommand(ssh, "ipmitool lan print; echo $?")
+        stdout_lines = stdout.readlines()
+        if len(stdout_lines) <= 0:
+            mylog.error("Failed to run ipmitool - " + "\n".join(stderr.readlines()))
+            sys.exit(1)
+        if (int(stdout_lines.pop().strip()) != 0):
+            mylog.error("Failed to run ipmitool - " + "\n".join(stderr.readlines()))
+            sys.exit(1)
+    finally:
+        if ssh:
+            ssh.close()
+    
+    ipmi_ip = None
+    for line in stdout_lines:
+        m = re.search("IP Address\s+: (\S+)", line)
+        if m:
+            ipmi_ip = m.group(1)
+            break
+    if not ipmi_ip:
+        mylog.error("Could not find an IPMI IP address for this node")
+        sys.exit(1)
+    
+    return ipmi_ip
+
+
+
