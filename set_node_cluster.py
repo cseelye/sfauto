@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# This script will set the hostname of a node
+# This script will set the clustername of a pending node
 
 # ----------------------------------------------------------------------------
 # Configuration
@@ -15,7 +15,8 @@ username = "admin"                  # Admin account for the cluster
 password = "solidfire"              # Admin password for the cluster
                                     # --pass
 
-hostname = ""                       
+cluster_name = ""                   # The new cluster for the node
+
 # ----------------------------------------------------------------------------
 
 import sys,os
@@ -40,13 +41,13 @@ def main():
     parser.add_option("--node_ip", type="string", dest="node_ip", default=node_ip, help="the management IP of the node")
     parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
     parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--hostname", type="string", dest="hostname", default=hostname, help="the new hostname for the node")
+    parser.add_option("--cluster_name", type="string", dest="cluster_name", default=cluster_name, help="the new cluster for the node")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, args) = parser.parse_args()
     node_ip = options.node_ip
     username = options.username
     password = options.password
-    hostname = options.hostname
+    cluster_name = options.cluster_name
     if options.debug != None:
         import logging
         mylog.console.setLevel(logging.DEBUG)
@@ -54,10 +55,10 @@ def main():
         mylog.error("'" + node_ip + "' does not appear to be a valid node IP")
         sys.exit(1)
 
-    mylog.info("Setting hostname to '" + hostname + "' on node " + str(node_ip))
+    mylog.info("Setting cluster to '" + cluster_name + "' on node " + str(node_ip))
     params = {}
     params["cluster"] = {}
-    params["cluster"]["name"] = hostname
+    params["cluster"]["cluster"] = cluster_name
     result = libsf.CallNodeApiMethod(node_ip, username, password, "SetConfig", params)
 
     mylog.passed("Successfully set hostname")
