@@ -8,6 +8,8 @@ import re
 import os
 import string
 import tempfile
+import commands
+import platform
 try:
     import ssh
 except ImportError:
@@ -28,6 +30,7 @@ class ClientRefusedError(ClientError): pass
 
 class SfClient:
     def __init__(self):
+        self.Localhost = False
         self.LocalOs = None
         self.RemoteOs = None
         self.RemoteOsVersion = ""
@@ -64,10 +67,37 @@ class SfClient:
         mylog.passed(self._log_prefix() + pMessage)
 
     def Connect(self, pClientIp, pUsername, pPassword):
-        self.IpAddress = pClientIp
+        self.IpAddress = str(pClientIp).lower()
         self.Username = pUsername
         self.Password = pPassword
 
+        if self.IpAddress == "localhost":
+            if "win" in platform.system().lower():
+                raise ClientError("Sorry, running on Windows is not supported")
+            uname_str = commands.getoutput("uname -a")
+            uname_str = uname_str.lower()
+            if "win" in uname_str:
+                raise ClientError("Sorry, running on Windows is not supported")
+            elif "linux" in uname_str:
+                self.RemoteOs = OsType.Linux
+                if "ubuntu" in uname_str:
+                    self.RemoteOsVersion = "ubuntu"
+                elif "el" in uname_str:
+                    self.RemoteOsVersion = "redhat"
+            elif "vmkernel" in uname_str:
+                self.RemoteOs = OsType.ESX
+                m = re.search(" (\d\.\d)\.\d+ ", uname_str)
+                if m:
+                    self.RemoteOsVersion = m.group(1)
+            elif "sunos" in uname_str:
+                self.RemoteOs = OsType.SunOS
+            else:
+                self._warn("Could not determine type of client; assuming Linux (uname -> " + uname_str + ")")
+                self.RemoteOs = OsType.Linux
+
+            self.Hostname = platform.node()
+            return
+        
         # First try with winexe to see if it is a Windows client
         try:
             self._debug("Attempting connect to " + pClientIp + " with winexe as " + pUsername + ":" + pPassword)
@@ -227,6 +257,10 @@ class SfClient:
             return -1, '', ''
         if pIpAddress == None:
             pIpAddress = self.IpAddress
+        
+        if self.Localhost:
+            return_code, stdout_data = commands.getstatusoutput(pCommand)
+            return return_code, stdout_data, ""
 
         if self.RemoteOs == OsType.Windows:
             return self._execute_winexe_command(pIpAddress, self.Username, self.Password, pCommand)
