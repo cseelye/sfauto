@@ -96,11 +96,18 @@ def main():
     # Get a mapping of volumes to luns on each affected system
     lun2volume = dict()
     for line in raw_error_list:
+        hg = None
+        system = None
         pieces = re.split("\s+", line)
         hd_piece = pieces[1]
-        m = re.search("(hd\d+)-", hd_piece)
-        hd = m.group(1)
-        system = hd2system[hd]
+        if "localhost" in hd_piece:
+            system = "localhost"
+        else:
+            m = re.search("(hd\d+)-", hd_piece)
+            if m:
+                hd = m.group(1)
+                system = hd2system[hd]
+        
         if system not in lun2volume.keys():
             mylog.info("Getting a list of volumes on " + system)
             client = SfClient()
@@ -131,10 +138,13 @@ def main():
         io_size = pieces[11]
         
         system = None
-        m = re.search("(hd\d+)-", hd_piece)
-        if m:
-            hd = m.group(1)
-            system = hd2system[hd]
+        if "localhost" in hd_piece:
+            system = "localhost"
+        else:
+            m = re.search("(hd\d+)-", hd_piece)
+            if m:
+                hd = m.group(1)
+                system = hd2system[hd]
         volume = None
         if system in lun2volume.keys() and lun in lun2volume[system].keys():
             volume = lun2volume[system][lun]
