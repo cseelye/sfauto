@@ -119,7 +119,7 @@ def main():
         if (len(obj["faults"]) > 0):
             current_faults = set()
             for fault in obj["faults"]:
-                if fault not in current_faults:
+                if fault["code"] not in current_faults:
                     current_faults.add(fault["code"])
     
             if current_faults & fault_whitelist == current_faults:
