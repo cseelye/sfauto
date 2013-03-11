@@ -1,7 +1,7 @@
 PARM_PATH=/root/parm
 OUT_PATH=/root/output
 
-# Add a signal handler for when we are killed with TERM (from upstart)
+# Add a signal handler for when we are killed
 stopme()
 {
     # If we are being stopped, assume this is a gracefull shutdown and make the exit status reflect so
@@ -10,9 +10,11 @@ stopme()
     echo "0" > /opt/vdbench/last_vdbench_exit
     logger -s -i -t vdbenchd "Killing vdbench"
     echo "Killing vdbench"
+    killall vdbench
+    sleep 2
+    # Make sure vdbench is dead
     killall -9 vdbench
-    killall -9 java
-    #for pid in $(ps -ef | grep java | grep -v grep | awk '{print $2}'); do kill -9 $pid; done
+    for pid in $(ps -ef | grep java | grep vdbench | awk '{print $2}'); do kill -9 $pid; done
     exit 0
 }
 trap "stopme" TERM INT

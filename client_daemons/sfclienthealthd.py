@@ -1,6 +1,6 @@
 
 MYPORT = 58083
-config_file = "sfclientd.json"
+config_file = "sfclienthealthd.json"
 
 import sys, time
 import socket
@@ -20,10 +20,11 @@ while True:
     group_name = ""
     try:
         # Read configuration file
-        config_handle = open(config_file, "r")
+        config_lines = ""
+        with open(config_file, "r") as config_handle:
+            config_lines = config_handle.readlines();
     
         # Remove comments from JSON before loading it
-        config_lines = config_handle.readlines();
         new_config_text = ""
         for line in config_lines:
             line = re.sub("(//.+)", "", line)
@@ -37,7 +38,8 @@ while True:
         pass
     if not group_name:
         output = commands.getoutput("virt-what").strip()
-        if "kvm" in output: group_name = "KVM"
+        if not output: group_name = "Physical"
+        elif "kvm" in output: group_name = "KVM"
         elif "hyperv" in output: group_name = "HyperV"
         elif "vmware" in output: group_name = "ESX"
         elif "xen" in output: group_name = "Xen"
@@ -84,7 +86,7 @@ while True:
         mem_buff = float(commands.getoutput("cat /proc/meminfo | grep -m1 Buffers | awk {'print $2'}").strip())
         mem_cache = float(commands.getoutput("cat /proc/meminfo | grep -m1 Cached | awk {'print $2'}").strip())
         mem_usage = "%.1f" % (100 - ((mem_free + mem_buff + mem_cache) * 100) / mem_total)
-    except: pass
+    except ValueError: pass
     
     # Check CPU usage
     cpu_usage = "-1";
@@ -101,14 +103,14 @@ while True:
     output = commands.getoutput("ps -ef | grep -v grep | grep java | grep vdbench | wc -l")
     vdbench_count = 0
     try: vdbench_count = int(output.strip())
-    except: pass
+    except ValueError: pass
     
     # See if we have a vdbench last exit status
     vdbench_exit = -1
     status, output = commands.getstatusoutput("cat /opt/vdbench/last_vdbench_exit")
     if status == 0:
         try: vdbench_exit = int(output.strip())
-        except:pass
+        except ValueError:pass
     
     # My info to broadcast
     my_info = dict()

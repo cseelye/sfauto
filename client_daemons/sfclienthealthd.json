@@ -3,8 +3,10 @@
     // be picked up on the next iteration
 
     // The name of the 'group' to put this client into
-    "group" : "ESX"
+    // Group will be auto-detected if this is not specified
+//    "group" : "ESX"
 //    "group" : "HyperV"
 //    "group" : "Xen"
 //    "group" : "KVM"
+//    "group" : "Pysical"
 }
