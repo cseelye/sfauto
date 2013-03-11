@@ -185,14 +185,16 @@ class ClientMon:
         if "gold" in Hostname: return
         
         # Skip this update if it does not match our filter
-        if self.__ipFilter and not str(IpAddress).startswith(self.__ipFilter): return
+        if self.__ipFilter and not str(IpAddress).startswith(self.__ipFilter):
+            #print "Skipping " + str(IpAddress)
+            return
         
-        if not CpuUsage: CpuUsage = -1
-        if not MemUsage: MemUsage = -1
-        if not VdbenchCount: VdbenchCount = 0
-        if not VdbenchExit: VdbenchExit = -1
-        if not GroupName: GroupName = ""
-        if not Timestamp: Timestamp = time.time()
+        if CpuUsage == None: CpuUsage = -1
+        if MemUsage == None: MemUsage = -1
+        if VdbenchCount == None: VdbenchCount = 0
+        if VdbenchExit == None: VdbenchExit = -1
+        if GroupName == None: GroupName = ""
+        if Timestamp == None: Timestamp = time.time()
         
         sql = """
         INSERT INTO clients 
@@ -229,6 +231,7 @@ class ClientMon:
                 `timestamp`='""" + str(Timestamp) + """',
                 `group`='""" + str(GroupName) + """'
         """
+        #print sql
         
         try:
             self.__db_cursor.execute(sql)
