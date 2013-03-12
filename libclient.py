@@ -1829,3 +1829,87 @@ class SfClient:
 
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
+
+    def IsHealthy(self):
+        self._info("Checking health")
+        
+        # alphabetically first MAC
+        return_code, stdout, stderr = self.ExecuteCommand("ifconfig | grep HWaddr | awk '{print $5}' | sed 's/://g' | sort | head -1")
+        unique_id = stdout.strip()
+
+        # Get uptime
+        return_code, stdout, stderr = self.ExecuteCommand("cat /proc/uptime | awk '{print $1}'")
+        uptime = stdout.strip()
+
+        # Check memory usage
+        mem_usage = -1
+        try:
+            return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 MemTotal | awk {'print $2'}")
+            mem_total = float(stdout.strip())
+            return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 MemFree | awk {'print $2'}")
+            mem_free = float(stdout.strip())
+            return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 Buffers | awk {'print $2'}")
+            mem_buff = float(stdout.strip())
+            return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 Cached | awk {'print $2'}")
+            mem_cache = float(stdout.strip())
+            mem_usage = "%.1f" % (100 - ((mem_free + mem_buff + mem_cache) * 100) / mem_total)
+        except ValueError: pass
+
+        # Check CPU usage
+        cpu_usage = "-1";
+        try:
+            return_code, stdout, stderr = self.ExecuteCommand("top -b -d 2 -n 2 | grep Cpu | tail -1")
+            m = re.search("(\d+\.\d+)%id", stdout)
+            if (m):
+                    cpu_usage = "%.1f" % (100.0 - float(m.group(1)))
+        except ValueError: pass
+
+        # Check if vdbench is running here
+        return_code, stdout, stderr = self.ExecuteCommand("ps -ef | grep -v grep | grep java | grep vdbench | wc -l")
+        vdbench_count = 0
+        try: vdbench_count = int(stdout.strip())
+        except ValueError: pass
+
+        # See if we have a vdbench last exit status
+        vdbench_exit = -1
+        return_code, stdout, stderr = self.ExecuteCommand("cat /opt/vdbench/last_vdbench_exit")
+        try: vdbench_exit = int(stdout.strip())
+        except ValueError:pass
+
+        healthy = True
+        self._info("Hostname " + self.Hostname + " MAC " + unique_id)
+        self._info("Uptime " + str(uptime))
+        if vdbench_count <= 0 and vdbench_exit > 0:
+            self._error("vdbench failed")
+            healthy = True
+        else:
+            if vdbench_count > 0:
+                self._info("vdbench is running")
+            elif vdbench_exit == 0:
+                self._info("Last vdbench run finished without errors")
+            elif vdbench_exit == -1:
+                self._info("vdbench has not been started")
+
+        if cpu_usage > 0:
+            self._info("CPU usage " + str(cpu_usage))
+        if mem_usage > 0:
+            self._info("Mem usage " + str(mem_usage))
+        
+        if healthy:
+            self._passed("Client is healthy")
+        else:
+            self._error("Client is not healthy")
+
+        return healthy
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
