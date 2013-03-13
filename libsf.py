@@ -1212,10 +1212,15 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
 
         for vname in volume_name_list:
             volume_id = 0
+            found = False
             for volume in account_volumes["volumes"]:
                 if volume["name"] == vname:
-                    volume_id = int(volume["volumeID"])
-                    break
+                    if found:
+                        mylog.warning("Duplicate volume name " + vname)
+                        break
+                    else:
+                        volume_id = int(volume["volumeID"])
+                        found = True
             if volume_id == None:
                 mylog.error("Could not find volume '" + vname + "' on account '" + AccountName + "'")
                 exit(1)
@@ -1233,10 +1238,15 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
         
         for vname in volume_name_list:
             volume_id = 0
-            for volume in all_volumes["volumes"]:
+            found = False
+            for volume in account_volumes["volumes"]:
                 if volume["name"] == vname:
-                    volume_id = int(volume["volumeID"])
-                    break
+                    if found:
+                        mylog.warning("Duplicate volume name " + vname)
+                        break
+                    else:
+                        volume_id = int(volume["volumeID"])
+                        found = True
             if volume_id == None:
                 mylog.error("Could not find volume '" + vname + "'")
                 exit(1)
@@ -1249,9 +1259,13 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             vol_name = volume["name"]
             m = re.search(VolumeRegex, vol_name)
             if m:
-                found_volumes[vol_name] = vol_id
-                count += 1
-                if VolumeCount > 0 and count >= VolumeCount: break
+                if vol_name in found_volumes.keys():
+                    mylog.warning("Duplicate volume name " + vol_name)
+                    break
+                else:
+                    found_volumes[vol_name] = vol_id
+                    count += 1
+                    if VolumeCount > 0 and count >= VolumeCount: break
 
     # Search for regex match across all volumes
     elif VolumeRegex:
@@ -1260,38 +1274,54 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             vol_name = volume["name"]
             m = re.search(VolumeRegex, vol_name)
             if m:
-                found_volumes[vol_name] = vol_id
-                count += 1
-                if VolumeCount > 0 and count >= VolumeCount: break
+                if vol_name in found_volumes.keys():
+                    mylog.warning("Duplicate volume name " + vol_name)
+                    break
+                else:
+                    found_volumes[vol_name] = vol_id
+                    count += 1
+                    if VolumeCount > 0 and count >= VolumeCount: break
 
     # Search for matching volumes on an account
     elif VolumePrefix and AccountName:
         for volume in account_volumes["volumes"]:
             if volume["name"].lower().startswith(VolumePrefix):
-                vol_id = int(volume["volumeID"])
-                vol_name = volume["name"]
-                found_volumes[vol_name] = vol_id
-                count += 1
-                if VolumeCount > 0 and count >= VolumeCount: break
+                if volume["name"] in found_volumes.keys():
+                    mylog.warning("Duplicate volume name " + vol_name)
+                    break
+                else:
+                    vol_id = int(volume["volumeID"])
+                    vol_name = volume["name"]
+                    found_volumes[vol_name] = vol_id
+                    count += 1
+                    if VolumeCount > 0 and count >= VolumeCount: break
 
     # Search for all matching volumes
     elif VolumePrefix:
         for volume in all_volumes["volumes"]:
             if volume["name"].lower().startswith(VolumePrefix):
-                vol_id = int(volume["volumeID"])
-                vol_name = volume["name"]
-                found_volumes[vol_name] = vol_id
-                count += 1
-                if VolumeCount > 0 and count >= VolumeCount: break
+                if volume["name"] in found_volumes.keys():
+                    mylog.warning("Duplicate volume name " + vol_name)
+                    break
+                else:
+                    vol_id = int(volume["volumeID"])
+                    vol_name = volume["name"]
+                    found_volumes[vol_name] = vol_id
+                    count += 1
+                    if VolumeCount > 0 and count >= VolumeCount: break
 
     # Search for all volumes on an account
     elif AccountName:
         for volume in account_volumes["volumes"]:
             vol_id = int(volume["volumeID"])
             vol_name = volume["name"]
-            found_volumes[vol_name] = vol_id
-            count += 1
-            if VolumeCount > 0 and count >= VolumeCount: break
+            if vol_name in found_volumes.keys():
+                mylog.warning("Duplicate volume name " + vol_name)
+                break
+            else:
+                found_volumes[vol_name] = vol_id
+                count += 1
+                if VolumeCount > 0 and count >= VolumeCount: break
 
     return found_volumes
 
