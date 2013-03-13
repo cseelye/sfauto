@@ -35,6 +35,7 @@ echo "$STATUS" > /opt/vdbench/last_vdbench_exit
 # Keep a copy of the output files if vdbench failed
 if [ "$STATUS" -ne "0" ]; then
     mv $OUT_PATH $OUT_PATH.$START_TIME
+    chmod -R 644 $OUT_PATH.$START_TIME
 fi
 logger -i -t vdbenchd "vdbench exited with status $STATUS"
 exit $STATUS
