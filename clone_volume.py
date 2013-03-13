@@ -48,7 +48,7 @@ account_id = 0              # The account ID to create the clones for
                             # Either account_name or account_id must be specified
                             # --account_id
 
-clone_count = 0             # The number of clones to make
+clone_count = 1             # The number of clones to make per volume
                             # --clone_count
 
 clone_prefix = "-c"         # Prefix for the clone. Name will be generated as volume_name + clone_prefix + "%05d"
