@@ -783,19 +783,20 @@ def EnableInterfaces(pIpAddress, pUsername, pPassword):
 
 def ParseIpsFromList(pIpListString):
     if not pIpListString: return []
-    mylog.debug("Parsing " + pIpListString)
+    #mylog.debug("Parsing " + pIpListString)
 
     ip_addr = []
     pieces = pIpListString.split(",")
     for ip in pieces:
         ip = ip.strip() 
-        mylog.debug("Validating " + ip)
+        #mylog.debug("Validating " + ip)
         if not IsValidIpv4Address(ip):
             raise TypeError("'" + ip + "' does not appear to be a valid address")
         ip_addr.append(ip)
     return ip_addr
 
 def IsValidIpv4Address(pAddressString):
+    if not pAddressString: return False
     pieces = pAddressString.split(".")
     last_octet = 0
     try:
@@ -1179,41 +1180,67 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
     found_volumes = dict()
     count = 0
     
-    # Search for specific volume id
+    # Search for specific volume id or list of ids
     if VolumeId:
-        volume_name = None
-        for volume in all_volumes["volumes"]:
-            if int(volume["volumeID"]) == VolumeId:
-                volume_name = volume["name"]
-                break
-        if volume_name == None:
-            mylog.error("Could not find volume '" + str(VolumeId) + "'")
-            exit(1)
-        found_volumes[volume_name] = VolumeId
+        # Convert to a list if it is a scalar
+        volume_id_list = []
+        try:
+            volume_id_list = list(VolumeId)
+        except ValueError:
+            volume_id_list.append(VolumeId)
+        
+        for vid in volume_id_list:
+            volume_name = None
+            for volume in all_volumes["volumes"]:
+                if int(volume["volumeID"]) == vid:
+                    volume_name = volume["name"]
+                    break
+            if volume_name == None:
+                mylog.error("Could not find volume '" + str(vid) + "'")
+                exit(1)
+            found_volumes[volume_name] = vid
 
-    # Search for a single volume name associated with a specific account
+    # Search for a single volume name (or list of volume names) associated with a specific account
+    # If there are duplicate volume names, the first match is taken
     elif VolumeName and AccountName:
-        volume_id = 0
-        for volume in account_volumes["volumes"]:
-            if volume["name"] == VolumeName:
-                volume_id = int(volume["volumeID"])
-                break
-        if volume_id == None:
-            mylog.error("Could not find volume '" + VolumeName + "' on account '" + AccountName + "'")
-            exit(1)
-        found_volumes[VolumeName] = volume_id
+        # Convert to a list if it is a scalar
+        volume_name_list = []
+        try:
+            volume_name_list = list(VolumeName)
+        except ValueError:
+            volume_name_list.append(VolumeName)
 
-    # Search for a single volume name across all volumes - first match is taken
+        for vname in volume_name_list:
+            volume_id = 0
+            for volume in account_volumes["volumes"]:
+                if volume["name"] == vname:
+                    volume_id = int(volume["volumeID"])
+                    break
+            if volume_id == None:
+                mylog.error("Could not find volume '" + vname + "' on account '" + AccountName + "'")
+                exit(1)
+            found_volumes[vname] = volume_id
+
+    # Search for a single volume name (or list of volume names) across all volumes.
+    # If there are duplicate volume names, the first match is taken
     elif VolumeName:
-        volume_id = 0
-        for volume in all_volumes["volumes"]:
-            if volume["name"] == VolumeName:
-                volume_id = int(volume["volumeID"])
-                break
-        if volume_id == None:
-            mylog.error("Could not find volume '" + VolumeName + "' on account '" + AccountName + "'")
-            exit(1)
-        found_volumes[VolumeName] = volume_id
+        # Convert to a list if it is a scalar
+        volume_name_list = []
+        try:
+            volume_name_list = list(VolumeName)
+        except ValueError:
+            volume_name_list.append(VolumeName)
+        
+        for vname in volume_name_list:
+            volume_id = 0
+            for volume in all_volumes["volumes"]:
+                if volume["name"] == vname:
+                    volume_id = int(volume["volumeID"])
+                    break
+            if volume_id == None:
+                mylog.error("Could not find volume '" + vname + "'")
+                exit(1)
+            found_volumes[vname] = volume_id
 
     # Search for regex match across volumes associated with a specific account
     elif VolumeRegex and AccountName:
