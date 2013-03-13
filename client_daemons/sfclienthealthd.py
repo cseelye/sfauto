@@ -36,6 +36,7 @@ while True:
     except Exception as e:
         #print e.message;
         pass
+
     if not group_name:
         output = commands.getoutput("virt-what").strip()
         if not output: group_name = "Physical"
@@ -73,7 +74,12 @@ while True:
 
     # Get the MAC address of the system to use as a unique ID
     # Use the alphabetically first MAC addr - thanks to udev the "first" MAC often changes on reboot in VMs
-    mac_addr = commands.getoutput("ifconfig | grep HWaddr | awk '{print $5}' | sed 's/://g' | sort | head -1")
+    mac_list = commands.getoutput("ifconfig | grep HWaddr | awk '{print $5}' | sed 's/://g' | sort -u")
+    mac_addr = ""
+    for mac in mac_list.split("\n"):
+        if mac == "000000000000": continue # Occasionally we see MACs that are all 0 from badly configured NICs/bonds
+        mac_addr = mac
+        break
     
     # Get my uptime
     uptime = commands.getoutput("cat /proc/uptime | awk '{print $1}'")
@@ -92,12 +98,10 @@ while True:
     cpu_usage = "-1";
     try:
         cpu_line = commands.getoutput("top -b -d 2 -n 2 | grep Cpu | tail -1")
-        m = re.search("(\d+\.\d+)%id", cpu_line)
+        m = re.search("(\d+\.\d+).id", cpu_line)
         if (m):
-                cpu_usage = "%.1f" % (100.0 - float(m.group(1)))
-    except Exception as e:
-        print e.message;
-        pass
+            cpu_usage = "%.1f" % (100.0 - float(m.group(1)))
+    except ValueError: pass
     
     # Check if vdbench is running here
     output = commands.getoutput("ps -ef | grep -v grep | grep java | grep vdbench | wc -l")
@@ -124,7 +128,7 @@ while True:
     my_info["mem_usage"] = mem_usage
     my_info["cpu_usage"] = cpu_usage
     my_info["uptime"] = uptime
-
+    
     # Get the list of all broadcast networks to send out to
     bcasts = []
     for line in commands.getoutput("ifconfig | grep 'inet ' | grep -v '127.0'").split("\n"):
