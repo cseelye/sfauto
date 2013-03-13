@@ -1842,23 +1842,48 @@ class SfClient:
         uptime = stdout.strip()
 
         # Check memory usage
-        mem_usage = -1
-        try:
-            return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 MemTotal | awk {'print $2'}")
-            mem_total = float(stdout.strip())
-            return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 MemFree | awk {'print $2'}")
-            mem_free = float(stdout.strip())
-            return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 Buffers | awk {'print $2'}")
-            mem_buff = float(stdout.strip())
-            return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 Cached | awk {'print $2'}")
-            mem_cache = float(stdout.strip())
+        #mem_usage = -1
+        #try:
+        #    return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 MemTotal | awk {'print $2'}")
+        #    mem_total = float(stdout.strip())
+        #    return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 MemFree | awk {'print $2'}")
+        #    mem_free = float(stdout.strip())
+        #    return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 Buffers | awk {'print $2'}")
+        #    mem_buff = float(stdout.strip())
+        #    return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 Cached | awk {'print $2'}")
+        #    mem_cache = float(stdout.strip())
+        #    mem_usage = "%.1f" % (100 - ((mem_free + mem_buff + mem_cache) * 100) / mem_total)
+        #except ValueError: pass
+        return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo")
+        mem_total = 0
+        mem_free = 0
+        mem_buff = 0
+        mem_cache = 0
+        for line in stdout.split("\n"):
+            m = re.search("MemTotal:\s+(\d+) kB", line)
+            if m:
+                mem_total = float(m.group(1))
+                continue
+            m = re.search("MemFree:\s+(\d+) kB", line)
+            if m:
+                mem_free = float(m.group(1))
+                continue
+            m = re.search("Buffers:\s+(\d+) kB", line)
+            if m:
+                mem_buff = float(m.group(1))
+                continue
+            m = re.search("Cached:\s+(\d+) kB", line)
+            if m:
+                mem_cache = float(m.group(1))
+                continue
+        mem_usage = 0
+        if mem_total > 0:
             mem_usage = "%.1f" % (100 - ((mem_free + mem_buff + mem_cache) * 100) / mem_total)
-        except ValueError: pass
 
         # Check CPU usage
         cpu_usage = "-1";
         try:
-            return_code, stdout, stderr = self.ExecuteCommand("top -b -d 2 -n 2 | grep Cpu | tail -1")
+            return_code, stdout, stderr = self.ExecuteCommand("top -b -d 1 -n 2 | grep Cpu | tail -1")
             m = re.search("(\d+\.\d+)%id", stdout)
             if (m):
                     cpu_usage = "%.1f" % (100.0 - float(m.group(1)))
@@ -1870,30 +1895,37 @@ class SfClient:
         try: vdbench_count = int(stdout.strip())
         except ValueError: pass
 
+        # See if vdbenchd is in use
+        return_code, stdout, stderr = self.ExecuteCommand("if [ -f /opt/vdbench/last_vdbench_pid ]; then echo 'True'; else echo 'False'; fi")
+        vdbenchd = bool(stdout.strip())
+
         # See if we have a vdbench last exit status
         vdbench_exit = -1
         return_code, stdout, stderr = self.ExecuteCommand("cat /opt/vdbench/last_vdbench_exit")
         try: vdbench_exit = int(stdout.strip())
         except ValueError:pass
 
-        healthy = True
         self._info("Hostname " + self.Hostname + " MAC " + unique_id)
         self._info("Uptime " + str(uptime))
-        if vdbench_count <= 0 and vdbench_exit > 0:
+
+        # Use vdbench status to determine health
+        healthy = True
+        if vdbench_count > 0:
+            self._info("vdbench is running")
+        elif not vdbenchd and vdbench_count <= 0:
             self._error("vdbench failed")
-            healthy = True
+            healthy = False
+        elif vdbenchd and vdbench_exit == 0:
+            self._info("Last vdbench run finished without errors")
         else:
-            if vdbench_count > 0:
-                self._info("vdbench is running")
-            elif vdbench_exit == 0:
-                self._info("Last vdbench run finished without errors")
-            elif vdbench_exit == -1:
-                self._info("vdbench has not been started")
+            self._error("vdbench failed")
+            healthy = False
+
 
         if cpu_usage > 0:
-            self._info("CPU usage " + str(cpu_usage))
+            self._info("CPU usage " + str(cpu_usage) + "%")
         if mem_usage > 0:
-            self._info("Mem usage " + str(mem_usage))
+            self._info("Mem usage " + str(mem_usage) + "%")
         
         if healthy:
             self._passed("Client is healthy")
