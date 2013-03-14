@@ -889,15 +889,6 @@ class SfClient:
         if self.RemoteOs == OsType.Linux: self.EnableInterfaces(responding_ip)
         self._info("Up and responding")
 
-    def _shell_quote(self, pInputString):
-        output = pInputString;
-        if self.RemoteOs == OsType.Windows:
-            output = output.replace("\"", "\\\"\\\"\\\"\\\"")
-        else:
-            output = output.replace("\"", "\\\"")
-        output = output.replace(";", "\;")
-        return output
-
     def CleanIscsi(self, default_iscsid=True):
         if self.RemoteOs == OsType.Windows:
             retcode, stdout, stderr = self.ExecuteCommand("diskapp.exe --clean")
@@ -1842,18 +1833,6 @@ class SfClient:
         uptime = stdout.strip()
 
         # Check memory usage
-        #mem_usage = -1
-        #try:
-        #    return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 MemTotal | awk {'print $2'}")
-        #    mem_total = float(stdout.strip())
-        #    return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 MemFree | awk {'print $2'}")
-        #    mem_free = float(stdout.strip())
-        #    return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 Buffers | awk {'print $2'}")
-        #    mem_buff = float(stdout.strip())
-        #    return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo | grep -m1 Cached | awk {'print $2'}")
-        #    mem_cache = float(stdout.strip())
-        #    mem_usage = "%.1f" % (100 - ((mem_free + mem_buff + mem_cache) * 100) / mem_total)
-        #except ValueError: pass
         return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo")
         mem_total = 0
         mem_free = 0
@@ -1933,15 +1912,14 @@ class SfClient:
             self._error("Client is not healthy")
 
         return healthy
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+
+
+

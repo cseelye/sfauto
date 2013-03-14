@@ -219,34 +219,34 @@ def main():
 
         # If we have hit job count, wait for a job to finish before starting another
         while len(clones_in_progress.keys()) >= total_job_count:
-            for clone_name, job, in clones_in_progress.items():
+            for dest_clone_name, job, in clones_in_progress.items():
                 params = {}
                 params["asyncHandle"] = job.CloneJobHandle
                 result = libsf.CallApiMethod(mvip, username, password, "GetAsyncResult", params)
                 if result["status"].lower() == "complete":
                     if "result" in result:
-                        mylog.passed("  Clone " + clone_name + " finished")
+                        mylog.passed("  Clone " + dest_clone_name + " finished")
                     else:
-                        mylog.error("  Clone " + clone_name + " failed -- " + result["error"]["name"] + ": " + result["error"]["message"])
+                        mylog.error("  Clone " + dest_clone_name + " failed -- " + result["error"]["name"] + ": " + result["error"]["message"])
                         failure = True
-                    del clones_in_progress[clone_name]
+                    del clones_in_progress[dest_clone_name]
                     break
             if len(clones_in_progress.keys()) >= total_job_count:
                 time.sleep(2)
 
     # Wait for all remaining jobs to complete
     while len(clones_in_progress.keys()) > 0:
-        for clone_name, job, in clones_in_progress.items():
+        for dest_clone_name, job, in clones_in_progress.items():
             params = {}
             params["asyncHandle"] = job.CloneJobHandle
             result = libsf.CallApiMethod(mvip, username, password, "GetAsyncResult", params)
             if result["status"].lower() == "complete":
                 if "result" in result:
-                    mylog.passed("  Clone " + clone_name + " finished")
+                    mylog.passed("  Clone " + dest_clone_name + " finished")
                 else:
-                    mylog.error("  Clone " + clone_name + " failed -- " + result["error"]["name"] + ": " + result["error"]["message"])
+                    mylog.error("  Clone " + dest_clone_name + " failed -- " + result["error"]["name"] + ": " + result["error"]["message"])
                     failure = True
-                del clones_in_progress[clone_name]
+                del clones_in_progress[dest_clone_name]
                 break
         time.sleep(2)
 
