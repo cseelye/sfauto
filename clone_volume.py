@@ -179,16 +179,19 @@ def main():
     for source_volume_name, source_volume_id in volumes_to_clone.items():
         for clone_num in range(1, clone_count + 1):
             if clone_name == None or len(clone_name) <= 0:
-                clone_name = source_volume_name + clone_prefix + "%05d"%clone_num
+                dest_clone_name = source_volume_name + clone_prefix + "%05d"%clone_num
+            else:
+                dest_clone_name = clone_name
+            mylog.debug("Creating clone job for volume " + source_volume_name + " to clone " + dest_clone_name)
             job = CloneJob()
             job.SourceVolumeName = source_volume_name
             job.SourceVolumeId = source_volume_id
-            job.CloneName = clone_name
+            job.CloneName = dest_clone_name
             clone_jobs.append(job)
 
     mylog.info(str(len(volumes_to_clone.keys())) + " volumes to clone")
     mylog.info(str(len(clone_jobs)) + " total clones to create")
-
+    
     # Start cloning
     failure = False
     clones_in_progress = dict()

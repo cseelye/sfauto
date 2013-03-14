@@ -1164,7 +1164,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
 
     # Find the source account if the user specified one
     source_account_id = 0
-    account_volumes = []
+    account_volumes = dict()
     if AccountName:
         for account in all_accounts["accounts"]:
             if account["username"].lower() == AccountName.lower():
@@ -1239,7 +1239,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
         for vname in volume_name_list:
             volume_id = 0
             found = False
-            for volume in account_volumes["volumes"]:
+            for volume in all_volumes["volumes"]:
                 if volume["name"] == vname:
                     if found:
                         mylog.warning("Duplicate volume name " + vname)
