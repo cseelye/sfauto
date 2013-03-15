@@ -703,6 +703,7 @@ class Command(object):
 
         # Start the thread
         thread = threading.Thread(target=process_thread)
+        thread.daemon = True
         thread.start()
 
         # Wait 'timeout' seconds for the thread to finish
@@ -712,15 +713,21 @@ class Command(object):
         if thread.is_alive():
             mylog.debug("Terminating subprocess '" + self.cmd + "' after " + str(timeout) + "sec")
             ppid = self.process.pid
-            
-            # The PID of the subprocess is actually the PID of /bin/sh, since we launch with shell=True above.
+
+            # The PID of the subprocess is actually the PID of the shell (/bin/sh or cmd.exe), since we launch with shell=True above.
             # This means that killing this PID leaves the actual process we are interested in running as an orphaned subprocess
-            # So this next hackery kills all the children of that parent process
+            # So we need to kill all the children of that parent process
+            if "win" in platform.system().lower():
+                # This will kill everything in this shell as well as the shell itselfs
+                os.system("wmic Process WHERE ParentProcessID=" + str(ppid) + " delete  2>&1 > NUL")
+            else:
+                # Under Linux you can simply do this, but MacOS does not have the --ppid flag:
+                #os.system("for pid in $(ps --ppid " + str(ppid) + " -o pid --no-header); do kill -9 $pid; done")
+                os.system("for pid in $(ps -eo ppid,pid | egrep \"^\\s*" + str(ppid) + "\\s+\" | awk '{print $2}'); do kill -9 $pid 2>&1 >/dev/null; done")
             
-            # Under Linux you can simply do this, but MacOS does not have the --ppid flag:
-            #os.system("for pid in $(ps --ppid " + str(ppid) + " -o pid --no-header); do kill -9 $pid; done")
-            os.system("for pid in $(ps -eo ppid,pid | egrep \"^\\s*" + str(ppid) + "\\s+\" | awk '{print $2}'); do kill -9 $pid 2>&1 >/dev/null; done")
-            self.process.kill()
+            # Now we can kill the parent process if it is still running and wait for the thread to finish
+            try: self.process.kill()
+            except WindowsError: pass
             thread.join()
 
         # Return the result of the command
