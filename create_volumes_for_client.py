@@ -70,7 +70,10 @@ import libclient
 from libclient import ClientError, SfClient
 
 
-def ClientThread(client_ip, client_user, client_pass, accounts_list, results, index):
+def ClientThread(client_ip, client_user, client_pass, accounts_list, results, index, debug=None):
+    if debug:
+        import logging
+        mylog.console.setLevel(logging.DEBUG)
     client = SfClient()
     mylog.info(client_ip + ": Connecting to client")
     try:
@@ -174,6 +177,7 @@ def main():
     wait = options.wait
     parallel_thresh = options.parallel_thresh
     parallel_max = options.parallel_max
+    debug = options.debug
     if (enable_512 == None):
         enable_512 = False
     client_user = options.client_user
@@ -186,7 +190,7 @@ def main():
     if not client_ips:
         mylog.error("Please supply at least one client IP address")
         sys.exit(1)
-    if options.debug != None:
+    if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
     if not libsf.IsValidIpv4Address(mvip):
@@ -252,5 +256,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-

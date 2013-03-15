@@ -41,7 +41,10 @@ except ImportError:
     mylog.warning("Using paramiko module instead of ssh module; this script may have issues with a large number of nodes")
 
 
-def NodeThread(node_ip, node_user, node_pass, save_logs, results, index):
+def NodeThread(node_ip, node_user, node_pass, save_logs, results, index, debug=None):
+    if debug:
+        import logging
+        mylog.console.setLevel(logging.DEBUG)
     try:
         mylog.info(node_ip + ": Connecting")
         ssh = libsf.ConnectSsh(node_ip, node_user, node_pass)
@@ -103,6 +106,7 @@ def main():
     (options, args) = parser.parse_args()
     ssh_user = options.ssh_user
     ssh_pass = options.ssh_pass
+    debug = options.debug
     try:
         node_ips = libsf.ParseIpsFromList(options.node_ips)
     except TypeError as e:
@@ -113,7 +117,7 @@ def main():
         sys.exit(1)
     if options.nosave_logs:
         save_logs = False
-    if options.debug:
+    if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
 
@@ -125,7 +129,7 @@ def main():
     thread_index = 0
     for node_ip in node_ips:
         results[thread_index] = False
-        th = multiprocessing.Process(target=NodeThread, args=(node_ip, ssh_user, ssh_pass, save_logs, results, thread_index))
+        th = multiprocessing.Process(target=NodeThread, args=(node_ip, ssh_user, ssh_pass, save_logs, results, thread_index, debug))
         th.start()
         current_threads.append(th)
         thread_index += 1

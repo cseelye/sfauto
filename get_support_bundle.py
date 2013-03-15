@@ -68,6 +68,7 @@ def main():
     ssh_pass = options.ssh_pass
     folder = options.folder
     label = options.label
+    debug = options.debug
     try:
         node_ips = libsf.ParseIpsFromList(options.node_ips)
     except TypeError as e:
@@ -76,12 +77,15 @@ def main():
     if not node_ips:
         mylog.error("Please supply at least one node IP address")
         sys.exit(1)
-    if options.debug != None:
+    if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
 
     # Function to be run as a worker thread
-    def NodeThread(timestamp, node_ip, node_user, node_pass):
+    def NodeThread(timestamp, node_ip, node_user, node_pass, debug=None):
+        if debug:
+            import logging
+            mylog.console.setLevel(logging.DEBUG)
         try:
             mylog.info(node_ip + ": Connecting")
             ssh = libsf.ConnectSsh(node_ip, node_user, node_pass)
@@ -135,7 +139,7 @@ def main():
     timestamp = time.strftime("%Y-%m-%d-%H-%M-%S")
     for node_ip in node_ips:
         # technically these are processes, not threads
-        th = multiprocessing.Process(target=NodeThread, args=(timestamp, node_ip, ssh_user, ssh_pass))
+        th = multiprocessing.Process(target=NodeThread, args=(timestamp, node_ip, ssh_user, ssh_pass, debug))
         th.start()
         threads.append(th)
 

@@ -38,7 +38,10 @@ from libsf import mylog
 import libclient
 from libclient import ClientError, SfClient
 
-def ClientThread(client_ip, client_user, client_pass, results, index):
+def ClientThread(client_ip, client_user, client_pass, results, index, debug=None):
+    if debug:
+        import logging
+        mylog.console.setLevel(logging.DEBUG)
     mylog.info("  " + client_ip + ": Connecting to client")
     client = None
     try:
@@ -46,12 +49,18 @@ def ClientThread(client_ip, client_user, client_pass, results, index):
         client.Connect(client_ip, client_user, client_pass)
     except ClientError as e:
         mylog.error("  " + client_ip + ": " + e.message)
+        results[index] = False
         return
 
-    if client.IsHealthy():
-        results[index] = True
-    else:
+    healthy = False
+    try:
+        healthy = client.IsHealthy()
+    except ClientError as e:
+        mylog.error("  " + client_ip + ": " + str(e))
         results[index] = False
+        return
+
+    results[index] = healthy
     return
 
 def main():
@@ -79,6 +88,7 @@ def main():
     client_pass = options.client_pass
     parallel_thresh = options.parallel_thresh
     parallel_max = options.parallel_max
+    debug = options.debug
     try:
         client_ips = libsf.ParseIpsFromList(options.client_ips)
     except TypeError as e:
@@ -87,13 +97,13 @@ def main():
     if not client_ips:
         mylog.error("Please supply at least one client IP address")
         sys.exit(1)
-    if options.debug:
+    if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
 
 
     mylog.info("Checking client health")
-    
+
     # Run the client operations in parallel if there are enough clients
     if len(client_ips) <= parallel_thresh:
         parallel_clients = 1
@@ -107,7 +117,7 @@ def main():
     thread_index = 0
     for client_ip in client_ips:
         results[thread_index] = False
-        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, results, thread_index))
+        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, results, thread_index, debug))
         th.start()
         current_threads.append(th)
         thread_index += 1
@@ -150,5 +160,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-

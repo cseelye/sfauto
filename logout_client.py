@@ -42,7 +42,10 @@ from libsf import mylog
 import libclient
 from libclient import ClientError, SfClient
 
-def ClientThread(client_ip, client_user, client_pass, target_list, results, index):
+def ClientThread(client_ip, client_user, client_pass, target_list, results, index, debug=None):
+    if debug:
+        import logging
+        mylog.console.setLevel(logging.DEBUG)
     client = SfClient()
     mylog.info(client_ip + ": Connecting to client")
     try:
@@ -92,6 +95,7 @@ def main():
             target_list.append(t.strip())
     parallel_thresh = options.parallel_thresh
     parallel_max = options.parallel_max
+    debug = options.debug
     try:
         client_ips = libsf.ParseIpsFromList(options.client_ips)
     except TypeError as e:
@@ -100,10 +104,7 @@ def main():
     if not client_ips:
         mylog.error("Please supply at least one client IP address")
         sys.exit(1)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if options.debug != None:
+    if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
 
@@ -121,7 +122,7 @@ def main():
     thread_index = 0
     for client_ip in client_ips:
         results[thread_index] = False
-        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, target_list, results, thread_index))
+        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, target_list, results, thread_index, debug))
         th.start()
         current_threads.append(th)
         thread_index += 1
@@ -164,5 +165,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-

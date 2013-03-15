@@ -60,7 +60,10 @@ import libclient
 from libclient import ClientError, SfClient, OsType
 
 
-def ClientThread(client_ip, client_user, client_pass, account_name, target_list, svip, login_order, accounts_list, results, index):
+def ClientThread(client_ip, client_user, client_pass, account_name, target_list, svip, login_order, accounts_list, results, index, debug=None):
+    if debug:
+        import logging
+        mylog.console.setLevel(logging.DEBUG)
     client = SfClient()
     mylog.info(client_ip + ": Connecting to client")
     try:
@@ -163,7 +166,7 @@ def ClientThread(client_ip, client_user, client_pass, account_name, target_list,
             if "state" in volume:
                 outstr += ", Session: " + volume["state"]
             mylog.info(outstr)
-    
+
     results[index] = True
     return
 
@@ -201,14 +204,15 @@ def main():
     password = options.password
     login_order = options.login_order
     account_name = options.account_name
+    debug = options.debug
     target_list = []
     if options.target_list:
         for t in options.target_list.split(","):
             target_list.append(t.strip())
-    
+
     parallel_thresh = options.parallel_thresh
     parallel_max = options.parallel_max
-    if options.debug != None:
+    if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
     try:
@@ -247,7 +251,7 @@ def main():
     thread_index = 0
     for client_ip in client_ips:
         results[thread_index] = False
-        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, account_name, target_list, svip, login_order, accounts_list, results, thread_index))
+        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, account_name, target_list, svip, login_order, accounts_list, results, thread_index, debug))
         th.start()
         current_threads.append(th)
         thread_index += 1
