@@ -96,7 +96,7 @@ class SfClient:
 
             self.Hostname = platform.node()
             return
-        
+
         # First try with winexe to see if it is a Windows client
         try:
             self._debug("Attempting connect to " + pClientIp + " with winexe as " + pUsername + ":" + pPassword)
@@ -145,17 +145,17 @@ class SfClient:
                 if retcode != 0: raise ClientError("Could not run uname on client")
                 if "win" in uname_str:
                     raise ClientError("Sorry, cygwin is not supported. This script requires your Windows client accept connections from winexe")
+                elif "vmkernel" in uname_str:
+                    self.RemoteOs = OsType.ESX
+                    m = re.search(" (\d\.\d)\.\d+ ", uname_str)
+                    if m:
+                        self.RemoteOsVersion = m.group(1)
                 elif "linux" in uname_str:
                     self.RemoteOs = OsType.Linux
                     if "ubuntu" in uname_str:
                         self.RemoteOsVersion = "ubuntu"
                     elif "el" in uname_str:
                         self.RemoteOsVersion = "redhat"
-                elif "vmkernel" in uname_str:
-                    self.RemoteOs = OsType.ESX
-                    m = re.search(" (\d\.\d)\.\d+ ", uname_str)
-                    if m:
-                        self.RemoteOsVersion = m.group(1)
                 elif "sunos" in uname_str:
                     self.RemoteOs = OsType.SunOS
                 else:
@@ -211,7 +211,7 @@ class SfClient:
         stderr_data = "".join(stderr_data)
 
         return return_code, stdout_data, stderr_data
-    
+
     def _execute_winexe_command(self, pClientIp, pUsername, pPassword, pCommand, pTimeout=30):
         lib_path = os.path.dirname(os.path.realpath(__file__))
         if (self.LocalOs == OsType.Linux):
@@ -219,18 +219,21 @@ class SfClient:
         elif (self.LocalOs == OsType.MacOS):
             winexe = os.path.join(lib_path, "winexe/bin/winexe.macos") + " --system -U " + pUsername + "%" + pPassword + " //" + pClientIp + " \"" + pCommand + "\""
         elif self.LocalOs == OsType.Windows:
-            winexe = os.path.join(lib_path, r"winexe\bin\psexec.exe") + r" \\" + str(pClientIp) + " -n 10 -u " + pUsername + " -p " + pPassword + " " + pCommand
+            winexe = os.path.join(lib_path, r"winexe\bin\psexec.exe") + r" \\" + str(pClientIp) + " -n 3 -u " + pUsername + " -p " + pPassword + " " + pCommand
         self._debug("Executing " + winexe)
 
         # Run psexec
         if self.LocalOs == OsType.Windows:
             return_code, stdout, raw_stderr = libsf.RunCommand(winexe, pTimeout)
+            if return_code == None:
+                raise ClientRefusedError("Could not connect to client - not responding or not Windows")
+
             # Parse psexec output from stderr
             stderr = ""
             psexec_output = ""
             header = True
             footer = False
-            for line in stderr.split("\n"):
+            for line in raw_stderr.split("\n"):
                 if "Sysinternals - www.sysinternals.com" in line:
                     header = False
                     psexec_output += line + "\n"
@@ -238,24 +241,27 @@ class SfClient:
                 if header:
                     psexec_output += line + "\n"
                     continue
-                
-                if line.startswith("Connecting to " + ip):
+
+                if line.startswith("Connecting to " + pClientIp):
                     footer = True
                     psexec_output += line + "\n"
-                    break
+                    continue
                 if footer:
                     psexec_output += line + "\n"
                     continue
-                
+
                 stderr += line + "\n"
-            
+
+            if "PsExec could not start" in psexec_output:
+                psexec_output += stderr
+
             if "The user name or password is incorrect" in psexec_output:
                 raise ClientAuthorizationError("Could not connect to Windows client - auth or permission error")
             if "Access is denied" in psexec_output:
                 raise ClientAuthorizationError("Could not connect to Windows client - auth or permission error")
             if "Timeout" in psexec_output:
                 raise ClientRefusedError("Could not connect to client - not responding or not Windows")
-            
+
             return return_code, stdout, stderr
 
         # Run winexec
@@ -267,7 +273,7 @@ class SfClient:
                 # In either case the return code may be non-zero
                 # If winexe succeeded but the remote command failed, we want to pass the non-zero return and stdout/stderr back to the caller
                 # If winexe itself failed to connect and run the command we want to raise an exception
-    
+
                 # Look for known error signatures from winexe, and assume everything else is from the remote command
                 if "NT_STATUS_RESOURCE_NAME_NOT_FOUND" in stdout:
                     # usually a transient network error
@@ -292,7 +298,7 @@ class SfClient:
                     raise ClientRefusedError("Could not connect to client - not responding or not Windows")
                 elif stdout.startswith("ERROR:") and "NT_" in stdout:
                     raise ClientError("Could not connect to Windows client - " + stdout)
-    
+
                 return return_code, stdout, stderr
 
     def ExecuteCommand(self, pCommand, pIpAddress = None):
@@ -301,7 +307,7 @@ class SfClient:
             return -1, '', ''
         if pIpAddress == None:
             pIpAddress = self.IpAddress
-        
+
         if self.Localhost:
             return_code, stdout_data = commands.getstatusoutput(pCommand)
             return return_code, stdout_data, ""
@@ -593,17 +599,17 @@ class SfClient:
             elif self.RemoteOsVersion == "redhat":
                 old_ip = ifaces[interface_name]["ip"]
                 self._info("Changing IP on " + interface_name + " from " + old_ip + " to " + NewIp)
-                
+
                 interface_conf_file = "/etc/sysconfig/network-scripts/ifcfg-" + interface_name
-                
+
                 # Back up old config file
                 self._debug("Backing up old ifcfg file")
                 retcode, stdout, stderr = self.ExecuteCommand("cp " + interface_conf_file + " " + interface_conf_file + ".bak")
                 if retcode != 0: raise ClientError("Could not back up interface file: " + stderr)
-                
+
                 # Copy the file locally to work on.  If something goes wrong, we can raise an exception and bail without leaving a partially configured file around
                 retcode, stdout, stderr = self.ExecuteCommand("cp " + interface_conf_file + " ifcfg")
-                
+
                 # See if the interface is already statically configured.  If so, replace the existing config
                 # grep return codes: 0 means it was successful and found a match, 1 means it was successful but found no matches, anything else means an error
                 retcode, stdout, stderr = self.ExecuteCommand("grep BOOTPROTO=none " + interface_conf_file)
@@ -632,7 +638,7 @@ class SfClient:
                         if retcode != 0: raise ClientError("Could not change interface file: " + stderr)
                 else:
                     raise ClientError("Could not grep interface file: " + stderr)
-                
+
                 # Move the local file over the real file
                 retcode, stdout, stderr = self.ExecuteCommand("mv ifcfg " + interface_conf_file)
                 if retcode != 0: raise ClientError("Could not copy interface file: " + stderr)
@@ -647,7 +653,7 @@ class SfClient:
                 self.SshSession.close()
                 self.SshSession = None
                 time.sleep(30)
-                
+
                 if self.IpAddress == old_ip:
                     self.IpAddress = NewIp
                     start_time = time.time()
@@ -1332,7 +1338,7 @@ class SfClient:
                     raise ClientError("Failed to log out of all targets")
                 self._passed("Logged out of requested volumes")
                 return
-            
+
             # Log out of all volumes
             retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m node -U all")
             if retcode == 0 or retcode == 21: # 21 means there were no sessions to log out of
@@ -1502,7 +1508,7 @@ class SfClient:
                     continue
                 #self._debug("Adding device " + volume["device"])
                 length = str(len(volume["device"]))
-                if length not in devs_by_length: 
+                if length not in devs_by_length:
                     #self._debug("Adding len = " + length + " (" + volume["device"] + ")")
                     devs_by_length[length] = []
                 devs_by_length[length].append(volume["device"])
@@ -1595,7 +1601,7 @@ class SfClient:
                 dev = pieces[0][11:] # remove /sys/block/ off the front
                 size = pieces[1]
                 sectors[dev] = size
-            
+
             retcode, raw_iscsiadm, stderr = self.ExecuteCommand("iscsiadm -m session -P 3")
             if retcode != 0: raise ClientError("Could not get volume list: " + stderr)
             new_volume = None
@@ -1737,7 +1743,7 @@ class SfClient:
             #        retcode, stdout, stderr = self.ExecuteCommand("cat /sys/block/" + new_volume["device"] + "/queue/hw_sector_size")
             #        new_volume["sectors"] = stdout.strip()
             #        volumes[new_volume["device"]] = new_volume
-            
+
             volumes = self.GetVolumeSummary()
             sort = "iqn" # or device, portal, state
             self._info("Found " + str(len(volumes.keys())) + " iSCSI volumes")
@@ -1845,7 +1851,7 @@ class SfClient:
             interface_mac = interface_mac.replace(":", "")
             interface_mac = interface_mac.replace("-", "")
             interface_mac = interface_mac.lower()
-        
+
         if self.RemoteOs == OsType.Linux:
             self._debug("Searching for network interfaces")
             retcode, stdout, stderr = self.ExecuteCommand("ifconfig -a")
@@ -1865,7 +1871,7 @@ class SfClient:
                     ip = m.group(1)
                     if ip == "127.0.0.1": continue
                     ifaces[iface_name]["ip"] = ip
-            
+
             for name in ifaces.keys():
                 output = []
                 for k,v in ifaces[name].iteritems():
@@ -1907,15 +1913,15 @@ class SfClient:
     def IsHealthy(self):
         if self.RemoteOs == OsType.Linux:
             self._info("Checking health")
-            
+
             # alphabetically first MAC
             return_code, stdout, stderr = self.ExecuteCommand("ifconfig | grep HWaddr | awk '{print $5}' | sed 's/://g' | sort | head -1")
             unique_id = stdout.strip()
-    
+
             # Get uptime
             return_code, stdout, stderr = self.ExecuteCommand("cat /proc/uptime | awk '{print $1}'")
             uptime = stdout.strip()
-    
+
             # Check memory usage
             return_code, stdout, stderr = self.ExecuteCommand("cat /proc/meminfo")
             mem_total = 0
@@ -1942,7 +1948,7 @@ class SfClient:
             mem_usage = 0
             if mem_total > 0:
                 mem_usage = "%.1f" % (100 - ((mem_free + mem_buff + mem_cache) * 100) / mem_total)
-    
+
             # Check CPU usage
             cpu_usage = "-1";
             try:
@@ -1951,26 +1957,26 @@ class SfClient:
                 if (m):
                         cpu_usage = "%.1f" % (100.0 - float(m.group(1)))
             except ValueError: pass
-    
+
             # Check if vdbench is running here
             return_code, stdout, stderr = self.ExecuteCommand("ps -ef | grep -v grep | grep java | grep vdbench | wc -l")
             vdbench_count = 0
             try: vdbench_count = int(stdout.strip())
             except ValueError: pass
-    
+
             # See if vdbenchd is in use
             return_code, stdout, stderr = self.ExecuteCommand("if [ -f /opt/vdbench/last_vdbench_pid ]; then echo 'True'; else echo 'False'; fi")
             vdbenchd = bool(stdout.strip())
-    
+
             # See if we have a vdbench last exit status
             vdbench_exit = -1
             return_code, stdout, stderr = self.ExecuteCommand("cat /opt/vdbench/last_vdbench_exit")
             try: vdbench_exit = int(stdout.strip())
             except ValueError:pass
-    
+
             self._info("Hostname " + self.Hostname + " MAC " + unique_id)
             self._info("Uptime " + str(uptime))
-    
+
             # Use vdbench status to determine health
             healthy = True
             if vdbench_count > 0:
@@ -1983,29 +1989,19 @@ class SfClient:
             else:
                 self._error("vdbench failed")
                 healthy = False
-    
-    
+
+
             if cpu_usage > 0:
                 self._info("CPU usage " + str(cpu_usage) + "%")
             if mem_usage > 0:
                 self._info("Mem usage " + str(mem_usage) + "%")
-            
+
             if healthy:
                 self._passed("Client is healthy")
             else:
                 self._error("Client is not healthy")
-    
+
             return healthy
 
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
-
-
-
-
-
-
-
-
-
-
