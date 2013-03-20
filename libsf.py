@@ -9,6 +9,7 @@ import datetime
 import calendar
 import json
 import urllib2
+import BaseHTTPServer
 import httplib
 import random
 import socket
@@ -181,7 +182,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
 class MultiFormatter(logging.Formatter):
     raw_format = "%(message)s"
     std_format = "%(asctime)s: %(levelname)-7s %(message)s"
-    
+
     def __init__(self, fmt=std_format):
         self.std_format = fmt
         logging.Formatter.__init__(self, fmt)
@@ -199,13 +200,13 @@ class MultiFormatter(logging.Formatter):
 # Cross platform log to syslog and console with colors
 class mylog:
     silence = False
-    
+
     logging.raiseExceptions = False
     sftestlog = logging.getLogger("sftest")
     sftestlog.setLevel(logging.DEBUG)
 
     # Log everything to syslog on non-windows
-    if "win" not in platform.system().lower(): 
+    if "win" not in platform.system().lower():
         syslog_formatter = logging.Formatter("%(name)s: %(levelname)s %(message)s") # prepend with ident and our severities
         syslog_address = "/dev/log"
         if platform.system().lower() == "darwin": syslog_address="/var/run/syslog"
@@ -220,7 +221,7 @@ class mylog:
     console.setLevel(logging.INFO)
     console.setFormatter(console_formatter)
     sftestlog.addHandler(console)
-    
+
     @staticmethod
     def _split_message(message):
         lines = []
@@ -270,7 +271,7 @@ class mylog:
         lines = mylog._split_message(message)
         for line in lines:
             mylog.sftestlog.log(MyLogLevels.PASS, line)
-    
+
     @staticmethod
     def raw(message):
         if mylog.silence: return
@@ -426,7 +427,7 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
     last_error_code = ""
     last_error_mess = ""
     while(True):
-        
+
         if retry <= 0:
             mylog.error("Could not call API method " + MethodName)
             if ExitOnError:
@@ -468,7 +469,7 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
                 mylog.warning("HTTPException: " + str(e))
                 last_error_code = "HTTPException"
                 last_error_mess = str(e)
-            
+
             http_retry -= 1
             if http_retry <= 0:
                 if ExitOnError:
@@ -478,9 +479,9 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
 
             mylog.info("Waiting 60 seconds before trying API again...")
             time.sleep(60)
-        
+
         # At this point we got a good HTTP response code from the MVIP
-        
+
         # Read the raw text content of the response
         response_str = api_resp.read().decode('ascii')
         #print "Raw response = ------------------------------------------------------"
@@ -492,7 +493,7 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
         actual_len = len(response_str)
         if (expected_len != actual_len):
             mylog.warning("API response: expected " + str(expected_len) + " bytes (content-length) but received " + str(actual_len) + " bytes")
-        
+
         # Try to parse the response into JSON
         try:
             response_obj = json.loads(response_str)
@@ -522,7 +523,7 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
             mylog.warning("Retrying because of xDBConnectionLoss")
             retry -= 1
             continue # go back to the beginning and try to get a better response from the cluster
-        
+
         # Any other errors, fail
         if ExitOnError:
             mylog.error("Error " + response_obj['error']['name'] + " - " + response_obj['error']['message'])
@@ -545,7 +546,7 @@ def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitO
     last_error_code = ""
     last_error_mess = ""
     while(True):
-        
+
         if retry <= 0:
             mylog.error("Could not call API method " + pMethodName)
             if ExitOnError:
@@ -587,7 +588,7 @@ def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitO
                 mylog.warning("HTTPException: " + str(e))
                 last_error_code = "HTTPException"
                 last_error_mess = str(e)
-            
+
             http_retry -= 1
             if http_retry <= 0:
                 if ExitOnError:
@@ -597,9 +598,9 @@ def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitO
 
             mylog.info("Waiting 60 seconds before trying API again...")
             time.sleep(60)
-        
+
         # At this point we got a good HTTP response code from the MVIP
-        
+
         # Read the raw text content of the response
         response_str = api_resp.read().decode('ascii')
         #print "Raw response = ------------------------------------------------------"
@@ -611,7 +612,7 @@ def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitO
         actual_len = len(response_str)
         if (expected_len != actual_len):
             mylog.warning("API response: expected " + str(expected_len) + " bytes (content-length) but received " + str(actual_len) + " bytes")
-        
+
         # Try to parse the response into JSON
         try:
             response_obj = json.loads(response_str)
@@ -641,7 +642,7 @@ def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitO
             mylog.warning("Retrying because of xDBConnectionLoss")
             retry -= 1
             continue # go back to the beginning and try to get a better response from the cluster
-        
+
         # Any other errors, fail
         if ExitOnError:
             mylog.error("Error " + response_obj['error']['name'] + " - " + response_obj['error']['message'])
@@ -652,13 +653,13 @@ def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitO
 def ConnectSsh(pClientIp, pUsername, pPassword):
     client = ssh.SSHClient()
     client.load_system_host_keys()
-    
+
     keyfile = None
     if sys.platform.startswith("win"):
         keyfile = os.environ["HOMEDRIVE"] + os.environ["HOMEPATH"] + "\\ssh\\id_rsa"
         if not os.path.exists(keyfile): keyfile = None
         else: mylog.debug("Connecting SSH to " + pClientIp + " using keyfile " + keyfile)
-    
+
     client.set_missing_host_key_policy(ssh.AutoAddPolicy())
     try:
         client.connect(pClientIp, username=pUsername, password=pPassword, key_filename=keyfile)
@@ -724,7 +725,7 @@ class Command(object):
                 # Under Linux you can simply do this, but MacOS does not have the --ppid flag:
                 #os.system("for pid in $(ps --ppid " + str(ppid) + " -o pid --no-header); do kill -9 $pid; done")
                 os.system("for pid in $(ps -eo ppid,pid | egrep \"^\\s*" + str(ppid) + "\\s+\" | awk '{print $2}'); do kill -9 $pid 2>&1 >/dev/null; done")
-            
+
             # Now we can kill the parent process if it is still running and wait for the thread to finish
             try: self.process.kill()
             except WindowsError: pass
@@ -795,7 +796,7 @@ def ParseIpsFromList(pIpListString):
     ip_addr = []
     pieces = pIpListString.split(",")
     for ip in pieces:
-        ip = ip.strip() 
+        ip = ip.strip()
         #mylog.debug("Validating " + ip)
         if not IsValidIpv4Address(ip):
             raise TypeError("'" + ip + "' does not appear to be a valid address")
@@ -1186,7 +1187,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
 
     found_volumes = dict()
     count = 0
-    
+
     # Search for specific volume id or list of ids
     if VolumeId:
         # Convert to a list if it is a scalar
@@ -1195,7 +1196,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             volume_id_list = list(VolumeId)
         except ValueError:
             volume_id_list.append(VolumeId)
-        
+
         for vid in volume_id_list:
             volume_name = None
             for volume in all_volumes["volumes"]:
@@ -1242,7 +1243,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             volume_name_list = list(VolumeName)
         except ValueError:
             volume_name_list.append(VolumeName)
-        
+
         for vname in volume_name_list:
             volume_id = 0
             found = False
@@ -1353,7 +1354,7 @@ def GetIpmiIp(NodeIp, Username, Password):
     finally:
         if ssh:
             ssh.close()
-    
+
     ipmi_ip = None
     for line in stdout_lines:
         m = re.search("IP Address\s+: (\S+)", line)
@@ -1363,7 +1364,7 @@ def GetIpmiIp(NodeIp, Username, Password):
     if not ipmi_ip:
         mylog.error("Could not find an IPMI IP address for this node")
         sys.exit(1)
-    
+
     return ipmi_ip
 
 def IpmiCommand(IpmiIp, IpmiUsername, IpmiPassword, IpmiCommand):
@@ -1376,5 +1377,3 @@ def IpmiCommand(IpmiIp, IpmiUsername, IpmiPassword, IpmiCommand):
             break
         retry -= 1
         time.sleep(3)
-
-
