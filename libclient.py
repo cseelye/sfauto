@@ -209,7 +209,6 @@ class SfClient:
                 return_code = int(retline.strip())
         stdout_data = "".join(stdout_data)
         stderr_data = "".join(stderr_data)
-
         return return_code, stdout_data, stderr_data
 
     def _execute_winexe_command(self, pClientIp, pUsername, pPassword, pCommand, pTimeout=30):
@@ -705,7 +704,7 @@ class SfClient:
         elif self.RemoteOs == OsType.Linux:
             self._info("Setting hostname to " + pNewHostname)
             oldhostname = self.Hostname
-            self.ExecuteCommand("hostname " + pNewNostname)
+            self.ExecuteCommand("hostname " + pNewHostname)
             if self.RemoteOsVersion == "redhat":
                 local_fh, local_filename = tempfile.mkstemp(dir='.', text=True)
                 sftp = self.SshSession.open_sftp()
@@ -1287,6 +1286,22 @@ class SfClient:
                             error_count += 1
                     else:
                         login_count += 1
+
+            # Wait for SCSI devices for all sessions
+            if login_count > 0:
+                start_time = time.time()
+                while True:
+                    retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m session -P3 | egrep 'Target|scsi disk' | wc -l")
+                    stdout = stdout.strip()
+                    # This should generate two lines of output for every target
+                    # Target: iqn.2010-01.com.solidfire:8m8z.kvm-templates.38537
+                    #    Attached scsi disk sdc          State: running
+                    # Instead of parsing the output, we'll assume that an even number of lines means there is a device for every session
+                    if int(stdout) % 2 == 0:
+                        break
+                    if time.time() - start_time > 120: # Wait up to 2 minutes
+                        raise ClientError("Timeout waiting for all iSCSI sessions to have SCSI devices")
+                    time.sleep(1)
 
             if (login_count > 0):
                 self._passed("Successfully logged in to " + str(login_count) + " volumes")
