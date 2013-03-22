@@ -6,8 +6,8 @@
 # Configuration
 #  These may also be set on the command line
 
-host_ip = "172.25.106.000"        # The IP address of the hypervisor
-                                # --host_ip
+vmhost = "172.25.106.000"        # The IP address of the hypervisor
+                                # --vmhost
 
 host_user = "root"                # The username for the hypervisor
                                 # --client_user
@@ -43,8 +43,8 @@ from libsf import mylog
 def main():
     # Parse command line arguments
     parser = OptionParser()
-    global host_ip, host_user, host_pass, vm_name, vm_regex, vm_count
-    parser.add_option("--host_ip", type="string", dest="host_ip", default=host_ip, help="the management IP of the hypervisor")
+    global vmhost, host_user, host_pass, vm_name, vm_regex, vm_count
+    parser.add_option("--vmhost", type="string", dest="vmhost", default=vmhost, help="the management IP of the hypervisor")
     parser.add_option("--host_user", type="string", dest="host_user", default=host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=host_pass, help="the password for the hypervisor [%default]")
     parser.add_option("--vm_name", type="string", dest="vm_name", default=vm_name, help="the name of the single VM to power off")
@@ -52,7 +52,7 @@ def main():
     parser.add_option("--vm_count", type="int", dest="vm_count", default=vm_count, help="the number of matching VMs to power off (0 to use all)")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, args) = parser.parse_args()
-    host_ip = options.host_ip
+    vmhost = options.vmhost
     host_user = options.host_user
     host_pass = options.host_pass
     vm_name = options.vm_name
@@ -61,20 +61,20 @@ def main():
     if options.debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(host_ip):
-        mylog.error("'" + host_ip + "' does not appear to be a valid IP")
+    if not libsf.IsValidIpv4Address(vmhost):
+        mylog.error("'" + vmhost + "' does not appear to be a valid IP")
         sys.exit(1)
 
-    mylog.info("Connecting to " + host_ip)
+    mylog.info("Connecting to " + vmhost)
     try:
-        conn = libvirt.open("qemu+tcp://" + host_ip + "/system")
+        conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
     except libvirt.libvirtError as e:
         mylog.error(str(e))
         sys.exit(1)
     if conn == None:
         mylog.error("Failed to connect")
         sys.exit(1)
-    
+
     # Shortcut when only a single VM is specified
     if vm_name:
         try:
@@ -95,11 +95,11 @@ def main():
             except libvirt.libvirtError as e:
                 mylog.error("Failed to power off " + vm.name() + ": " + str(e))
                 sys.exit(1)
-    
-    
+
+
     mylog.info("Searching for matching VMs")
     matched_vms = []
-    
+
     # Get a list of running VMs
     try:
         vm_ids = conn.listDomainsID()
@@ -117,7 +117,7 @@ def main():
         else:
             matched_vms.append(vm)
 
-    
+
     # Get a list of stopped VMs
     try:
         vm_ids = conn.listDefinedDomains()
@@ -134,8 +134,8 @@ def main():
             if m: matched_vms.append(vm)
         else:
             matched_vms.append(vm)
-    
-    
+
+
     power_count = 0
     matched_vms = sorted(matched_vms, key=lambda vm: vm.name())
     for vm in matched_vms:
@@ -151,7 +151,7 @@ def main():
                 mylog.passed("  Successfully powered off " + vm.name())
             except libvirt.libvirtError as e:
                 mylog.error("  Failed to power off " + vm.name() + ": " + str(e))
-    
+
     if power_count == len(matched_vms):
         mylog.passed("All VMs powered off successfully")
         sys.exit(0)
@@ -159,7 +159,7 @@ def main():
         mylog.error("Not all VMs were powered off")
         sys.exit(1)
 
-    
+
 
 
 if __name__ == '__main__':

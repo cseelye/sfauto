@@ -6,20 +6,30 @@
 # Configuration
 #  These may also be set on the command line
 
-host_ip = "172.25.106.000"        # The IP address of the hypervisor
-                                # --host_ip
+vmhost = "172.25.106.000"      # The IP address of the hypervisor
+                                # --vmhost
 
-host_user = "root"                # The username for the hypervisor
-                                # --client_user
+host_user = "root"              # The username for the hypervisor
+                                # --host_user
 
+<<<<<<< HEAD
 host_pass = "password"           # The password for the hypervisor
                                 # --client_pass
+=======
+host_pass = "solidfire"         # The password for the hypervisor
+                                # --host_pass
+>>>>>>> 6611be4... KVM scripts - standardize command line args, add a few new ones
 
-client_user = "root"                # The username for the clients
-                                    # --client_user
+vm_user = "root"                # The username for the clients
+                                # --vm_user
 
+<<<<<<< HEAD
 client_pass = "password"           # The password for the clients
                                     # --client_pass
+=======
+vm_pass = "solidfire"           # The password for the clients
+                                # --vm_pass
+>>>>>>> 6611be4... KVM scripts - standardize command line args, add a few new ones
 
 # ----------------------------------------------------------------------------
 
@@ -44,54 +54,51 @@ from libclientmon import CftClientMon
 def main():
     # Parse command line arguments
     parser = OptionParser()
-    global host_ip, host_user, host_pass, client_user, client_pass
-    parser.add_option("--host_ip", type="string", dest="host_ip", default=host_ip, help="the management IP of the hypervisor")
+    global vmhost, host_user, host_pass, vm_user, vm_pass
+    parser.add_option("--vmhost", type="string", dest="vmhost", default=vmhost, help="the management IP of the hypervisor")
     parser.add_option("--host_user", type="string", dest="host_user", default=host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=host_pass, help="the password for the hypervisor [%default]")
-    parser.add_option("--client_user", type="string", dest="client_user", default=client_user, help="the username for the client [%default]")
-    parser.add_option("--client_pass", type="string", dest="client_pass", default=client_pass, help="the password for the client [%default]")
+    parser.add_option("--vm_user", type="string", dest="vm_user", default=vm_user, help="the username for the client [%default]")
+    parser.add_option("--vm_pass", type="string", dest="vm_pass", default=vm_pass, help="the password for the client [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, args) = parser.parse_args()
-    host_ip = options.host_ip
+    vmhost = options.vmhost
     host_user = options.host_user
     host_pass = options.host_pass
-    client_user = options.client_user
-    client_pass = options.client_pass
+    vm_user = options.vm_user
+    vm_pass = options.vm_pass
     if options.debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(host_ip):
-        mylog.error("'" + host_ip + "' does not appear to be a valid IP")
+    if not libsf.IsValidIpv4Address(vmhost):
+        mylog.error("'" + vmhost + "' does not appear to be a valid IP")
         sys.exit(1)
 
     # Get a list of vm info from the monitor
     monitor = CftClientMon()
     vm_list = monitor.GetGroupVmInfo("KVM")
-    
-    mylog.info("Connecting to " + host_ip)
+
+    mylog.info("Connecting to " + vmhost)
     try:
-        conn = libvirt.openReadOnly("qemu+tcp://" + host_ip + "/system")
+        conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
     except libvirt.libvirtError as e:
         mylog.error(str(e))
         sys.exit(1)
     if conn == None:
         mylog.error("Failed to connect")
         sys.exit(1)
-    
-    # Get a list of VMs and their MACs from the hypervisor
+
     try:
         vm_ids = conn.listDomainsID()
-    except libvirtError as e:
+        running_vm_list = map(conn.lookupByID, vm_ids)
+        running_vm_list = sorted(running_vm_list, key=lambda vm: vm.name())
+    except libvirt.libvirtError as e:
         mylog.error(str(e))
         sys.exit(1)
 
-    for vid in vm_ids:
-        try:
-            vm = conn.lookupByID(vid)
-        except libvirt.libvirtError as e:
-            mylog.error("Failed to get info for VM " + vid)
-            continue
-        
+    updated = 0
+    for vm in running_vm_list:
+        mylog.info("Updating hostname on " + vm.name())
         # Find the VM alphabetically first MAC address from the XML config
         vm_xml = ElementTree.fromstring(vm.XMLDesc(0))
         mac_list = []
@@ -99,30 +106,45 @@ def main():
             mac_list.append(node.get("address"))
         mac_list.sort()
         mac = mac_list[0]
-        
+
         # Get the IP of this VM from the monitor info
         ip = ""
         for vm_info in vm_list:
             if vm_info.MacAddress == mac.replace(":", ""):
                 ip = vm_info.IpAddress
                 break
+        if not ip:
+            mylog.warning("Could not find IP for " + vm.name())
+            continue
 
         client = SfClient()
-        mylog.info("Connecting to client '" +ip + "'")
+        #mylog.info("Connecting to client '" +ip + "'")
         try:
-            client.Connect(ip, client_user, client_pass)
+            client.Connect(ip, vm_user, vm_pass)
         except ClientError as e:
             mylog.error(e)
             continue
-    
-        mylog.info("Updating hostname on " + client.Hostname)
+
+        if (client.Hostname == vm.name()):
+            mylog.passed("  Hostname is correct")
+            updated += 1
+            continue
+
         try:
             client.UpdateHostname(vm.name())
         except ClientError as e:
             mylog.error(e.message)
             sys.exit(1)
-    
+
         mylog.passed("  Successfully set hostname")
+        updated += 1
+
+    if updated == len(vm_ids):
+        mylog.passed("Successfully updated hostname on all running VMs")
+        sys.exit(0)
+    else:
+        mylog.error("Could not update hostname on all running VMs")
+        sys.exit(1)
 
 
 
