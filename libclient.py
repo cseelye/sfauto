@@ -706,55 +706,40 @@ class SfClient:
             oldhostname = self.Hostname
             self.ExecuteCommand("hostname " + pNewHostname)
             if self.RemoteOsVersion == "redhat":
-                local_fh, local_filename = tempfile.mkstemp(dir='.', text=True)
-                sftp = self.SshSession.open_sftp()
-                sftp.get('/etc/sysconfig/network', local_filename)
-                with open(local_filename, 'r') as infile:
-                    with open(local_filename + ".new", 'w') as outfile:
-                        for line in infile.readlines():
-                            if oldhostname in line:
-                                line = line.replace(oldhostname, pNewHostname)
-                            outfile.write(line)
-                sftp.put(local_filename + ".new", "/etc/sysconfig/network")
-                sftp.close()
-                os.unlink(local_filename)
-                os.unlink(local_filename + ".new")
+                # Change /etc/sysconfig/network
+                retcode, stdout, stderr = self.ExecuteCommand("chattr -i /etc/sysconfig/network")
+                if retcode != 0:
+                    raise ClientError("Failed to chattr /etc/sysconfig/network: " + stderr)
+                retcode, stdout, stderr = self.ExecuteCommand("sed 's/HOSTNAME=.*/HOSTNAME=" + pNewHostname + "/' /etc/sysconfig/network")
+                if retcode != 0:
+                    raise ClientError("Failed to update /etc/hostname: " + stderr)
+
+                # Update current hostname
                 retcode, stdout, stderr = self.ExecuteCommand("hostname -v " + pNewHostname)
                 if retcode != 0:
                     raise ClientError("Failed to change hostname: " + stderr)
             else:
+                # Change /etc/hostname
                 retcode, stdout, stderr = self.ExecuteCommand("chattr -i /etc/hostname")
                 if retcode != 0:
                     raise ClientError("Failed to chattr /etc/hostname: " + stderr)
-                # change the hostname
                 self._debug("Changing hostname to '" + pNewHostname + "'")
                 retcode, stdout, stderr = self.ExecuteCommand("echo " + pNewHostname + " > /etc/hostname")
                 if retcode != 0:
                     raise ClientError("Failed to update /etc/hostname: " + stderr)
+                # Update current hostname
                 retcode, stdout, stderr = self.ExecuteCommand("hostname -v -b " + pNewHostname)
                 if retcode != 0:
                     raise ClientError("Failed to change hostname: " + stderr)
-            # change /etc/hosts
+
+            # Change /etc/hosts
             retcode, stdout, stderr = self.ExecuteCommand("chattr -i /etc/hosts")
             if retcode != 0:
                 raise ClientError("Failed to chattr /etc/hosts: " + stderr)
             self._debug("Updating /etc/hosts")
-            local_fh, local_filename = tempfile.mkstemp(dir='.', text=True)
-            sftp = self.SshSession.open_sftp()
-            sftp.get('/etc/hosts', local_filename)
-            infile = open(local_filename, 'r')
-            outfile = open(local_filename + '.new', 'w')
-            for line in infile.readlines():
-                if oldhostname in line:
-                    line = line.replace(oldhostname, pNewHostname)
-                outfile.write(line)
-            infile.close()
-            outfile.flush()
-            outfile.close()
-            sftp.put(local_filename + '.new', '/etc/hosts')
-            sftp.close()
-            os.unlink(local_filename)
-            os.unlink(local_filename + '.new')
+            retcode, stdout, stderr = self.ExecuteCommand("sed -i 's/" + oldhostname + "/" + pNewHostname + "/g' /etc/hosts")
+            if retcode != 0:
+                raise ClientError("Failed to edit /etc/hosts: " + stderr)
 
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
