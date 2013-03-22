@@ -18,6 +18,12 @@ client_pass = "solidfire"           # The password for the client
 command = ""                        # The command to execute on the client
                                     # --command
 
+csv = False                         # Display minimal output that is suitable for piping into other programs
+                                    # --csv
+
+bash = False                        # Display minimal output that is formatted for a bash array/for  loop
+                                    # --bash
+
 # ----------------------------------------------------------------------------
 
 
@@ -67,6 +73,9 @@ def main():
     if bash or csv:
         mylog.silence = True
 
+    return_code = None
+    stdout = ""
+    stderr = ""
     try:
         mylog.info("Connecting to " + client_ip)
         client = SfClient()
@@ -78,7 +87,7 @@ def main():
         sys.exit(1)
     stdout = stdout.rstrip("\n")
     stderr = stderr.rstrip("\n")
-    
+
     if bash or csv:
         sys.stdout.write(stdout)
         sys.stdout.write("\n")
@@ -89,10 +98,10 @@ def main():
         if stderr:
             mylog.info("STDERR: " + stderr)
 
-    if return_code:
+    if return_code != None:
         sys.exit(return_code)
     else:
-        sys.exit(1)
+        sys.exit(-1)
 
 
 if __name__ == '__main__':
