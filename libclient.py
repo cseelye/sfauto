@@ -1069,47 +1069,52 @@ class SfClient:
 
         elif self.RemoteOs == OsType.Linux:
             self._debug("Updating iscsid.conf")
-            sftp = self.SshSession.open_sftp()
-            local_fh, local_filename = tempfile.mkstemp(dir='.', text=True)
-            infile = open('iscsid.conf.default.' + self.RemoteOsVersion, 'r')
-            outfile = open(local_filename, 'w')
-            for line in infile.readlines():
-                line = line.strip()
-                #comment = re.search("^#", line)
-                #if (comment):
-                #    outfile.write(line + "\n")
-                #    continue
 
-                m = re.search("node.session.auth.authmethod =", line)
-                if (m):
-                    line = "node.session.auth.authmethod = CHAP"
-                m = re.search("node.session.auth.username =", line)
-                if (m):
-                    line = "node.session.auth.username = " + pChapUser
-                m = re.search("node.session.auth.password =", line)
-                if (m):
-                    line = "node.session.auth.password = " + pChapSecret
+            # Turn on CHAP
+            cmd = "sed 's/node\.session\.auth\.authmethod\s*=.*/node\.session\.auth\.authmethod = CHAP/g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
+            cmd = "sed 's/discovery\.sendtargets\.auth\.authmethod\s*=.*/discovery\.sendtargets\.auth\.authmethod = CHAP/g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
 
-                m = re.search("discovery.sendtargets.auth.authmethod =", line)
-                if (m):
-                    line = "discovery.sendtargets.auth.authmethod = CHAP"
-                m = re.search("discovery.sendtargets.auth.username =", line)
-                if (m):
-                    line = "discovery.sendtargets.auth.username = " + pChapUser
-                m = re.search("discovery.sendtargets.auth.password =", line)
-                if (m):
-                    line = "discovery.sendtargets.auth.password = " + pChapSecret
+            # Set username/password for one-way CHAP
+            cmd = "sed 's/discovery\.sendtargets\.auth\.username\s*=.*/discovery\.sendtargets\.auth\.username = " + pChapUser + "/g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
+            cmd = "sed 's/discovery\.sendtargets\.auth\.password\s*=.*/discovery\.sendtargets\.auth\.password = " + pChapSecret + "/g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
+            cmd = "sed 's/node\.session\.auth\.username\s*=.*/node\.session\.auth\.username = " + pChapUser + "/g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
+            cmd = "sed 's/node\.session\.auth\.password\s*=.*/node\.session\.auth\.password = " + pChapSecret + "/g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
 
-                outfile.write(line + "\n")
-
-            infile.close()
-            outfile.flush()
-            outfile.close()
-            sftp.put(local_filename, '/etc/iscsi/iscsid.conf')
-            sftp.close()
-
-            os.unlink(local_filename)
-            #os.unlink(local_filename + '.new')
+            # Disable 2-way CHAP
+            cmd = "sed 's/^discovery\.sendtargets\.auth\.username_in\s*=.*/#node\.session\.auth\.username_in = /g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
+            cmd = "sed 's/^discovery\.sendtargets\.auth\.password_in\s*=.*/#node\.session\.auth\.password_in = /g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
+            cmd = "sed 's/^node\.session\.auth\.username_in\s*=.*/#node\.session\.auth\.username_in = /g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
+            cmd = "sed 's/^node\.session\.auth\.password_in\s*=.*/#node\.session\.auth\.password_in = /g' -i /etc/iscsi/iscsid.conf"
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
+            if retcode != 0:
+                raise ClientError("Could not edit iscsid.conf - " + stderr)
 
             self._passed("Set CHAP credentials in iscsid.conf")
 
