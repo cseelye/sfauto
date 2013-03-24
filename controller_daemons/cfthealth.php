@@ -1,5 +1,5 @@
 <html>
-<?php 
+<?php
 
 $unresponsive_threshold = 20; // 20 sec
 $dead_threshold = 60 * 60; // 1 hour
@@ -23,7 +23,7 @@ $unhealthy_clusters = ltrim($unhealthy_clusters, ",");
 echo "<!-- unhealthy_clusters = " . $unhealthy_clusters . " -->\n";
 
 // How many responsive clients has vdbench failed on
-$sql = "SELECT COUNT(*) FROM clients WHERE vdbench_count<=0 AND vdbench_last_exit != 0 AND timestamp > '$unresponsive_time'";
+$sql = "SELECT COUNT(*) FROM clients WHERE vdbench_count<=0 AND (vdbench_last_exit != 0 AND vdbench_last_exit != -1) AND timestamp > '$unresponsive_time'";
 $res = $db->query($sql);
 $row = $res->fetch_assoc();
 $fail_count = $row['COUNT(*)'];
@@ -67,7 +67,7 @@ if ($unhealthy_clusters == "")
 {
 	echo "{Healthy}";
 }
-else 
+else
 {
 	echo "{UNHEALTHY}";
 }
@@ -75,7 +75,7 @@ if ($fail_count > 0)
 {
 	echo "[FAIL]";
 }
-elseif ($stop_count > 0) 
+elseif ($stop_count > 0)
 {
 	echo "[STOP]";
 }
@@ -155,7 +155,7 @@ while($row = $res->fetch_assoc())
 	echo "</tr>";
 	echo "\n";
 	echo "<tr><td style='line-height: 5px' colspan='2'>&nbsp;</td></tr>\n";
-	
+
 // 	if ($row['ishealthy'] == 0)
 // 	{
 // 		echo "  <tr>";
@@ -171,7 +171,7 @@ while($row = $res->fetch_assoc())
 		echo "</tr>";
 		echo "\n";
 	}
-	
+
 //	if ($row['current_faults'] != null && $row['current_faults'] != "")
 //	{
 //		echo "  <tr>";
@@ -180,7 +180,7 @@ while($row = $res->fetch_assoc())
 //		echo "</tr>";
 //		echo "\n";
 //	}
-	
+
 	if ($row['message'] != null && $row['message'] != "")
 	{
 		$message = $row['message'];
@@ -190,12 +190,12 @@ while($row = $res->fetch_assoc())
 		echo "</tr>";
 		echo "\n";
 	}
-	
+
 	echo "<tr>";
 	echo "<td colspan='2'>Last update: " . sprintf("%.1f", microtime(true) - $row['timestamp']) . " sec ago</td>";
 	echo "</tr>";
 	echo "\n";
-	
+
 	echo "</table>\n";
 }
 
@@ -224,7 +224,7 @@ foreach ($groups as $group_name)
 		$clients[$row['mac']]['vdbench_count'] = $row['vdbench_count'];
 		$clients[$row['mac']]['vdbench_last_exit'] = $row['vdbench_last_exit'];
 		$clients[$row['mac']]['timestamp'] = $row['timestamp'];
-		
+
 		if (microtime(true) -$row['timestamp'] > $dead_threshold)
 		{
 			$clients[$row['mac']]['status'] = "dead";
@@ -237,7 +237,7 @@ foreach ($groups as $group_name)
 		}
 		elseif ($row['vdbench_count'] <= 0)
 		{
-			if ($row['vdbench_last_exit'] == 0)
+			if ($row['vdbench_last_exit'] == 0 || $row['vdbench_last_exit'] == -1)
 			{
 				$clients[$row['mac']]['status'] = "stopped";
 				$client_status["stopped"]++;
@@ -254,7 +254,7 @@ foreach ($groups as $group_name)
 			$client_status["healthy"]++;
 		}
 	}
-	
+
 	echo "<table style='margin: 10px; float: left;'>\n";
 	echo "  <tr>";
 	if ($group_name == null || $group_name == "")
@@ -263,7 +263,7 @@ foreach ($groups as $group_name)
 		echo "<td style='text-align: center; font-size: 110%; font-weight: bold; border-style: solid; border-width: 3px 0px; border-color: black;' colspan='100'>" . $group_name . " clients (" . $client_count . ")</td>";
 	echo "</tr>";
 	echo "\n";
-	
+
 	echo "  <tr>";
 	echo "<td></td>";
 	echo "<td style='text-align: left; padding: 1px 0px'>";
@@ -276,7 +276,7 @@ foreach ($groups as $group_name)
 	echo "<td></td>";
 	echo "</tr>";
 	echo "\n";
-	
+
 	echo "  <tr>";
 	echo "<td></td>";
 	echo "<td style='text-align: left; padding: 1px 0px'>";
@@ -289,7 +289,7 @@ foreach ($groups as $group_name)
 	echo "<td></td>";
 	echo "</tr>";
 	echo "\n";
-	
+
 	echo "  <tr>";
 	echo "<td></td>";
 	echo "<td style='text-align: left; padding: 1px 0px'>";
@@ -300,7 +300,7 @@ foreach ($groups as $group_name)
 	echo "<td></td>";
 	echo "</tr>";
 	echo "\n";
-	
+
 	echo "  <tr>";
 	echo "<th width='180' style='text-align: left'>Hostname</th>";
 	echo "<th width='140'>IP Address</th>";
@@ -343,7 +343,7 @@ foreach ($groups as $group_name)
 				echo "  <tr class='oddrow'>";
 			}
 		}
-		
+
 		echo "<td class='left'>" . $client['hostname'] . "</td><td>" . $client['ip'] . "</td>";
 		echo "<td>" . $client['cpu_usage'] . "%</td>";
 		echo "<td>" . $client['mem_usage'] . "%</td>";
@@ -355,7 +355,7 @@ foreach ($groups as $group_name)
 		{
 			echo "<td>No (" . $client['vdbench_last_exit'] . ")</td>";
 		}
-		
+
 		echo "<td>" . sprintf("%.1f", microtime(true) - $client['timestamp']) . " sec ago</td>";
 		//echo "<td><a  href=\"?delete=" . $row['hostname'] . "\">Remove</a></td>";
 		echo "</tr>";
