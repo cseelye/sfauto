@@ -60,7 +60,7 @@ import libclient
 from libclient import ClientError, SfClient, OsType
 
 
-def ClientThread(client_ip, client_user, client_pass, account_name, target_list, svip, login_order, accounts_list, results, index, debug=None):
+def ClientThread(client_ip, client_user, client_pass, account_name, target_list, mvip, svip, login_order, accounts_list, results, index, debug=None):
     if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
@@ -251,7 +251,7 @@ def main():
     thread_index = 0
     for client_ip in client_ips:
         results[thread_index] = False
-        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, account_name, target_list, svip, login_order, accounts_list, results, thread_index, debug))
+        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, account_name, target_list, mvip, svip, login_order, accounts_list, results, thread_index, debug))
         th.start()
         current_threads.append(th)
         thread_index += 1
