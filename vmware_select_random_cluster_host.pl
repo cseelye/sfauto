@@ -5,18 +5,33 @@ use VMware::VIRuntime;
 use libsf;
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     cluster => {
         type => "=s",
         help => "The name of the cluster to rescan all hosts in",
         required => 1,
     },
-    batch => {
+    csv => {
         type => "",
-        help => "Display a minimal output that is suited for piping to other programs",
+        help => "Display a minimal output that is formatted as a comma separated list",
+        required => 0,
+    },
+    bash => {
+        type => "",
+        help => "Display a minimal output that is formatted as a space separated list",
         required => 0,
     },
     debug => {
@@ -34,16 +49,17 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $cluster_name = Opts::get_option('cluster');
-my $batch = Opts::get_option('batch');
+my $csv = Opts::get_option('csv');
+my $bash = Opts::get_option('bash');
 my $enable_debug = Opts::get_option('debug');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;
-$mylog::Silent = 1 if $batch;
+$mylog::Silent = 1 if ($bash || $csv);
 
 # Turn off cert validation so we can get away with self signed certs
 mylog::debug("Disabling SSL cert verification");
@@ -85,7 +101,13 @@ for my $host (@{$cluster->host})
 }
 #my $vmhost = Vim::get_view(mo_ref => $cluster->host->[$host_index]);
 
-mylog::info("Selected host " . $vmhost->name);
-print $vmhost->name . "\n" if $batch;
+if ($csv || $bash)
+{
+    print $vmhost->name . "\n";
+}
+else
+{
+    mylog::info("Selected host " . $vmhost->name);
+}
 
 exit 0;

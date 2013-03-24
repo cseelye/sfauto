@@ -151,60 +151,14 @@ if ($@)
     exit 1;
 }
 
-# Find all the VMs with IP addresses
-my %vms;
-foreach my $vm_mo (@vm_list)
+# Get VM names
+my @vm_names;
+foreach my $vm_mor (@vm_list)
 {
-    my $vm = Vim::get_view(mo_ref => $vm_mo, properties => ['name', 'runtime', 'guest']);
-
-    # Skip if it's not a VM
-    next if !$vm->isa("VirtualMachine");
-
-    my $vm_name = $vm->name;
-
-    # Skip if it's not powered on
-    if ($vm->runtime->powerState->val !~ /poweredOn/)
-    {
-        mylog::debug("$vm_name is not powered on");
-        next;
-    }
-
-    # Try to find an IP address
-    my $vm_ip;
-    if (defined $vm->guest && defined $vm->guest->net)
-    {
-        foreach my $net (@{$vm->guest->net})
-        {
-            if (defined $net->ipAddress)
-            {
-                foreach my $ip (@{$net->ipAddress})
-                {
-                    if ($ip =~ /^172/)
-                    {
-                        $vm_ip = $ip;
-                        last;
-                    }
-                }
-                last if $vm_ip;
-            }
-            else
-            {
-                mylog::debug("$vm_name does not have a defined ipAddress object on " . $net->macAddress . " (" . $net->network . ")");
-            }
-        }
-        # Skip if we couldn't find an IP - either the VM doesn't have one, it's not fully booted, VMware Tools not running, etc.
-        if (!$vm_ip)
-        {
-            mylog::warn("$vm_name is powered on but has no 172 IP address");
-            next;
-        }
-        $vms{$vm_name} = $vm_ip;
-    }
-    else
-    {
-        mylog::debug("$vm_name does not have a defined guest/net object");
-    }
+    my $vm = Vim::get_view(mo_ref => $vm_mor, properties => ['name']);
+    push @vm_names, $vm->name;
 }
+@vm_names = sort @vm_names;
 
 eval
 {
@@ -214,21 +168,15 @@ eval
 
 if ($csv || $bash)
 {
-    my @ips;
-    foreach my $vm (sort keys %vms)
-    {
-        push @ips, $vms{$vm};
-    }
     my $separator = ",";
     $separator = " " if $bash;
-    print join($separator, @ips) . "\n";
+    print join($separator, @vm_names) . "\n";
 }
 else
 {
-    foreach my $vm_name (sort keys %vms)
+    foreach my $vm_name (@vm_names)
     {
-        my $vm_ip = $vms{$vm_name};
-        mylog::info("  $vm_name - $vm_ip");
+        mylog::info("  $vm_name");
     }
 }
 exit 0;

@@ -5,25 +5,40 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
-      cluster => {
-         type => "=s",
-         help => "Name of ESX cluster to search",
-         required => 0,
-      },
-      batch => {
-         type => "",
-         help => "Display a minimal output that is suited for piping to other programs",
-         required => 0,
-      },
-      debug => {
-         type => "",
-         help => "Display more verbose messages",
-         required => 0,
-      },
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
+    cluster => {
+        type => "=s",
+        help => "Name of ESX cluster to search",
+        required => 1,
+    },
+    csv => {
+        type => "",
+        help => "Display a minimal output that is formatted as a comma separated list",
+        required => 0,
+    },
+    bash => {
+        type => "",
+        help => "Display a minimal output that is formatted as a space separated list",
+        required => 0,
+    },
+    debug => {
+        type => "",
+        help => "Display more verbose messages",
+        required => 0,
+    },
 );
 Opts::add_options(%opts);
 
@@ -33,16 +48,17 @@ if (scalar(@ARGV) < 1)
    Opts::usage();
    exit 1;
 }
-
 Opts::parse();
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $cluster_name = Opts::get_option('cluster');
 my $enable_debug = Opts::get_option('debug');
-my $batch = Opts::get_option('batch');
+my $csv = Opts::get_option('csv');
+my $bash = Opts::get_option('bash');
 Opts::validate();
 
 $mylog::DisplayDebug = 1 if $enable_debug;
-$mylog::Silent = 1 if $batch;
+$mylog::Silent = 1 if ($bash || $csv);
 
 # Turn off cert validation so we can get away with self signed certs
 mylog::debug("Disabling SSL cert verification");
@@ -77,14 +93,11 @@ for my $disk (@{$storage_manager->storageDeviceInfo->scsiLun})
     # Skip disks that are not solidfire
     next if $disk->vendor !~ /solidfir/i;
 
-    #print $disk->displayName . "\n";
     $sf_disks{$disk->canonicalName} = 1;
 }
 my %sf_datastores;
 for my $mount (@{$storage_manager->fileSystemVolumeInfo->mountInfo})
 {
-    #print $mount->volume->name . "\n";
-    
     if ($mount->volume->type !~ /VMFS/i)
     {
         mylog::debug("Skipping " . $mount->volume->name . " because it is not a VMFS volume");
@@ -112,25 +125,30 @@ for my $ds (@{$datastore_list})
 {
     # Skip non-SF datastores
     next if (!$sf_datastores{$ds->name});
-    
+
     if (!$ds->vm || scalar $ds->vm <= 0)
     {
         mylog::debug($ds->name . " has no VMs in it");
         push (@empty_ds, $ds->name);
         next;
     }
-    
+
     mylog::debug($ds->name . " has " . scalar(@{$ds->vm}) . " VMs in it");
 }
 
 
 @empty_ds = sort @empty_ds;
-foreach my $ds (@empty_ds)
+if ($bash || $csv)
 {
-    mylog::info("  $ds");
+    my $separator = ",";
+    $separator = " " if $bash;
+    print join($separator, @empty_ds) . "\n";
 }
-print join(',', @empty_ds) . "\n" if $batch;
-
-
-
-
+else
+{
+    mylog::info("Datastores with no VMs:");
+    foreach my $ds (@empty_ds)
+    {
+        mylog::info("  $ds");
+    }
+}

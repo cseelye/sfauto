@@ -5,24 +5,36 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vm_name => {
         type => "=s",
         help => "The name of the virtual machine to kill",
         required => 1,
     },
-    ssh_user => {
+    host_user => {
         type => "=s",
         help => "The SSH username for the ESX host",
-        required => 1,
+        required => 0,
+        default => "root",
     },
-    ssh_pass => {
+    host_pass => {
         type => "=s",
         help => "The SSH password for the ESX host",
-        required => 1,
+        required => 0,
+        default => "solidfire",
     },
     debug => {
         type => "",
@@ -33,9 +45,6 @@ my %opts = (
 
 Opts::add_options(%opts);
 
-Opts::set_option("ssh_user", "root");
-Opts::set_option("ssh_pass", "password");
-
 if (scalar(@ARGV) < 1)
 {
    print "Power off a virtual machine.";
@@ -43,13 +52,13 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $vm_name = Opts::get_option('vm_name');
 my $enable_debug = Opts::get_option('debug');
-my $ssh_user = Opts::get_option('ssh_user');
-my $ssh_pass = Opts::get_option('ssh_pass');
+my $ssh_user = Opts::get_option('host_user');
+my $ssh_pass = Opts::get_option('host_pass');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;
@@ -72,6 +81,7 @@ if ($@)
 
 
 my $vm_host;
+my $host_ip;
 eval
 {
     # Find the source VM
@@ -83,7 +93,7 @@ eval
         exit 1;
     }
     $vm_name = $vm->name;
-    
+
     # Skip if it's not powered on
     if ($vm->runtime->powerState->val eq "poweredOff")
     {
@@ -92,8 +102,16 @@ eval
     }
 
     mylog::info("Finding the host $vm_name is running on...");
-    my $host = Vim::get_view(mo_ref => $vm->runtime->host);
+    my $host = Vim::get_view(mo_ref => $vm->runtime->host, properties => ['name', 'configManager']);
     $vm_host = $host->name;
+
+    # Get the first management IP of the host
+    my $netsys = Vim::get_view(mo_ref => $host->configManager->networkSystem, properties => ['networkInfo']);
+    foreach my $vnic (@{$netsys->networkInfo->vnic})
+    {
+        $host_ip = $vnic->spec->ip->ipAddress;
+        last;
+    }
 };
 if ($@)
 {
@@ -118,126 +136,29 @@ if (!$vm_host)
     exit 1;
 }
 
-mylog::info("Killing " . $vm_name);
+mylog::info("Killing " . $vm_name . " on $vm_host");
 
 mylog::debug("Searching for $vm_name world ID on $vm_host");
-my $result = `expect ssh.exp $vm_host $ssh_user $ssh_pass "esxcli vm process list"; echo \$?`;
-my @lines = split (/\n/, $result);
-my $ret = pop (@lines);
-if ($ret != 0)
+my $command = "esxcli vm process list | grep -A1 '^$vm_name' | tail -1 | awk '{print \$3}' 2>&1";
+my ($return_code, $stdout) = libsf::SshCommand(client_ip => $host_ip, client_user => $ssh_user, client_pass => $ssh_pass, command => $command);
+if ($return_code != 0)
 {
-    mylog::error("Could not connect to ESX host: " . join ("\n", @lines));
+    mylog::error("Could not run esxcli: $stdout");
     exit 1;
 }
-my $found = 0;
-my $world_id = -1;
-foreach my $line (@lines)
+my $world_id = int($stdout);
+if ($world_id <= 0)
 {
-    # Remove trailing whitespace
-    $line =~ s/\s+$//g;
-    
-    if ($line =~ /^$vm_name/)
-    {
-        $found = 1;
-    }
-    if ($found && $line =~ /World ID:\s+(\d+)/)
-    {
-        $world_id = $1;
-        last;
-    }
-}
-if ($world_id < 0)
-{
-    mylog::error("Could not find world ID for $vm_name");
+    mylog::error("Could not find VM world ID");
     exit 1;
 }
-mylog::debug("Killing world ID $world_id");
-$result = `expect ssh.exp $vm_host $ssh_user $ssh_pass "esxcli vm process kill -t force -w $world_id"; echo \$?`;
-@lines = split (/\n/, $result);
-$ret = pop (@lines);
-if ($ret != 0)
+$command = "esxcli vm process kill -t force -w $world_id 2>&1";
+($return_code, $stdout) = libsf::SshCommand(client_ip => $host_ip, client_user => $ssh_user, client_pass => $ssh_pass, command => $command);
+if ($return_code != 0)
 {
-    mylog::error("Could not kill $vm_name: " . join ("\n", @lines));
+    mylog::error("Could not run kill $vm_name: $stdout");
     exit 1;
 }
-
-
-
-
-
-
-
-
-
-#my $ssh = Net::OpenSSH->new($vm_host, user => "root", password => "password");
-#if ($ssh->error)
-#{
-#    mylog::error($ssh->error);
-#    exit 1;
-#}
-#my @lines = $ssh->capture("esxcli vm process list");
-#my $found = 0;
-#my $world_id = -1;
-#for my $line (@lines)
-#{
-#    if ($line =~ /^$vm_name/)
-#    {
-#        $found = 1;
-#    }
-#    if ($found && $line =~ /World ID:\s+(\d+)/)
-#    {
-#        $world_id = $1;
-#        last;
-#    }
-#}
-#if ($world_id < 0)
-#{
-#    mylog::error("Could not find world ID for $vm_name");
-#    exit 1;
-#}
-#
-#if (!$ssh->system("esxcli vm process kill -t force -w $world_id"))
-#{
-#    mylog::error("Failed to kill $vm_name: " . $ssh->error);
-#    exit 1;
-#}
-
-
-
-
-#my $ssh = Net::SSH::Perl->new($vm_host, port => 22, debug => 1);
-#$ssh->login("root", "password");
-#my ($stdout, $stderr, $ret) = $ssh->cmd("esxcli vm process list");
-#if ($ret != 0)
-#{
-#    mylog::error("Could not list VMs on $vm_host: $stderr");
-#    exit 1;
-#}
-#my $found = 0;
-#my $world_id = -1;
-#for my $line (split /\n/, $stdout)
-#{
-#    if ($line =~ /^$vm_name/)
-#    {
-#        $found = 1;
-#    }
-#    if ($found && $line =~ /World ID:\s+(\d+)/)
-#    {
-#        $world_id = $1;
-#        last;
-#    }
-#}
-#if ($world_id < 0)
-#{
-#    mylog::error("Could not find world ID for $vm_name");
-#    exit 1;
-#}
-#($stdout, $stderr, $ret) = $ssh->cmd("esxcli vm process kill -t force -w $world_id");
-#if ($ret != 0)
-#{
-#    mylog::error("Failed to kill $vm_name: $stderr");
-#    exit 1;
-#}
 
 mylog::pass("Successfully killed $vm_name");
 exit 0;

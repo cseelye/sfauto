@@ -6,10 +6,20 @@ use Data::Dumper;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vmhost => {
         type => "=s",
         help => "The hostname/IP of the host to create datastores on",
@@ -30,12 +40,11 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $host_name = Opts::get_option('vmhost');
 my $enable_debug = Opts::get_option('debug');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;
@@ -81,7 +90,7 @@ if ($@)
 mylog::info("Searching for iSCSI adapter on $host_name");
 my $iscsi_hba = libsf::VMwareFindIscsiHba($vmhost);
 
-# Map out LUN UUID <-> canonical name <-> iSCSI iqn 
+# Map out LUN UUID <-> canonical name <-> iSCSI iqn
 mylog::info("Getting a list of SCSI LUNS...");
 mylog::debug("Refreshing storage manager");
 my $storage_manager = Vim::get_view(mo_ref => $vmhost->configManager->storageSystem);
@@ -116,15 +125,17 @@ eval
     {
         my $options_list = $datastore_manager->QueryVmfsDatastoreCreateOptions(devicePath => $disk->devicePath);
         my $create_option = $options_list->[0];
-    
+
         my $canonical_name = $create_option->spec->vmfs->extent->diskName;
         my $lun_name = $device2lun{$canonical_name};
-        my $iqn = $lun2target{$lun_name}; 
-    
+        next if (!$lun_name);
+        my $iqn = $lun2target{$lun_name};
+        next if (!$iqn);
+
         my @pieces = split(/\./, $iqn);
         my $datastore_name = pop @pieces;
         $datastore_name = pop(@pieces) . "." . $datastore_name;
-    
+
         mylog::info("Creating datastore $datastore_name on disk $canonical_name...");
         $create_option->spec->vmfs->volumeName($datastore_name);
         my $newDatastore = $datastore_manager->CreateVmfsDatastore(spec => $create_option->spec);

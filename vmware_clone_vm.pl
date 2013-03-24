@@ -5,10 +5,20 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     source_vm => {
         type => "=s",
         help => "The name of the virtual machine to clone",
@@ -54,10 +64,8 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $source_vm_name = Opts::get_option('source_vm');
 my $clone_name = Opts::get_option('clone_name');
 my $dest_datastore_name = Opts::get_option('datastore');
@@ -65,6 +73,7 @@ my $dest_host_name = Opts::get_option('vmhost');
 my $dest_folder_name = Opts::get_option('folder');
 my $enable_debug = Opts::get_option('debug');
 my $thin_prov = Opts::get_option('thin');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;

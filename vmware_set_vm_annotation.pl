@@ -8,7 +8,17 @@ use libsf;
 Opts::set_option("username", "eng\\script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vm_name => {
         type => "=s",
         help => "The name of the virtual machine to get set the annotation on",
@@ -34,13 +44,12 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $vm_name = Opts::get_option('vm_name');
 my $annotation = Opts::get_option('annotation');
 my $enable_debug = Opts::get_option('debug');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;
@@ -80,15 +89,15 @@ eval
     # Wait for task to complete
     my $task_view = Vim::get_view(mo_ref => $task);
     my $taskinfo = $task_view->info->state->val;
-    while (1) 
+    while (1)
     {
         my $info = $task_view->info;
-        if ($info->state->val eq 'success') 
+        if ($info->state->val eq 'success')
         {
             mylog::pass("Successfully set annotation on $vm_name");
             exit 0;
-        } 
-        elsif ($info->state->val eq 'error') 
+        }
+        elsif ($info->state->val eq 'error')
         {
             mylog::error("Failed to set annotation: " . $info->error->fault . " " . $info->error->localizedMessage);
             exit 1;

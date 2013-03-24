@@ -5,10 +5,20 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vm_name => {
         type => "=s",
         help => "The name of the virtual machine to get the IP address",
@@ -19,11 +29,6 @@ my %opts = (
         help => "How long to wait before aborting (minutes)",
         required => 0,
         default => 5,
-    },
-    batch => {
-        type => "",
-        help => "Display a minimal output that is suited for piping to other programs",
-        required => 0,
     },
     debug => {
         type => "",
@@ -40,18 +45,14 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-
-Opts::validate();
-
 my $vsphere_server = Opts::get_option("server");
 my $vm_name = Opts::get_option('vm_name');
 my $enable_debug = Opts::get_option('debug');
 my $wait_timeout = Opts::get_option('timeout');
-my $batch = Opts::get_option('batch');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;
-$mylog::Silent = 1 if $batch;
 
 # Turn off cert validation so we can get away with self signed certs
 mylog::debug("Disabling SSL cert verification");
@@ -80,14 +81,14 @@ eval
         mylog::error("Could not find VM '$vm_name'");
         exit 1;
     }
-    
+
     # Skip if it's not powered on
     if ($vm->runtime->powerState->val !~ /poweredOn/)
     {
         mylog::error("$vm_name is not powered on");
         exit 1;
     }
-    
+
     # Quit if VMware tools are not installed and running
     if ($vm->guest->toolsStatus->val eq "toolsNotInstalled")
     {
@@ -133,14 +134,13 @@ eval
                 mylog::debug("Cannot read the IP address of " . $vm->name);
             }
             mylog::info("$vm_name IP address is $vm_ip");
-            print "$vm_ip\n" if $batch;
             last;
         }
         else
         {
             mylog::debug("$vm_name does not have a defined guest/net object");
         }
-        
+
         if (time() - $start_time > $wait_timeout*60)
         {
             mylog::error("Timed out waiting for IP address");

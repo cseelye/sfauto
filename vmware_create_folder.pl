@@ -5,10 +5,20 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     folder => {
         type => "=s",
         help => "The name of the new folder to create",
@@ -17,7 +27,8 @@ my %opts = (
     parent => {
         type => "=s",
         help => "The name of the parent folder to create the new folder in",
-        required => 1,
+        required => 0,
+        default => "vm"
     },
     debug => {
         type => "",
@@ -34,12 +45,12 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $folder_name = Opts::get_option('folder');
 my $parent_name = Opts::get_option('parent');
 my $enable_debug = Opts::get_option('debug');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;
@@ -73,13 +84,16 @@ eval
     }
 
     # See if the folder already exists in the requested location
-    foreach my $child_mor (@{$parent->childEntity})
+    if ($parent->childEntity)
     {
-        my $child = Vim::get_view(mo_ref => $child_mor, properties => ['name']);
-        if ($child->isa("Folder") && $child->name eq $folder_name)
+        foreach my $child_mor (@{$parent->childEntity})
         {
-            mylog::pass("$folder_name already exists in $parent_name");
-            exit 0;
+            my $child = Vim::get_view(mo_ref => $child_mor, properties => ['name']);
+            if ($child->isa("Folder") && $child->name eq $folder_name)
+            {
+                mylog::pass("$folder_name already exists in $parent_name");
+                exit 0;
+            }
         }
     }
 

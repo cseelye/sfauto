@@ -5,10 +5,20 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vmhost => {
         type => "=s",
         help => "The hostname/IP of the host to rescan",
@@ -34,8 +44,8 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $host_name = Opts::get_option('vmhost');
 my $cluster_name = Opts::get_option('cluster');
 my $enable_debug = Opts::get_option('debug');

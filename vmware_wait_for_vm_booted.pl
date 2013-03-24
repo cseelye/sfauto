@@ -5,10 +5,20 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "QA\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vm_name => {
         type => "=s",
         help => "The name of the virtual machine to wait for",
@@ -29,12 +39,11 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $vm_name = Opts::get_option('vm_name');
 my $enable_debug = Opts::get_option('debug');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;
@@ -66,11 +75,11 @@ eval
         mylog::error("Could not find source VM '$vm_name'");
         exit 1;
     }
-    
+
     mylog::info("Checking VM health");
     my $previous_status = "";
     my $status = "";
-    
+
     # Wait for the VM to be powered on
     $status = $vm->runtime->powerState->val;
     $previous_status = "";
@@ -88,14 +97,14 @@ eval
         sleep 10 if ($status ne "poweredOn");
     }
     mylog::info("  VM is poweredOn");
-                
+
     # See if VMware tools are installed
     if ($vm->guest->toolsStatus->val eq "toolsNotInstalled")
     {
         mylog::warn("VMware Tools are not installed in this VM; cannot detect VM boot/health");
         exit 0;
     }
-    
+
     $previous_status = "";
     $status = $vm->guestHeartbeatStatus->val;
     while ($status ne "green")

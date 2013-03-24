@@ -12,13 +12,8 @@ vmhost = "172.25.106.000"       # The IP address of the hypervisor
 host_user = "root"              # The username for the hypervisor
                                 # --host_user
 
-<<<<<<< HEAD
 host_pass = "password"           # The password for the hypervisor
                                 # --client_pass
-=======
-host_pass = "solidfire"         # The password for the hypervisor
-                                # --host_pass
->>>>>>> 6611be4... KVM scripts - standardize command line args, add a few new ones
 
 vm_name = ""                    # The name of the VM to turn on
                                 # --vm_name

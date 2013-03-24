@@ -6,16 +6,26 @@ use Data::Dumper;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vm_name => {
         type => "=s",
         help => "The name of the virtual machine to migrate",
         required => 1,
     },
-    host_name => {
+    vmhost => {
         type => "=s",
         help => "The hostname/IP of the host to migrate the VM to",
         required => 0,
@@ -40,20 +50,20 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $vm_name = Opts::get_option('vm_name');
-my $host_name = Opts::get_option('host_name');
+my $vmhost = Opts::get_option('vmhost');
 my $host_index = Opts::get_option('host_index');
 my $enable_debug = Opts::get_option('debug');
+Opts::validate();
 
-if ($host_name && defined $host_index)
+if ($vmhost && defined $host_index)
 {
     mylog::error("Please specify only one of host_name, host_index");
     exit 1;
 }
-if (!$host_name && !defined $host_index)
+if (!$vmhost && !defined $host_index)
 {
     mylog::error("Please specify one of host_name, host_index");
     exit 1;
@@ -88,14 +98,14 @@ if (!$vm)
 }
 
 # Find the host
-my $vmhost;
-if ($host_name)
+my $host;
+if ($vmhost)
 {
-    mylog::info("Searching for host $host_name");
-    $vmhost = Vim::find_entity_view(view_type => 'HostSystem', filter => {'name' => qr/^$host_name$/i}, properties => []);
-    if (!$vmhost)
+    mylog::info("Searching for host $vmhost");
+    $host = Vim::find_entity_view(view_type => 'HostSystem', filter => {'name' => qr/^$vmhost$/i}, properties => []);
+    if (!$host)
     {
-        mylog::error("Could not find host '$host_name'");
+        mylog::error("Could not find host '$vmhost'");
         exit 1;
     }
 }
@@ -119,19 +129,19 @@ elsif ($host_index >= 0)
     }
     my %name2host;
     my $host_list = Vim::get_views(mo_ref_array => \@{$parent_cluster->host}, properties => ['name']);
-    foreach my $host (@{$host_list})
+    foreach my $h (@{$host_list})
     {
-        $name2host{$host->name} = $host;
+        $name2host{$host->name} = $h;
     }
     my @name_list = sort keys(%name2host);
-    $host_name = $name_list[$host_index];
-    $vmhost = $name2host{$host_name};
+    $vmhost = $name_list[$host_index];
+    $host = $name2host{$vmhost};
 }
 
-mylog::info("Migrating $vm_name to $host_name");
+mylog::info("Migrating $vm_name to $vmhost");
 eval
 {
-    $vm->MigrateVM(host => $vmhost, priority => VirtualMachineMovePriority->new('highPriority'));
+    $vm->MigrateVM(host => $host, priority => VirtualMachineMovePriority->new('highPriority'));
 };
 if ($@)
 {
@@ -142,10 +152,3 @@ if ($@)
 
 mylog::pass("Successfully migrated");
 exit 0;
-
-
-
-
-
-
-

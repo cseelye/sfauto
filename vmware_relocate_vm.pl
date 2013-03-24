@@ -6,10 +6,20 @@ use Data::Dumper;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vm_name => {
         type => "=s",
         help => "The name of the virtual machine to relocate",
@@ -28,7 +38,7 @@ my %opts = (
     },
     reserve_space => {
         type => "=i",
-        help => "The amount of extra space (GB) to reserve in the datasatore when determining of the VM will fit",
+        help => "The amount of extra space (GB) to reserve in the datasatore when determining if the VM will fit",
         required => 0,
         default => 10,
     },
@@ -47,14 +57,14 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $vm_name = Opts::get_option('vm_name');
 my $datastore_name = Opts::get_option('datastore_name');
 my $vm_provisioning = Opts::get_option('vm_provisioning');
 my $reserve_space = Opts::get_option('reserve_space');
 my $enable_debug = Opts::get_option('debug');
+Opts::validate();
 
 $reserve_space = $reserve_space*1024*1024*1024;
 
@@ -182,10 +192,3 @@ my $end = time();
 mylog::info("Relocate took " . libsf::SecondsToElapsed($end - $start));
 mylog::pass("Successfully relocated");
 exit 0;
-
-
-
-
-
-
-

@@ -5,18 +5,33 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "eng\\script_user");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
+# Set default vCenter Server
+# This can be overridden with --mgmt_server
+Opts::set_option("server", "vcenter.domain.local");
+
 my %opts = (
+    mgmt_server => {
+        type => "=s",
+        help => "The hostname/IP of the vCenter Server (replaces --server)",
+        required => 0,
+        default => Opts::get_option("server"),
+    },
     vm_name => {
         type => "=s",
         help => "The name of the virtual machine that will be moved/cloned to the datastore",
         required => 1,
     },
-    batch => {
+    csv => {
         type => "",
-        help => "Display a minimal output that is suited for piping to other programs",
+        help => "Display a minimal output that is formatted as a comma separated list",
+        required => 0,
+    },
+    bash => {
+        type => "",
+        help => "Display a minimal output that is formatted as a space separated list",
         required => 0,
     },
     debug => {
@@ -34,16 +49,17 @@ if (scalar(@ARGV) < 1)
    exit 1;
 }
 Opts::parse();
-Opts::validate();
-
-my $vsphere_server = Opts::get_option("server");
+my $vsphere_server = Opts::get_option("mgmt_server");
+Opts::set_option("server", $vsphere_server);
 my $vm_name = Opts::get_option('vm_name');
 my $enable_debug = Opts::get_option('debug');
-my $batch = Opts::get_option('batch');
+my $csv = Opts::get_option('csv');
+my $bash = Opts::get_option('bash');
+Opts::validate();
 
 # Turn on debug events if requested
 $mylog::DisplayDebug = 1 if $enable_debug;
-$mylog::Silent = 1 if $batch;
+$mylog::Silent = 1 if ($bash || $csv);
 
 # Turn off cert validation so we can get away with self signed certs
 mylog::debug("Disabling SSL cert verification");
@@ -73,7 +89,7 @@ eval
         exit 1;
     }
     $vm_name = $source_vm->name;
-    
+
     # Assume the host the source VM is on has all of the datastores we care about
     # Make a list of SF disks by device ID
     mylog::info("Searching for datastores");
@@ -89,11 +105,11 @@ eval
             $sf_disks{$device_name} = 1;
         }
     }
-    
-    
+
+
     # Determine how much space the VM needs - committed disk + uncommitted disk + memory size
     my $vm_usage = $source_vm->summary->storage->committed / 1024 / 1024 + $source_vm->summary->storage->uncommitted / 1024 / 1024 + $source_vm->config->hardware->memoryMB;
-    
+
     # Get a list of datastores
     my $datastores = Vim::find_entity_views(view_type => 'Datastore');
 
@@ -130,9 +146,14 @@ eval
         exit 1;
     }
     my $ds_name = $selected_datastore->name;
-    mylog::info("Selected datastore $ds_name");
-    print "$ds_name\n" if $batch;
-
+    if ($csv || $bash)
+    {
+        print "$ds_name\n";
+    }
+    else
+    {
+        mylog::info("Selected datastore $ds_name");
+    }
 };
 if ($@)
 {

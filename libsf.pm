@@ -5,7 +5,45 @@ package libsf;
     use VMware::VIRuntime;
     use DateTime;
     use Time::HiRes qw/ gettimeofday /;
-    
+    use IPC::Open3;
+
+    sub SshCommand
+    {
+        # There is no good perl module for SSH that isn't hideously difficult to install, so we'll use python instead
+        my %params = (
+                client_ip   => undef,
+                client_user => "root",
+                client_pass => "solidfire",
+                command     => undef,
+                @_);
+        mylog::debug("Executing " . $params{command} . " on " . $params{client_ip});
+        my $command = "python execute_client_command.py --client_ip=$params{client_ip} --client_user=$params{client_user} --client_pass=$params{client_pass} --command=\"$params{command}\" --bash";
+        my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, $command);
+        my @outlines = <CHLD_OUT>;
+        my @errlines = <CHLD_ERR>;
+        close CHLD_OUT;
+        close CHLD_ERR;
+        close CHLD_IN;
+        waitpid ($pid, 0);
+        my $return_code = $? >> 8;
+
+        return ($return_code, join("\n", @outlines));
+
+        #if (lc($^O) =~ /win/)
+        #{
+        #    $command .= " & echo %ERRORLEVEL%";
+        #}
+        #else
+        #{
+        #    $command .= "; echo $?"
+        #}
+        #my $result = `$command`;
+        #mylog::debug($result);
+        #my @lines = split (/\n/, $result);
+        #my $return_code = pop (@lines);
+        #return ($return_code, join("\n", @lines));
+    }
+
     sub GetCurrentDateString
     {
         my ( $s, $us ) = gettimeofday;
@@ -17,24 +55,24 @@ package libsf;
     {
         # From perlmonks
         # http://www.perlmonks.org/?node_id=110550
-        
+
         my( $weeks, $days, $hours, $minutes, $seconds, $sign, $res ) = qw/0 0 0 0 0/;
-    
+
         $seconds = shift;
         $sign    = $seconds == abs $seconds ? '' : '-';
         $seconds = abs $seconds;
-    
+
         ($seconds, $minutes) = ($seconds % 60, int($seconds / 60)) if $seconds;
         ($minutes, $hours  ) = ($minutes % 60, int($minutes / 60)) if $minutes;
         ($hours,   $days   ) = ($hours   % 24, int($hours   / 24)) if $hours;
         ($days,    $weeks  ) = ($days    %  7, int($days    /  7)) if $days;
-    
+
         $res = sprintf '%ds',     $seconds;
         $res = sprintf "%dm$res", $minutes if $minutes or $hours or $days or $weeks;
         $res = sprintf "%dh$res", $hours   if             $hours or $days or $weeks;
         $res = sprintf "%dd$res", $days    if                       $days or $weeks;
         $res = sprintf "%dw$res", $weeks   if                                $weeks;
-    
+
         return "$sign$res";
     }
     sub DisplayFault
@@ -43,9 +81,15 @@ package libsf;
         if (ref($fault) ne 'SoapFault')
         {
             mylog::error("$message - " . $fault);
-            exit 1;
         }
-        mylog::error("$message - " . ref($fault->name) . ": " . $fault->fault_string);
+        if (ref($fault->name))
+        {
+            mylog::error("$message - " . ref($fault->name) . ": " . $fault->fault_string);
+        }
+        else
+        {
+            mylog::error("$message - " . $fault->name . ": " . $fault->fault_string);
+        }
     }
 
     sub VMwareFindIscsiHba
@@ -66,12 +110,12 @@ package libsf;
 
         die "Could not find an iSCSI HBA on $host_name";
     }
-    
+
     sub VMwareRescanIscsi
     {
         my $vmhost = shift;
         my $host_name = $vmhost->name;
-        
+
         my $iscsi_hba = VMwareFindIscsiHba($vmhost);
 
         mylog::info("Starting rescan");
@@ -114,19 +158,19 @@ package mylog;
             Win32::Console::ANSI->import;
         }
     }
-    
+
     our $Silent = 0;        # Enable to silence logging to the screen
     our $DisplayDebug = 0;  # Enable to display debug messages to the screen
-    
+
     # Determine if we have a real STDOUT or are being redirected
     my $redirected = 0;
     if ( ! -t STDOUT )
     {
     	$redirected = 1;
     }
-    
+
     openlog("sftest", "ndelay", LOG_LOCAL0);
-    
+
     END
     {
         closelog();
@@ -136,9 +180,9 @@ package mylog;
     {
         my $message = shift;
         my $timestamp = libsf::GetCurrentDateString();
-        
+
         syslog(LOG_ERR, $message);
-        
+
         return if $Silent;
         if ($redirected)
         {
@@ -149,7 +193,7 @@ package mylog;
         	print BOLD RED ON BLACK "$timestamp: ERROR  $message\n";
         }
     }
-    
+
     sub warn
     {
         my $message = shift;
@@ -165,10 +209,10 @@ package mylog;
         }
         else
         {
-        	print BOLD YELLOW ON BLACK "$timestamp: WARN   $message\n";        	
+        	print BOLD YELLOW ON BLACK "$timestamp: WARN   $message\n";
         }
     }
-    
+
     sub info
     {
         my $message = shift;
@@ -186,7 +230,7 @@ package mylog;
         	print BOLD WHITE ON BLACK "$timestamp: INFO   $message\n";
         }
     }
-    
+
     sub debug
     {
         my $message = shift;
@@ -205,7 +249,7 @@ package mylog;
 	        print WHITE ON BLACK "$timestamp: DEBUG  $message\n";
         }
     }
-    
+
     sub pass
     {
         my $message = shift;
