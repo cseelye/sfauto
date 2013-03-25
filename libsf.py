@@ -16,6 +16,7 @@ import socket
 if "win" not in platform.system().lower(): import syslog
 import re
 import os, subprocess
+import commands
 import inspect
 import curses
 import threading
