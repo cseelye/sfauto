@@ -1193,10 +1193,13 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
     if VolumeId:
         # Convert to a list if it is a scalar
         volume_id_list = []
-        try:
-            volume_id_list = list(VolumeId)
-        except ValueError:
-            volume_id_list.append(VolumeId)
+        if isinstance(VolumeId, basestring):
+            volume_name_list = VolumeId.split(",")
+        else:
+            try:
+                volume_name_list = list(VolumeId)
+            except ValueError:
+                volume_name_list.append(VolumeId)
 
         for vid in volume_id_list:
             volume_name = None
@@ -1214,10 +1217,13 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
     elif VolumeName and AccountName:
         # Convert to a list if it is a scalar
         volume_name_list = []
-        try:
-            volume_name_list = list(VolumeName)
-        except ValueError:
-            volume_name_list.append(VolumeName)
+        if isinstance(VolumeName, basestring):
+            volume_name_list = VolumeName.split(",")
+        else:
+            try:
+                volume_name_list = list(VolumeName)
+            except ValueError:
+                volume_name_list.append(VolumeName)
 
         for vname in volume_name_list:
             volume_id = 0
@@ -1240,10 +1246,13 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
     elif VolumeName:
         # Convert to a list if it is a scalar
         volume_name_list = []
-        try:
-            volume_name_list = list(VolumeName)
-        except ValueError:
-            volume_name_list.append(VolumeName)
+        if isinstance(VolumeName, basestring):
+            volume_name_list = VolumeName.split(",")
+        else:
+            try:
+                volume_name_list = list(VolumeName)
+            except ValueError:
+                volume_name_list.append(VolumeName)
 
         for vname in volume_name_list:
             volume_id = 0
