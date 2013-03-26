@@ -12,7 +12,7 @@ vmhost = "172.25.106.000"        # The IP address of the hypervisor
 host_user = "root"                # The username for the hypervisor
                                 # --client_user
 
-host_pass = "solidfire"           # The password for the hypervisor
+host_pass = "password"           # The password for the hypervisor
                                 # --client_pass
 
 vm_prefix = ""                    # The prefix of the VM names to match

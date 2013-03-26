@@ -13,7 +13,7 @@ client_ips = [                      # The IP addresses of the clients
 client_user = "root"                # The username for the client
                                     # --client_user
 
-client_pass = "solidfire"           # The password for the client
+client_pass = "password"           # The password for the client
                                     # --client_pass
 
 parallel_thresh = 5             # Do not thread clients unless there are more than this many

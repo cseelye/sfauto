@@ -12,7 +12,7 @@ mvip = "192.168.000.000"            # The management VIP of the cluster
 username = "admin"                  # Admin account for the cluster
                                     # --user
 
-password = "solidfire"              # Admin password for the cluster
+password = "password"              # Admin password for the cluster
                                     # --pass
 
 volume_names = [                    # The names of the volumes to sync

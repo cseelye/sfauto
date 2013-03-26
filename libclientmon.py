@@ -19,7 +19,7 @@ class VmInfo:
         self.Group = ""
         self.Timestamp = 0
 
-class CftClientMon:
+class SfautoClientMon:
     __db = None
     __cursor = None
     

@@ -12,7 +12,7 @@ mvip = "192.168.000.000"            # The management VIP of the cluster
 username = "admin"                  # Admin account for the cluster
                                     # --user
 
-password = "solidfire"              # Admin password for the cluster
+password = "password"              # Admin password for the cluster
                                     # --pass
 
 node_ip = "192.168.000.000"         # The management IP of the node to with the drives to count

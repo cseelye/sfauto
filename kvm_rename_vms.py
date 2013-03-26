@@ -12,14 +12,14 @@ vmhost = "172.25.106.000"      # The IP address of the hypervisor
 host_user = "root"              # The username for the hypervisor
                                 # --host_user
 
-host_pass = "password"           # The password for the hypervisor
-                                # --client_pass
+host_pass = "password"         # The password for the hypervisor
+                                # --host_pass
 
 vm_user = "root"                # The username for the clients
                                 # --vm_user
 
-client_pass = "password"           # The password for the clients
-                                    # --client_pass
+vm_pass = "password"           # The password for the clients
+                                # --vm_pass
 
 # ----------------------------------------------------------------------------
 
@@ -39,7 +39,7 @@ from libsf import mylog
 import libclient
 from libclient import ClientError, SfClient
 import libclientmon
-from libclientmon import CftClientMon
+from libclientmon import SfautoClientMon
 
 def main():
     # Parse command line arguments
@@ -65,7 +65,7 @@ def main():
         sys.exit(1)
 
     # Get a list of vm info from the monitor
-    monitor = CftClientMon()
+    monitor = SfautoClientMon()
     vm_list = monitor.GetGroupVmInfo("KVM")
 
     mylog.info("Connecting to " + vmhost)

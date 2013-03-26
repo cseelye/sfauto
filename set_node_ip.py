@@ -12,7 +12,7 @@ node_ip = "192.168.000.000"     # The current IP addresse of the node
 username = "admin"              # Admin account for the cluster
                                 # --user
 
-password = "solidfire"          # Admin password for the cluster
+password = "password"          # Admin password for the cluster
                                 # --pass
 
 oneg_ip = ""                    # The new IP address for the node

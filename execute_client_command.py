@@ -12,7 +12,7 @@ client_ip = "192.168.000.000"       # The IP address of the client
 client_user = "root"                # The username for the client
                                     # --client_user
 
-client_pass = "solidfire"           # The password for the client
+client_pass = "password"           # The password for the client
                                     # --client_pass
 
 command = ""                        # The command to execute on the client

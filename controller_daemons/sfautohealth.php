@@ -91,7 +91,7 @@ if ($fail_count <= 0 && $stop_count <= 0 && $unresponsive_count <= 0 && $dead_co
 {
 	echo "[HEALTHY]";
 }
-echo " CFT Health Monitor";
+echo " SFAUTO Health Monitor";
 echo "</title>\n";
 ?>
   <style type="text/css">

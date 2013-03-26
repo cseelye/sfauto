@@ -13,7 +13,7 @@ package libsf;
         my %params = (
                 client_ip   => undef,
                 client_user => "root",
-                client_pass => "solidfire",
+                client_pass => "password",
                 command     => undef,
                 @_);
         mylog::debug("Executing " . $params{command} . " on " . $params{client_ip});

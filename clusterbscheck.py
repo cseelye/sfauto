@@ -12,7 +12,7 @@ mvip = "0.0.0.0"            # The management VIP of the cluster
 username = "admin"                  # Admin account for the cluster
                                     # --user
 
-password = "solidfire"              # Admin password for the cluster
+password = "password"              # Admin password for the cluster
                                     # --pass
 
 ssh_user = "root"               # The username for the nodes

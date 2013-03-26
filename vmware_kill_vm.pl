@@ -34,7 +34,7 @@ my %opts = (
         type => "=s",
         help => "The SSH password for the ESX host",
         required => 0,
-        default => "solidfire",
+        default => "password",
     },
     debug => {
         type => "",

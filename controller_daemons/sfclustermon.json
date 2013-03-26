@@ -13,13 +13,5 @@
         //     "password" : "password",                                    // The cluster admin password
         //     "ignore_faults" : [ "clusterIOPSAreOverProvisioned" ],       // The list of cluster faults to ignore
         // }
-        
-        // The CFT cluster
-        "192.168.154.1" : {
-            "username" : "admin",
-            "password" : "password",
-            "ignore_faults" : [ "clusterIOPSAreOverProvisioned", "clusterFull" ]
-        }
-
     }
 }

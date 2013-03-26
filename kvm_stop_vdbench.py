@@ -12,7 +12,7 @@ vmhost = "172.25.106.000"        # The IP address of the hypervisor
 host_user = "root"                # The username for the hypervisor
                                 # --client_user
 
-host_pass = "solidfire"           # The password for the hypervisor
+host_pass = "password"           # The password for the hypervisor
                                 # --client_pass
 
 vm_name = ""                    # The name of the VM to shutdown
@@ -27,7 +27,7 @@ vm_count = 0                    # The number of matching VMs to stop vdbench
 vm_user = "root"                # The username for the VMs
                                 # --vm_user
 
-vm_pass = "solidfire"           # The password for the VMs
+vm_pass = "password"           # The password for the VMs
                                 # --vm_pass
 
 # ----------------------------------------------------------------------------
@@ -46,7 +46,7 @@ sys.path.insert(0, "..")
 import libsf
 from libsf import mylog
 import libclientmon
-from libclientmon import CftClientMon
+from libclientmon import SfautoClientMon
 
 
 def main():
@@ -79,7 +79,7 @@ def main():
         sys.exit(1)
 
     # Get a list of vm info from the monitor
-    monitor = CftClientMon()
+    monitor = SfautoClientMon()
     monitor_list = monitor.GetGroupVmInfo("KVM")
 
     mylog.info("Connecting to " + vmhost)

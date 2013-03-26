@@ -3,6 +3,6 @@
     "database" : "clientmon",
     "listenPort" : 58083,
     "username" : "root",
-    "password" : "solidfire",
+    "password" : "password",
     "ipFilter" : "172.25.106"   // Only monitor clients whose IP starts with this string
 }

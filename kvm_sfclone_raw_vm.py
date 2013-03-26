@@ -12,7 +12,7 @@ mvip = "192.168.000.000"        # The management VIP of the cluster
 username = "admin"              # Admin account for the cluster
                                 # --user
 
-password = "solidfire"          # Admin password for the cluster
+password = "password"          # Admin password for the cluster
                                 # --pass
 
 vmhost = "172.25.106.000"       # The IP address of the hypervisor
@@ -21,7 +21,7 @@ vmhost = "172.25.106.000"       # The IP address of the hypervisor
 host_user = "root"              # The username for the hypervisor
                                 # --client_user
 
-host_pass = "password"           # The password for the hypervisor
+host_pass = "password"         # The password for the hypervisor
                                 # --client_pass
 
 vm_name = ""                    # The name of the VM to clone
