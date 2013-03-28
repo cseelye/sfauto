@@ -27,7 +27,7 @@ from libsf import mylog
 
 
 def main():
-    global node_ip, username, password, hostname
+    global node_ip, username, password, cluster_name
 
     # Pull in values from ENV if they are present
     env_enabled_vars = [ "username", "password" ]
@@ -61,7 +61,7 @@ def main():
     params["cluster"]["cluster"] = cluster_name
     result = libsf.CallNodeApiMethod(node_ip, username, password, "SetConfig", params)
 
-    mylog.passed("Successfully set hostname")
+    mylog.passed("Successfully set cluster name")
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))

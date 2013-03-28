@@ -515,7 +515,7 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
             return response_obj["result"]
 
         # Record the error
-        mylog.debug("Error response from " + str(pMvip) + ": " + str(response_str))
+        mylog.debug("Error response from " + str(NodeIp) + ": " + str(response_str))
         last_error_code = response_obj["error"]["name"]
         last_error_mess = response_obj["error"]["message"]
 

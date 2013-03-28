@@ -44,11 +44,35 @@ from optparse import OptionParser
 import paramiko
 import re
 import socket
+import multiprocessing
+import time
+import logging
 import libsf
 from libsf import mylog
 import libclient
 from libclient import ClientError, SfClient
 
+
+def NodeThread(node_ip, oneg_ip, oneg_netmask, oneg_gateway, dns_ip, dns_search, teng_ip, teng_netmask, status, debug):
+    if debug:
+        mylog.console.setLevel(logging.DEBUG)
+    params = {}
+    params["network"] = {}
+    params["network"]["Bond1G"] = {}
+    params["network"]["Bond1G"]["address"] = oneg_ip
+    params["network"]["Bond1G"]["netmask"] = oneg_netmask
+    params["network"]["Bond1G"]["gateway"] = oneg_gateway
+    params["network"]["Bond1G"]["dns-nameservers"] = dns_ip
+    params["network"]["Bond1G"]["dns-search"] = dns_search
+    params["network"]["Bond10G"] = {}
+    params["network"]["Bond10G"]["address"] = teng_ip
+    params["network"]["Bond10G"]["netmask"] = teng_netmask
+    try:
+        result = libsf.CallNodeApiMethod(node_ip, username, password, "SetConfig", params, ExitOnError=False)
+        status = 0
+    except libsf.SfApiError as e:
+        status = 1
+        mylog.error(str(e))
 
 def main():
     global node_ip, username, password, oneg_ip, oneg_netmask, oneg_gateway, teng_ip, teng_netmask, dns_ip, dns_search
@@ -77,24 +101,53 @@ def main():
     teng_netmask = options.teng_netmask
     dns_ip = options.dns_ip
     dns_search = options.dns_search
-    if options.debug != None:
-        import logging
+    debug = options.debug
+    if debug:
         mylog.console.setLevel(logging.DEBUG)
 
-    params = {}
-    params["network"] = {}
-    params["network"]["Bond1G"] = {}
-    params["network"]["Bond1G"]["address"] = oneg_ip
-    params["network"]["Bond1G"]["netmask"] = oneg_netmask
-    params["network"]["Bond1G"]["gateway"] = oneg_gateway
-    params["network"]["Bond1G"]["dns-nameservers"] = dns_ip
-    params["network"]["Bond1G"]["dns-search"] = dns_search
-    params["network"]["Bond10G"] = {}
-    params["network"]["Bond10G"]["address"] = teng_ip
-    params["network"]["Bond10G"]["netmask"] = teng_netmask
-    result = libsf.CallNodeApiMethod(node_ip, username, password, "SetConfig", params)
+    mylog.info("Setting the following network config on " + node_ip)
+    mylog.info("  1G IP     : " + oneg_ip)
+    mylog.info("  1G mask   : " + oneg_netmask)
+    mylog.info("  1G gw     : " + oneg_gateway)
+    mylog.info("  10G IP    : " + teng_ip)
+    mylog.info("  10G mask  : " + teng_netmask)
+    mylog.info("  DNS server: " + dns_ip)
+    mylog.info("  DNS search: " + dns_search)
+    mylog.info("This may take up to 90 seconds")
+    
+    start_time = time.time()
+    status = multiprocessing.Value('i')
+    status = 1
+    th = multiprocessing.Process(target=NodeThread, args=(node_ip, oneg_ip, oneg_netmask, oneg_gateway, dns_ip, dns_search, teng_ip, teng_netmask, status, debug))
+    th.daemon = True
+    th.start()
+    while True:
+        if not th.is_alive():
+            break
 
-    mylog.passed("Successfully set network info")
+        if time.time() - start_time > 30:
+            mylog.debug("Terminating subprocess")
+            th.terminate()
+            status = 0
+            break
+
+    if status != 0:
+        mylog.error("Could not set network info")
+        sys.exit(1)
+
+    start_time = time.time()
+    pingable = False
+    while not pingable:
+        pingable = libsf.Ping(oneg_ip)
+        if time.time() - start_time > 60:
+            break
+
+    if pingable:
+        mylog.passed("Successfully set network info")
+        sys.exit(0)
+    else:
+        mylog.error("Could not ping node at new IP address")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
@@ -110,7 +163,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-
-
-
