@@ -66,10 +66,14 @@ def main():
     if not libsf.IsValidIpv4Address(ipmi_ip):
         mylog.error("'" + ipmi_ip + "' does not appear to be a valid IPMI IP")
         sys.exit(1)
-    
+
     mylog.info("Powering on node " + node_ip)
-    libsf.IpmiCommand(ipmi_ip, ipmi_user, ipmi_pass, "chassis power on")
-    
+    try:
+        libsf.IpmiCommand(ipmi_ip, ipmi_user, ipmi_pass, "chassis power on")
+    except libsf.SfError as e:
+        mylog.error(str(e))
+        sys.exit(1)
+
     mylog.info("Waiting for " + node_ip + " to come up")
     time.sleep(120)
     while (not libsf.Ping(node_ip)): time.sleep(1)

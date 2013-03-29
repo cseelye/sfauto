@@ -68,14 +68,18 @@ def main():
     if not ipmi_ip:
         mylog.info("Determining IPMI IP address for " + node_ip)
         ipmi_ip = libsf.GetIpmiIp(node_ip, ssh_user, ssh_pass)
-    
+
     if not libsf.IsValidIpv4Address(ipmi_ip):
         mylog.error("'" + ipmi_ip + "' does not appear to be a valid IPMI IP")
         sys.exit(1)
 
     mylog.info("Power cycling node " + node_ip)
-    libsf.IpmiCommand(ipmi_ip, ipmi_user, ipmi_pass, "chassis power reset")
-    
+    try:
+        libsf.IpmiCommand(ipmi_ip, ipmi_user, ipmi_pass, "chassis power reset")
+    except libsf.SfError as e:
+        mylog.error(str(e))
+        sys.exit(1)
+
     mylog.info("Waiting for " + node_ip + " to go down")
     while (libsf.Ping(node_ip)): time.sleep(1)
 

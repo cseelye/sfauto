@@ -720,7 +720,7 @@ class Command(object):
             # This means that killing this PID leaves the actual process we are interested in running as an orphaned subprocess
             # So we need to kill all the children of that parent process
             if "win" in platform.system().lower():
-                # This will kill everything in this shell as well as the shell itselfs
+                # This will kill everything in this shell as well as the shell itself
                 os.system("wmic Process WHERE ParentProcessID=" + str(ppid) + " delete  2>&1 > NUL")
             else:
                 # Under Linux you can simply do this, but MacOS does not have the --ppid flag:
@@ -1379,11 +1379,16 @@ def GetIpmiIp(NodeIp, Username, Password):
 
 def IpmiCommand(IpmiIp, IpmiUsername, IpmiPassword, IpmiCommand):
     retry = 3
-    status = None
-    output = ""
+    retcode = None
+    stdout = ""
+    stderr = ""
     while retry > 0:
-        status, output = commands.getstatusoutput("ipmitool -Ilanplus -U" + str(IpmiUsername) + " -P" + str(IpmiPassword) + " -H" + str(IpmiIp) + " -E " + str(IpmiCommand))
-        if status == 0:
+        cmd = "ipmitool -Ilanplus -U" + str(IpmiUsername) + " -P" + str(IpmiPassword) + " -H" + str(IpmiIp) + " -E " + str(IpmiCommand)
+        mylog.debug("Executing " + cmd)
+        retcode, stdout, stderr = RunCommand(cmd)
+        if retcode == 0:
             break
         retry -= 1
         time.sleep(3)
+    if retcode != 0:
+        raise SfError("ipmitool error: " + stdout + stderr)
