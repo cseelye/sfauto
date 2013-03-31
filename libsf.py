@@ -1392,3 +1392,53 @@ def IpmiCommand(IpmiIp, IpmiUsername, IpmiPassword, IpmiCommand):
         time.sleep(3)
     if retcode != 0:
         raise SfError("ipmitool error: " + stdout + stderr)
+
+def ClusterIsBinSyncing(Mvip, Username, Password):
+    # Get the bin assignments report
+    result = HttpRequest("https://" + Mvip + "/reports/bins.json", Username, Password)
+    bin_report = json.loads(result)
+
+    # Make sure that all bins are active and not syncing
+    for bsbin in bin_report:
+        for service in bsbin["services"]:
+            if service["status"] != "bsActive":
+                mylog.debug("Bin sync - one or more bins are not active")
+                return True
+
+    # Make sure there are no block related faults
+    result = CallApiMethod(Mvip, Username, Password, "ListClusterFaults", {'faultTypes' : 'current'})
+    for fault in result["faults"]:
+        if fault["code"] == "blockServiceUnhealthy":
+            mylog.debug("Bin sync - block related faults are present")
+            return True
+
+    return False
+
+def ClusterIsSliceSyncing(Mvip, Username, Password):
+    # Get the slice assignments report
+    result = HttpRequest("https://" + Mvip + "/reports/slices.json", Username, Password)
+    slice_report = json.loads(result)
+
+    # Make sure there are no unhealthy services
+    for ss in slice_report["services"]:
+        if ss["health"] != "good":
+            mylog.debug("Slice sync - one or more SS are unhealthy")
+            return True
+
+    # Make sure there are no volumes with multiple live secondaries or dead secondaries
+    for vol in slice_report["slices"]:
+        if len(vol["liveSecondaries"]) > 1:
+            mylog.debug("Slice sync - one or more volumes have multiple live secondaries")
+            return True
+        if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
+            mylog.debug("Slice sync - one or more volumes have dead secondaries")
+            return True
+
+    # Make sure there are no slice related faults
+    result = CallApiMethod(Mvip, Username, Password, "ListClusterFaults", {'faultTypes' : 'current'})
+    for fault in result["faults"]:
+        if fault["code"] == "sliceServiceUnhealthy" or fault["code"] == "volumesDegraded":
+            mylog.debug("Slice sync - slice related faults are present")
+            return True
+
+    return False

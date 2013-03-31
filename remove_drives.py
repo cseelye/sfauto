@@ -26,10 +26,6 @@ drive_slots = [                  # The slot to remove the drive from
 #    1,                           # --drive_slot
 ]
 
-wait_threshold = 30             # Give a warning if bin sync takes longer than this many minutes
-
-email_notify = ""               # email address to send warning to
-
 # ----------------------------------------------------------------------------
 
 import sys,os
@@ -80,7 +76,7 @@ def main():
         except ValueError:
             mylog.error("'" + slot + "' does not appear to be a valid slot number")
             sys.exit(1)
-        if slot < 0 or slot > 10:
+        if slot < -1 or slot > 10:
             mylog.error("'" + slot + "' does not appear to be a valid slot number")
             sys.exit(1)
         drive_slots.append(slot)
@@ -130,9 +126,16 @@ def main():
             exit(1)
 
         # Remove the drives
-        remove_time = time.time()
         libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': drives2remove})
-        libsf.WaitForBinSync(mvip, username, password, remove_time, wait_threshold, email_notify)
+
+        mylog.info("Waiting for syncing")
+        time.sleep(60)
+        # Wait for bin syncing
+        while libsf.ClusterIsBinSyncing(mvip, username, password):
+            time.sleep(30)
+        # Wait for slice syncing
+        while libsf.ClusterIsSliceSyncing(mvip, username, password):
+            time.sleep(30)
 
     mylog.passed("Finished removing drives")
 
@@ -149,22 +152,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

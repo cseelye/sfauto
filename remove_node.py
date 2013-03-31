@@ -93,20 +93,14 @@ def main():
             time.sleep(2)
             libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': drives_to_remove})
 
-            # Make sure bin sync is done
-            libsf.WaitForBinSync(mvip, username, password, remove_time)
-
-            # Wait for no faults
-            mylog.info("Waiting for all cluster faults to clear")
-            while True:
-                result = libsf.CallApiMethod(mvip, username, password, "ListClusterFaults", {'faultTypes' : 'current'})
-                done = True
-                for fault in result["faults"]:
-                    if "unhealthy" in fault["code"].lower() or "degraded" in fault["code"].lower():
-                        done = False
-                        break
-                if done: break
-                time.sleep(60)
+            mylog.info("Waiting for syncing")
+            time.sleep(60)
+            # Wait for bin syncing
+            while libsf.ClusterIsBinSyncing(mvip, username, password):
+                time.sleep(30)
+            # Wait for slice syncing
+            while libsf.ClusterIsSliceSyncing(mvip, username, password):
+                time.sleep(30)
 
     # Remove the node
     while True:

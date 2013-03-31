@@ -53,19 +53,22 @@ def main():
     mvip = options.mvip
     username = options.username
     password = options.password
-    if options.debug != None:
+    if options.debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
     if not libsf.IsValidIpv4Address(mvip):
         mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
         sys.exit(1)
 
+    mylog.info("Waiting for all syncing to be complete on " + mvip)
 
-    mylog.info("Waiting for bin syncing on %s" % mvip)
-    while libsf.IsBinSyncing(mvip, username, password): time.sleep(60)
+    mylog.info("Waiting for bin syncing")
+    while libsf.ClusterIsBinSyncing(mvip, username, password): time.sleep(30)
 
-    mylog.info("Waiting for slice syncing on %s" % mvip)
-    while libsf.IsSliceSyncing(mvip, username, password): time.sleep(60)
+    mylog.info("Waiting for slice syncing")
+    while libsf.ClusterIsSliceSyncing(mvip, username, password): time.sleep(30)
+
+    mylog.passed("All syncing is complete")
 
 
 if __name__ == '__main__':
@@ -81,10 +84,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-
-
-
-
-
-

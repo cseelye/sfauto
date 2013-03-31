@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# This script will wait for there to be no bin syncing on the cluster
+# This script will wait for there to be no slice syncing on the cluster
 
 # ----------------------------------------------------------------------------
 # Configuration
@@ -12,7 +12,7 @@ mvip = "192.168.000.000"            # The management VIP of the cluster
 username = "admin"                  # Admin account for the cluster
                                     # --user
 
-password = "password"              # Admin password for the cluster
+password = "solidfire"              # Admin password for the cluster
                                     # --pass
 
 wait_threshold = 0                  # How long to wait before considering this sync as taking "too long", in min
@@ -57,9 +57,9 @@ def main():
         mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
         sys.exit(1)
 
-    mylog.info("Waiting for there to be no bin syncing on " + mvip)
+    mylog.info("Waiting for there to be no slice syncing on " + mvip)
     start_time = time.time()
-    while libsf.ClusterIsBinSyncing(mvip, username, password):
+    while libsf.ClusterIsSliceSyncing(mvip, username, password):
         time.sleep(30)
     end_time = time.time()
     duration = end_time - start_time
@@ -70,7 +70,7 @@ def main():
         sys.exit(1)
     else:
         mylog.info("Duration " + libsf.SecondsToElapsedStr(duration))
-        mylog.passed("Bin syncing is finished")
+        mylog.passed("Slice syncing is finished")
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))

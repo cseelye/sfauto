@@ -25,6 +25,7 @@ from optparse import OptionParser
 import time
 import libsf
 from libsf import mylog
+import json
 
 def main():
     global mvip, username, password, no_sync
@@ -62,11 +63,14 @@ def main():
     result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
     for drive in result["drives"]:
         if drive["status"] == "available":
-            mylog.debug("Adding driveID " + str(drive["driveID"]) + " from nodeID " + str(drive["nodeID"]))
+            mylog.debug("Adding driveID " + str(drive["driveID"]) + " (slot " + drive["slot"] + ") from nodeID " + str(drive["nodeID"]))
             newdrive = {}
             newdrive["driveID"] = drive["driveID"]
             newdrive["type"] = "automatic"
             params["drives"].append(newdrive)
+
+    if len(params["drives"]) <= 0:
+        mylog.passed("There are no available drives to add")
 
     mylog.info("Adding " + str(len(params["drives"])) + " drives to cluster")
     add_time = time.time();
@@ -74,20 +78,18 @@ def main():
     result = libsf.CallApiMethod(mvip, username, password, "AddDrives", params)
 
     if not no_sync:
-        # Make sure bin sync is done
-        libsf.WaitForBinSync(mvip, username, password, add_time)
+        mylog.info("Waiting to make sure syncing has started")
+        time.sleep(60)
 
-        # Wait for no faults
-        mylog.info("Waiting for all cluster faults to clear")
-        while True:
-            result = libsf.CallApiMethod(mvip, username, password, "ListClusterFaults", {'faultTypes' : 'current'})
-            done = True
-            for fault in result["faults"]:
-                if "unhealthy" in fault["code"].lower() or "degraded" in fault["code"].lower():
-                    done = False
-                    break
-            if done: break
-            time.sleep(60)
+        mylog.info("Waiting for slice syncing")
+        while libsf.ClusterIsSliceSyncing(mvip, username, password):
+            time.sleep(20)
+
+        mylog.info("Waiting for bin syncing")
+        # Make sure bin sync is done
+        while libsf.ClusterIsBinSyncing(mvip, username, password):
+            time.sleep(20)
+
     mylog.passed("Successfully added drives to the cluster")
 
 

@@ -27,10 +27,6 @@ drive_slots = [                 # The slot to add the drive from
     #1,                         # --drive_slots
 ]
 
-wait_threshold = 30             # Give a warning if bin sync takes longer than this many minutes
-
-email_notify = ""               # email address to send warning to
-
 # ----------------------------------------------------------------------------
 
 import sys,os
@@ -64,8 +60,6 @@ def main():
     parser.add_option("--node_ips", type="string", dest="node_ips", default=",".join(node_ips), help="the IP addresses of the nodes to add drives from")
     parser.add_option("--by_node", action="store_true", dest="by_node", help="add the drives by node instead of all at once")
     parser.add_option("--drive_slots", type="string", dest="drive_slots", default=",".join(drive_slots), help="the slots to add the drives from")
-    parser.add_option("--wait_threshold", type="int", dest="wait_threshold", default=wait_threshold, help="give a warning if bin sync takes longer than this many minutes")
-    parser.add_option("--email_notify", type="string", dest="email_notify", default=email_notify, help="email address to send the warning to")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, args) = parser.parse_args()
     mvip = options.mvip
@@ -86,7 +80,7 @@ def main():
         except ValueError:
             mylog.error("'" + slot + "' does not appear to be a valid slot number")
             sys.exit(1)
-        if slot < 0 or slot > 10:
+        if slot < -1 or slot > 10:
             mylog.error("'" + slot + "' does not appear to be a valid slot number")
             sys.exit(1)
         drive_slots.append(slot)
@@ -158,11 +152,16 @@ def main():
                 exit(0)
 
             # Add the drives
-            add_time = time.time()
             libsf.CallApiMethod(mvip, username, password, "AddDrives", {'drives': drives2add})
 
+            mylog.info("Waiting for syncing")
+            time.sleep(60)
             # Wait for bin syncing
-            libsf.WaitForBinSync(mvip, username, password, add_time, wait_threshold, email_notify)
+            while libsf.ClusterIsBinSyncing(mvip, username, password):
+                time.sleep(30)
+            # Wait for slice syncing
+            while libsf.ClusterIsSliceSyncing(mvip, username, password):
+                time.sleep(30)
 
     else:
         if len(node_ips) > 1:
@@ -206,11 +205,16 @@ def main():
             exit(0)
 
         # Add the drives
-        add_time = time.time()
         libsf.CallApiMethod(mvip, username, password, "AddDrives", {'drives': drives2add})
 
+        mylog.info("Waiting for syncing")
+        time.sleep(60)
         # Wait for bin syncing
-        libsf.WaitForBinSync(mvip, username, password, add_time, wait_threshold, email_notify)
+        while libsf.ClusterIsBinSyncing(mvip, username, password):
+            time.sleep(30)
+        # Wait for slice syncing
+        while libsf.ClusterIsSliceSyncing(mvip, username, password):
+            time.sleep(30)
 
     mylog.passed("Finished adding drives")
 
@@ -227,9 +231,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-
-
-
-
-
