@@ -121,6 +121,7 @@ def main():
             found_numbers.append(vm_number)
             if vm_number > highest_number:
                 highest_number = vm_number
+    found_numbers = sorted(found_numbers)
 
     # Find the first gap in the sequence
     if fill:
