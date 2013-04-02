@@ -63,7 +63,7 @@ def main():
     result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
     for drive in result["drives"]:
         if drive["status"] == "available":
-            mylog.debug("Adding driveID " + str(drive["driveID"]) + " (slot " + drive["slot"] + ") from nodeID " + str(drive["nodeID"]))
+            mylog.debug("Adding driveID " + str(drive["driveID"]) + " (slot " + str(drive["slot"]) + ") from nodeID " + str(drive["nodeID"]))
             newdrive = {}
             newdrive["driveID"] = drive["driveID"]
             newdrive["type"] = "automatic"

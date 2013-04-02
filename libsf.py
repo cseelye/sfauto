@@ -1427,6 +1427,9 @@ def ClusterIsSliceSyncing(Mvip, Username, Password):
 
     # Make sure there are no volumes with multiple live secondaries or dead secondaries
     for vol in slice_report["slices"]:
+        if "liveSecondaries" not in vol:
+            mylog.debug("Slice sync - one or more volumes have no live secondaries")
+            return True
         if len(vol["liveSecondaries"]) > 1:
             mylog.debug("Slice sync - one or more volumes have multiple live secondaries")
             return True
