@@ -26,7 +26,8 @@ since = 0                           # Timestamp of when to check health from.  e
 
 fault_whitelist = [                 # Ignore these faults if they are present
     "clusterFull",                  # --whitelist
-    "clusterIOPSAreOverProvisioned"
+    "clusterIOPSAreOverProvisioned",
+    "nodeHardwareFault"
 ]
 
 ignore_faults = False               # Do not check for cluster faults
@@ -121,7 +122,7 @@ def main():
             for fault in obj["faults"]:
                 if fault["code"] not in current_faults:
                     current_faults.add(fault["code"])
-    
+
             if current_faults & fault_whitelist == current_faults:
                 mylog.info("Current cluster faults found: " + ", ".join(current_faults))
             else:

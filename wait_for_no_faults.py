@@ -17,7 +17,8 @@ password = "password"              # Admin password for the cluster
 
 whitelist = [                       # Ignore these faults and do not wait for them to clear
     "clusterFull",                  # --whitelist
-    "clusterIOPSAreOverProvisioned"
+    "clusterIOPSAreOverProvisioned",
+    "nodeHardwareFault"
 ]
 
 blacklist = [                       # Immediately fail if any of these faults are present
@@ -120,10 +121,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-
-
-
-
-
-
