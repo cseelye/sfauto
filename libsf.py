@@ -1167,21 +1167,18 @@ def MakeSimpleChapSecret(pLength=14):
     source_chars = string.ascii_letters + string.digits
     return "".join(random.choice(source_chars) for x in range(pLength))
 
-def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None, VolumeRegex=None, VolumePrefix=None, AccountName=None, VolumeCount=0):
+def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None, VolumeRegex=None, VolumePrefix=None, AccountName=None, AccountId=None, VolumeCount=0):
     all_volumes = CallApiMethod(pMvip, pUsername, pPassword, "ListActiveVolumes", {})
     all_accounts = CallApiMethod(pMvip, pUsername, pPassword, "ListAccounts", {})
 
     # Find the source account if the user specified one
     source_account_id = 0
-    account_volumes = dict()
-    if AccountName:
-        for account in all_accounts["accounts"]:
-            if account["username"].lower() == AccountName.lower():
-                source_account_id = account["accountID"]
-                break
-        if source_account_id <= 0:
-            mylog.error("Could not find account '" + AccountName + "'")
-            sys.exit(1)
+    if AccountName or AccountId:
+        if AccountId:
+            source_account_id = int(AccountId)
+        elif AccountName:
+            account_info = FindAccount(pMvip, pUsername, pPassword, AccountName=AccountName)
+            source_account_id = account_info["accountID"]
         params = {}
         params["accountID"] = source_account_id
         account_volumes = CallApiMethod(pMvip, pUsername, pPassword, "ListVolumesForAccount", params)
@@ -1194,12 +1191,13 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
         # Convert to a list if it is a scalar
         volume_id_list = []
         if isinstance(VolumeId, basestring):
-            volume_name_list = VolumeId.split(",")
+            volume_id_list = VolumeId.split(",")
+            volume_id_list = map(int, volume_id_list)
         else:
             try:
-                volume_name_list = list(VolumeId)
+                volume_id_list = list(VolumeId)
             except ValueError:
-                volume_name_list.append(VolumeId)
+                volume_id_list.append(VolumeId)
 
         for vid in volume_id_list:
             volume_name = None
@@ -1445,3 +1443,31 @@ def ClusterIsSliceSyncing(Mvip, Username, Password):
             return True
 
     return False
+
+def FindAccount(Mvip, Username, Password, AccountName=None, AccountId=None):
+    if not AccountName and not AccountId:
+        raise SfError("Please specify either AcountName or AccountId")
+
+
+    account_list = CallApiMethod(Mvip, Username, Password, "ListAccounts", {})
+    if AccountName:
+        for account in account_list["accounts"]:
+            if (account["username"].lower() == str(AccountName).lower()):
+                account_info = dict()
+                account_info["username"] = AccountName
+                account_info["accountID"] = account["accountID"]
+                return account_info
+        raise SfError("Could not find account with name " + str(AccountName))
+
+    else:
+        try:
+            AccountId = int(AccountId)
+        except TypeError:
+            raise SfError("Please specify an integer for AccountId")
+        for account in account_list["accounts"]:
+            if account["accountID"] == AccountId:
+                account_info = dict()
+                account_info["username"] = account["username"]
+                account_info["accountID"] = AccountId
+                return account_info
+        raise SfError("Could not find account with ID " + str(AccountId))
