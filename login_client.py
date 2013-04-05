@@ -29,7 +29,10 @@ login_order = "serial"          # How to log in to volumes - all at the same tim
                                 # or seqentially (serial) in order by iqn
                                 # --login_order
 
-account_name = ""               # Specify an account name instead of using the client hostname
+auth_type = "CHAP"              # Auth type - CHAP or None (volume access group)
+                                # --auth_type
+
+account_name = ""               # Specify a CHAP account name instead of using the client hostname
                                 # --account_name
 
 target_list = [                 # The list of target IQNs to log in to
@@ -60,7 +63,7 @@ import libclient
 from libclient import ClientError, SfClient, OsType
 
 
-def ClientThread(client_ip, client_user, client_pass, account_name, target_list, mvip, svip, login_order, accounts_list, results, index, debug=None):
+def ClientThread(client_ip, client_user, client_pass, account_name, target_list, auth_type, mvip, svip, login_order, accounts_list, results, index, debug=None):
     if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
@@ -71,50 +74,6 @@ def ClientThread(client_ip, client_user, client_pass, account_name, target_list,
     except ClientError as e:
         mylog.error(client_ip + ": " + e.message)
         return
-
-    if not account_name:
-        account_name = client.Hostname
-    mylog.debug(client_ip + ": Using account name " + account_name)
-
-    expected = 0
-
-    # See if there is an sf account with this name already created
-    mylog.info(client_ip + ": Looking for account '" + account_name + "' on cluster '" + mvip + "'")
-    init_password = None
-    account_id = None
-    for account in accounts_list["accounts"]:
-        if (account["username"].lower() == account_name.lower()):
-            account_id = account["accountID"]
-            init_password = account["initiatorSecret"]
-            expected = len(account["volumes"])
-            break
-
-    # If this is a Windows client, make sure the CHAP secret is alphanumeric
-    if account_id and client.RemoteOs == OsType.Windows:
-        if not init_password.isalnum():
-            init_password = libsf.MakeSimpleChapSecret()
-            mylog.info(client_ip + ": Resetting CHAP password to '" + init_password + "'")
-            params = {}
-            params["accountID"] = account_id
-            params["initiatorSecret"] = init_password
-            params["targetSecret"] = libsf.MakeSimpleChapSecret()
-            result = libsf.CallApiMethod(mvip, username, password, "ModifyAccount", params)
-
-    # Create an account if we couldn't find one
-    if (account_id == None):
-        mylog.info("Creating new account on cluster " + mvip)
-        params = {}
-        params["username"] = account_name.lower()
-        params["initiatorSecret"] = libsf.MakeSimpleChapSecret()
-        params["targetSecret"] = libsf.MakeSimpleChapSecret()
-        result = libsf.CallApiMethod(mvip, username, password, "AddAccount", params)
-        account_id = result["accountID"]
-        params = {}
-        params["accountID"] = account_id
-        result = libsf.CallApiMethod(mvip, username, password, "GetAccountByID", params)
-        init_password = result["account"]["initiatorSecret"]
-
-    mylog.info(client_ip + ": Using account " + str(account_id) + " with password '" + init_password + "'")
 
     # Clean iSCSI if there aren't already volumes logged in
     targets = []
@@ -132,13 +91,63 @@ def ClientThread(client_ip, client_user, client_pass, account_name, target_list,
             mylog.error(client_ip + ": " + e.message)
             return
 
-    # Add the CHAP credentials to the client
-    mylog.info(client_ip + ": Setting up iSCSI CHAP on client '" + client.Hostname + "'")
-    try:
-        client.SetupChap(svip, account_name.lower(), init_password)
-    except ClientError as e:
-        mylog.error(client_ip + ": " + e.message)
-        return
+    expected = 0
+    if auth_type.lower() == "chap":
+        if not account_name:
+            account_name = client.Hostname
+        mylog.debug(client_ip + ": Using account name " + account_name)
+
+
+        # See if there is an sf account with this name already created
+        mylog.info(client_ip + ": Looking for account '" + account_name + "' on cluster '" + mvip + "'")
+        init_password = None
+        account_id = None
+        for account in accounts_list["accounts"]:
+            if (account["username"].lower() == account_name.lower()):
+                account_id = account["accountID"]
+                init_password = account["initiatorSecret"]
+                expected = len(account["volumes"])
+                break
+
+        # If this is a Windows client, make sure the CHAP secret is alphanumeric
+        if account_id and client.RemoteOs == OsType.Windows:
+            if not init_password.isalnum():
+                init_password = libsf.MakeSimpleChapSecret()
+                mylog.info(client_ip + ": Resetting CHAP password to '" + init_password + "'")
+                params = {}
+                params["accountID"] = account_id
+                params["initiatorSecret"] = init_password
+                params["targetSecret"] = libsf.MakeSimpleChapSecret()
+                result = libsf.CallApiMethod(mvip, username, password, "ModifyAccount", params)
+
+        # Create an account if we couldn't find one
+        if (account_id == None):
+            mylog.info("Creating new account on cluster " + mvip)
+            params = {}
+            params["username"] = account_name.lower()
+            params["initiatorSecret"] = libsf.MakeSimpleChapSecret()
+            params["targetSecret"] = libsf.MakeSimpleChapSecret()
+            result = libsf.CallApiMethod(mvip, username, password, "AddAccount", params)
+            account_id = result["accountID"]
+            params = {}
+            params["accountID"] = account_id
+            result = libsf.CallApiMethod(mvip, username, password, "GetAccountByID", params)
+            init_password = result["account"]["initiatorSecret"]
+
+        mylog.info(client_ip + ": Using account " + str(account_id) + " with password '" + init_password + "'")
+
+        # Add the CHAP credentials to the client
+        mylog.info(client_ip + ": Setting up iSCSI CHAP on client '" + client.Hostname + "'")
+        try:
+            client.SetupChap(svip, account_name.lower(), init_password)
+        except ClientError as e:
+            mylog.error(client_ip + ": " + e.message)
+            return
+    else:
+        iqn = client.GetInitiatorName()
+        for vag in accounts_list["volumeAccessGroups"]:
+            if iqn in vag["initiators"]:
+                expected += len(vag["volumes"])
 
     # Do an iSCSI discovery
     mylog.info(client_ip + ": Discovering iSCSI volumes on client '" + client.Hostname + "' at VIP '" + svip + "'")
@@ -171,7 +180,7 @@ def ClientThread(client_ip, client_user, client_pass, account_name, target_list,
     return
 
 def main():
-    global client_ips, client_user, client_pass, login_order, account_name, target_list, mvip, username, password, parallel_thresh, parallel_max
+    global client_ips, client_user, client_pass, login_order, auth_type, account_name, target_list, mvip, username, password, parallel_thresh, parallel_max
 
     # Pull in values from ENV if they are present
     env_enabled_vars = [ "mvip", "username", "password", "client_ips", "client_user", "client_pass", "login_order", "parallel_thresh", "parallel_max" ]
@@ -191,7 +200,8 @@ def main():
     parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
     parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
     parser.add_option("--login_order", type="string", dest="login_order", default=login_order, help="login order for volumes (parallel or serial)")
-    parser.add_option("--account_name", type="string", dest="account_name", default=account_name, help="the account name to use instead of the client hostname. This will be used for every client!")
+    parser.add_option("--auth_type", type="string", dest="auth_type", default=auth_type, help="auth type - CHAP or NONE")
+    parser.add_option("--account_name", type="string", dest="account_name", default=account_name, help="the CHAP account name to use instead of the client hostname. This will be used for every client!")
     parser.add_option("--target_list", type="string", dest="target_list", default=target_list, help="the list of volume IQNs to log in to, instead of all volumes")
     parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=parallel_thresh, help="do not thread clients unless there are more than this many [%default]")
     parser.add_option("--parallel_max", type="int", dest="parallel_max", default=parallel_max, help="the max number of client threads to use [%default]")
@@ -203,13 +213,13 @@ def main():
     username = options.username
     password = options.password
     login_order = options.login_order
+    auth_type = options.auth_type
     account_name = options.account_name
     debug = options.debug
     target_list = []
     if options.target_list:
         for t in options.target_list.split(","):
             target_list.append(t.strip())
-
     parallel_thresh = options.parallel_thresh
     parallel_max = options.parallel_max
     if debug:
@@ -229,14 +239,20 @@ def main():
     if (login_order != "parallel" and login_order != "serial"):
         mylog.warning("Unknown login order specified; assuming serial")
         login_order = "serial"
-
+    auth_type = auth_type.lower()
+    if auth_type != "chap" and auth_type != "none":
+        mylog.error("Unknown auth type specified")
+        sys.exit(1)
 
     # Get the SVIP of the cluster
     cluster_info = libsf.CallApiMethod(mvip, username, password, "GetClusterInfo", {})
     svip = cluster_info["clusterInfo"]["svip"]
 
-    # Get a list of accounts from the cluster
-    accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
+    # Get a list of accounts/VAGs from the cluster
+    if auth_type == "chap":
+        accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
+    else:
+        accounts_list = libsf.CallApiMethod(mvip, username, password, "ListVolumeAccessGroups", {}, ApiVersion=5.0)
 
     # Run the client operations in parallel if there are enough clients
     if len(client_ips) <= parallel_thresh:
@@ -251,7 +267,7 @@ def main():
     thread_index = 0
     for client_ip in client_ips:
         results[thread_index] = False
-        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, account_name, target_list, mvip, svip, login_order, accounts_list, results, thread_index, debug))
+        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, account_name, target_list, auth_type, mvip, svip, login_order, accounts_list, results, thread_index, debug))
         th.start()
         current_threads.append(th)
         thread_index += 1

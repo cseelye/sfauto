@@ -747,6 +747,16 @@ class SfClient:
         self.Hostname = pNewHostname
         return True
 
+    def GetInitiatorName(self):
+        if self.RemoteOs == OsType.Linux:
+            retcode, stdout, stderr = self.ExecuteCommand("cat /etc/iscsi/initiatorname.iscsi | cut -d'=' -f2")
+            if retcode != 0:
+                return None
+            return stdout.strip()
+
+        else:
+            raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
+
     def UpdateInitiatorName(self):
         self._info("Checking iSCSI Initiator name")
         if self.RemoteOs == OsType.Windows:
@@ -794,23 +804,18 @@ class SfClient:
             return True
 
         elif self.RemoteOs == OsType.Linux:
-            # iqn.1993-08.org.debian:01:hostname
-            # iqn.1994-05.com.redhat:hostname
+            # iqn.1993-08.org.debian:01:hostname - from Ubuntu 10.04
+            # iqn.1994-05.com.redhat:hostname - from RHEL 6.3
             self._debug("Reading current initiator name")
-            retcode, stdout, stderr = self.ExecuteCommand("cat /etc/iscsi/initiatorname.iscsi")
-            #if retcode != 0: raise ClientError(stderr)
-            initiator_name = None
-            for line in stdout.split("\n"):
-                m = re.search("^InitiatorName=(.+)", line)
-                if m:
-                    pieces = m.group(1).split(":")
-                    oldname = pieces.pop()
-                    if oldname == self.Hostname:
-                        self._debug("Initiator name is already correct")
-                        return False
-                    initiator_name = ":".join(pieces) + ":" + self.Hostname
-                    break;
-            if not initiator_name:
+            initiator_name = self.GetInitiatorName()
+            if initiator_name:
+                pieces = initiator_name.split(":")
+                oldname = pieces.pop()
+                if oldname == self.Hostname:
+                    self._debug("Initiator name is already correct")
+                    return False
+                initiator_name = ":".join(pieces) + ":" + self.Hostname
+            else:
                 if self.RemoteOsVersion == "ubuntu":
                     initiator_name = "iqn.1993-08.org.debian:01:" + self.Hostname
                 else:
@@ -1071,47 +1076,47 @@ class SfClient:
             self._debug("Updating iscsid.conf")
 
             # Turn on CHAP
-            cmd = "sed 's/node\.session\.auth\.authmethod\s*=.*/node\.session\.auth\.authmethod = CHAP/g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/#*\s*node\.session\.auth\.authmethod\s*=.*/node\.session\.auth\.authmethod = CHAP/g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
-            cmd = "sed 's/discovery\.sendtargets\.auth\.authmethod\s*=.*/discovery\.sendtargets\.auth\.authmethod = CHAP/g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/#*\s*discovery\.sendtargets\.auth\.authmethod\s*=.*/discovery\.sendtargets\.auth\.authmethod = CHAP/g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
 
             # Set username/password for one-way CHAP
-            cmd = "sed 's/discovery\.sendtargets\.auth\.username\s*=.*/discovery\.sendtargets\.auth\.username = " + pChapUser + "/g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/#*\s*discovery\.sendtargets\.auth\.username\s*=.*/discovery\.sendtargets\.auth\.username = " + pChapUser + "/g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
-            cmd = "sed 's/discovery\.sendtargets\.auth\.password\s*=.*/discovery\.sendtargets\.auth\.password = " + pChapSecret + "/g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/#*\s*discovery\.sendtargets\.auth\.password\s*=.*/discovery\.sendtargets\.auth\.password = " + pChapSecret + "/g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
-            cmd = "sed 's/node\.session\.auth\.username\s*=.*/node\.session\.auth\.username = " + pChapUser + "/g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/#*\s*node\.session\.auth\.username\s*=.*/node\.session\.auth\.username = " + pChapUser + "/g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
-            cmd = "sed 's/node\.session\.auth\.password\s*=.*/node\.session\.auth\.password = " + pChapSecret + "/g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/#*\s*node\.session\.auth\.password\s*=.*/node\.session\.auth\.password = " + pChapSecret + "/g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
 
             # Disable 2-way CHAP
-            cmd = "sed 's/^discovery\.sendtargets\.auth\.username_in\s*=.*/#node\.session\.auth\.username_in = /g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/^#*\s*discovery\.sendtargets\.auth\.username_in\s*=.*/#node\.session\.auth\.username_in = /g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
-            cmd = "sed 's/^discovery\.sendtargets\.auth\.password_in\s*=.*/#node\.session\.auth\.password_in = /g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/^#*\s*discovery\.sendtargets\.auth\.password_in\s*=.*/#node\.session\.auth\.password_in = /g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
-            cmd = "sed 's/^node\.session\.auth\.username_in\s*=.*/#node\.session\.auth\.username_in = /g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/^#*\s*node\.session\.auth\.username_in\s*=.*/#node\.session\.auth\.username_in = /g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)
-            cmd = "sed 's/^node\.session\.auth\.password_in\s*=.*/#node\.session\.auth\.password_in = /g' -i /etc/iscsi/iscsid.conf"
+            cmd = "sed 's/^#*\s*node\.session\.auth\.password_in\s*=.*/#node\.session\.auth\.password_in = /g' -i /etc/iscsi/iscsid.conf"
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Could not edit iscsid.conf - " + stderr)

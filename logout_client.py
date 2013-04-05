@@ -20,6 +20,9 @@ target_list = [                     # The list of target IQNs to log out of
                                     # Leave empty to log out of all volumes
 ]                                   # --target_list
 
+noclean = False                     # Do not "clean" iSCSI after logging out
+                                    # --noclean
+
 parallel_thresh = 5             # Do not thread clients unless there are more than this many
                                 # --parallel_thresh
 
@@ -42,7 +45,7 @@ from libsf import mylog
 import libclient
 from libclient import ClientError, SfClient
 
-def ClientThread(client_ip, client_user, client_pass, target_list, results, index, debug=None):
+def ClientThread(client_ip, client_user, client_pass, target_list, noclean, results, index, debug=None):
     if debug:
         import logging
         mylog.console.setLevel(logging.DEBUG)
@@ -62,11 +65,20 @@ def ClientThread(client_ip, client_user, client_pass, target_list, results, inde
         mylog.error(client_ip + ": " + e.message)
         return
 
+    # Clean iSCSI
+    if not noclean:
+        mylog.info(client_ip + ": Cleaning iSCSI on client '" + client.Hostname + "'")
+        try:
+            client.CleanIscsi()
+        except ClientError as e:
+            mylog.error(client_ip + ": " + e.message)
+            return
+
     results[index] = True
     return
 
 def main():
-    global client_ips, client_user, client_pass, target_list, parallel_thresh, parallel_max
+    global client_ips, client_user, client_pass, target_list, noclean, parallel_thresh, parallel_max
 
     # Pull in values from ENV if they are present
     env_enabled_vars = [ "client_ips", "client_user", "client_pass", "parallel_thresh", "parallel_max" ]
@@ -83,6 +95,7 @@ def main():
     parser.add_option("--client_user", type="string", dest="client_user", default=client_user, help="the username for the clients [%default]")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=client_pass, help="the password for the clients [%default]")
     parser.add_option("--target_list", type="string", dest="target_list", default=target_list, help="the list of volume IQNs to log out of, instead of all volumes")
+    parser.add_option("--noclean", action="store_true", dest="noclean", help="do not 'clean' iSCIS afterlogging out")
     parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=parallel_thresh, help="do not thread clients unless there are more than this many [%default]")
     parser.add_option("--parallel_max", type="int", dest="parallel_max", default=parallel_max, help="the max number of client threads to use [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
@@ -93,6 +106,7 @@ def main():
     if options.target_list:
         for t in options.target_list.split(","):
             target_list.append(t.strip())
+    if options.noclean: noclean = True
     parallel_thresh = options.parallel_thresh
     parallel_max = options.parallel_max
     debug = options.debug
@@ -122,7 +136,7 @@ def main():
     thread_index = 0
     for client_ip in client_ips:
         results[thread_index] = False
-        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, target_list, results, thread_index, debug))
+        th = multiprocessing.Process(target=ClientThread, args=(client_ip, client_user, client_pass, target_list, noclean, results, thread_index, debug))
         th.start()
         current_threads.append(th)
         thread_index += 1

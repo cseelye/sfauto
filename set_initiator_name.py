@@ -82,6 +82,8 @@ def main():
             mylog.error(e)
             sys.exit(1)
 
+        mylog.passed("Successfully set initiator name on " + client.Hostname)
+
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
@@ -96,7 +98,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-
-
-

@@ -36,12 +36,12 @@ node.startup = manual
 
 # To enable CHAP authentication set node.session.auth.authmethod
 # to CHAP. The default is None.
-node.session.auth.authmethod = CHAP
+# node.session.auth.authmethod = CHAP
 
 # To set a CHAP username and password for initiator
 # authentication by the target(s), uncomment the following lines:
-node.session.auth.username = test
-node.session.auth.password = ab1234567890
+# node.session.auth.username = test
+# node.session.auth.password = ab1234567890
 
 # To set a CHAP username and password for target(s)
 # authentication by the initiator, uncomment the following lines:
@@ -50,12 +50,12 @@ node.session.auth.password = ab1234567890
 
 # To enable CHAP authentication for a discovery session to the target
 # set discovery.sendtargets.auth.authmethod to CHAP. The default is None.
-discovery.sendtargets.auth.authmethod = CHAP
+# discovery.sendtargets.auth.authmethod = CHAP
 
 # To set a discovery session CHAP username and password for the initiator
 # authentication by the target(s), uncomment the following lines:
-discovery.sendtargets.auth.username = test
-discovery.sendtargets.auth.password = ab1234567890
+# discovery.sendtargets.auth.username = test
+# discovery.sendtargets.auth.password = ab1234567890
 
 # To set a discovery session CHAP username and password for target(s)
 # authentication by the initiator, uncomment the following lines:

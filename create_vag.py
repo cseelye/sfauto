@@ -78,8 +78,8 @@ def main():
     # Create the group
     params = {}
     params["name"] = vag_name
-    parmas["initiators"] = []
-    result = libsf.CallApiMethod(mvip, username, password, "CreateVolumeAccessGroup", params)
+    params["initiators"] = []
+    result = libsf.CallApiMethod(mvip, username, password, "CreateVolumeAccessGroup", params, ApiVersion=5.0)
 
     mylog.passed("Group created successfully")
 
