@@ -1230,7 +1230,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
                 if volume["name"] == vname:
                     if found:
                         mylog.warning("Duplicate volume name " + vname)
-                        break
+                        continue
                     else:
                         volume_id = int(volume["volumeID"])
                         found = True
@@ -1259,7 +1259,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
                 if volume["name"] == vname:
                     if found:
                         mylog.warning("Duplicate volume name " + vname)
-                        break
+                        continue
                     else:
                         volume_id = int(volume["volumeID"])
                         found = True
@@ -1277,7 +1277,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             if m:
                 if vol_name in found_volumes.keys():
                     mylog.warning("Duplicate volume name " + vol_name)
-                    break
+                    continue
                 else:
                     found_volumes[vol_name] = vol_id
                     count += 1
@@ -1292,7 +1292,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             if m:
                 if vol_name in found_volumes.keys():
                     mylog.warning("Duplicate volume name " + vol_name)
-                    break
+                    continue
                 else:
                     found_volumes[vol_name] = vol_id
                     count += 1
@@ -1304,7 +1304,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             if volume["name"].lower().startswith(VolumePrefix):
                 if volume["name"] in found_volumes.keys():
                     mylog.warning("Duplicate volume name " + vol_name)
-                    break
+                    continue
                 else:
                     vol_id = int(volume["volumeID"])
                     vol_name = volume["name"]
@@ -1318,7 +1318,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             if volume["name"].lower().startswith(VolumePrefix):
                 if volume["name"] in found_volumes.keys():
                     mylog.warning("Duplicate volume name " + vol_name)
-                    break
+                    continue
                 else:
                     vol_id = int(volume["volumeID"])
                     vol_name = volume["name"]
@@ -1333,7 +1333,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             vol_name = volume["name"]
             if vol_name in found_volumes.keys():
                 mylog.warning("Duplicate volume name " + vol_name)
-                break
+                continue
             else:
                 found_volumes[vol_name] = vol_id
                 count += 1
@@ -1453,10 +1453,7 @@ def FindAccount(Mvip, Username, Password, AccountName=None, AccountId=None):
     if AccountName:
         for account in account_list["accounts"]:
             if (account["username"].lower() == str(AccountName).lower()):
-                account_info = dict()
-                account_info["username"] = AccountName
-                account_info["accountID"] = account["accountID"]
-                return account_info
+                return account
         raise SfError("Could not find account with name " + str(AccountName))
 
     else:
@@ -1466,8 +1463,31 @@ def FindAccount(Mvip, Username, Password, AccountName=None, AccountId=None):
             raise SfError("Please specify an integer for AccountId")
         for account in account_list["accounts"]:
             if account["accountID"] == AccountId:
-                account_info = dict()
-                account_info["username"] = account["username"]
-                account_info["accountID"] = AccountId
-                return account_info
+                return account
         raise SfError("Could not find account with ID " + str(AccountId))
+
+def FindVolumeAccessGroup(Mvip, Username, Password, VagName=None, VagId=None):
+    if not VagName and not VagId:
+        raise SfError("Please specify either VagName or VagId")
+
+    vag_list = CallApiMethod(Mvip, Username, Password, "ListVolumeAccessGroups", {}, ApiVersion=5.0)
+    if VagName:
+        for vag in vag_list["volumeAccessGroups"]:
+            if vag["name"].lower() == VagName.lower():
+                return vag
+        raise SfError("Could not find group with name " + str(VagName))
+
+    else:
+        try:
+            VagId = int(VagId)
+        except ValueError:
+            raise SfError("Please specify an integer for VagId")
+        for vag in vag_list["volumeAccessGroups"]:
+            if vag["volumeAccessGroupID"] == VagId:
+                return vag
+        raise SfError("Couldnot find group with ID " + str(VagId))
+
+
+
+
+
