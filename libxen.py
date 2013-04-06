@@ -39,12 +39,15 @@ def Connect(VmHost, HostUser, HostPass):
 
     return session
 
-def GetIscsiTargets(XenSession, Host, Svip, ChapUser, ChapPass):
+def GetIscsiTargets(XenSession, Host, Svip, ChapUser=None, ChapPass=None):
     sr_args = {
             "target": Svip,
-            "chapuser": ChapUser,
-            "chappassword": ChapPass
     }
+    if ChapUser:
+        sr_args["chapuser"] = ChapUser
+    if ChapPass:
+        sr_args["chappassword"] = ChapPass
+
     sr_type = "lvmoiscsi"
     xml_str = None
     try:
@@ -63,32 +66,33 @@ def GetIscsiTargets(XenSession, Host, Svip, ChapUser, ChapPass):
             target_list.append(iqn)
     return target_list
 
-def GetScsiLun(XenSession, Host, TargetIqn, Svip, ChapUser, ChapPass):
-        sr_args = {
-                "target": Svip,
-                "targetIQN": TargetIqn,
-                "chapuser": ChapUser,
-                "chappassword": ChapPass
-        }
-        sr_type = "lvmoiscsi"
-        xml_str = None
-        try:
-            XenSession.xenapi.SR.probe(Host, sr_args, sr_type)
-        except XenAPI.Failure as e:
-            if e.details[0] == "SR_BACKEND_FAILURE_107":
-                xml_str = e.details[3]
-            else:
-                mylog.error("Could not discover SCSI LUN for target " + TargetIqn + " - " + str(e))
-                sys.exit(1)
+def GetScsiLun(XenSession, Host, TargetIqn, Svip, ChapUser=None, ChapPass=None):
+    sr_args = {
+            "target": Svip,
+            "targetIQN": TargetIqn,
+    }
+    if ChapUser:
+        sr_args["chapuser"] = ChapUser
+    if ChapPass:
+        sr_args["chappassword"] = ChapPass
+    sr_type = "lvmoiscsi"
+    xml_str = None
+    try:
+        XenSession.xenapi.SR.probe(Host, sr_args, sr_type)
+    except XenAPI.Failure as e:
+        if e.details[0] == "SR_BACKEND_FAILURE_107":
+            xml_str = e.details[3]
+        else:
+            raise XenError("Could not discover SCSI LUN for target " + TargetIqn + " - " + str(e))
 
-        lun_xml = ElementTree.fromstring(xml_str)
-        scsi_id = None
-        node = lun_xml.find("LUN/SCSIid")
-        if node != None:
-            scsi_id = node.text.strip()
-        if not scsi_id:
-            mylog.debug("Could not find scsi ID in " + xml_str)
-            mylog.error("Could not determine SCSI ID for target " + TargetIqn)
-        sr_size = int(lun_xml.find("LUN/size").text.strip())
+    lun_xml = ElementTree.fromstring(xml_str)
+    scsi_id = None
+    node = lun_xml.find("LUN/SCSIid")
+    if node != None:
+        scsi_id = node.text.strip()
+    if not scsi_id:
+        mylog.debug("Could not find scsi ID in " + xml_str)
+        raise XenError("Could not determine SCSI ID for target " + TargetIqn)
+    sr_size = int(lun_xml.find("LUN/size").text.strip())
 
-        return scsi_id, sr_size
+    return scsi_id, sr_size
