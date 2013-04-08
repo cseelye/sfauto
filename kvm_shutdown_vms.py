@@ -141,10 +141,10 @@ def main():
     for vm in matched_vms:
         [state, maxmem, mem, ncpu, cputime] = vm.info()
         if state == libvirt.VIR_DOMAIN_SHUTOFF:
-            mylog.passed("  " + vm.name() + " is already powered off")
+            mylog.passed("  " + vm.name() + " is already shutdown")
             power_count += 1
         else:
-            mylog.info("  Powering off " + vm.name())
+            mylog.info("  Shutting down " + vm.name())
             try:
                 vm.shutdown()
                 power_count += 1
@@ -153,10 +153,10 @@ def main():
                 mylog.error("  Failed to shutdown " + vm.name() + ": " + str(e))
 
     if power_count == len(matched_vms):
-        mylog.passed("All VMs powered off successfully")
+        mylog.passed("All VMs shutdown off successfully")
         sys.exit(0)
     else:
-        mylog.error("Not all VMs were powered off")
+        mylog.error("Not all VMs were shutdown off")
         sys.exit(1)
 
 
