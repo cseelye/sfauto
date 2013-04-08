@@ -58,7 +58,7 @@ from optparse import OptionParser
 import re
 import multiprocessing
 import libsf
-from libsf import mylog
+from libsf import mylog, SfApiError
 
 def ApiCallThread(mvip, username, password, volume_name, volume_id, max_iops, min_iops, burst_iops, results, index):
     mylog.info("Updating QoS on " + volume_name)
@@ -74,7 +74,7 @@ def ApiCallThread(mvip, username, password, volume_name, volume_id, max_iops, mi
     except SfApiError as e:
         mylog.error("[" + e.name + "]: " + e.message)
         return
-    
+
     results[index] = True
     return
 
