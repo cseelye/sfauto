@@ -273,7 +273,7 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
     log.debug("Retreiving " + pUrl)
     response = None
     try:
-        response = urllib2.urlopen(pUrl)
+        response = urllib2.urlopen(pUrl, None, 4 * 60)
     except KeyboardInterrupt: raise
     except: return None
 
@@ -292,7 +292,7 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams):
     response_obj = None
     api_resp = None
     try:
-        api_resp = urllib2.urlopen(rpc_url, api_call)
+        api_resp = urllib2.urlopen(rpc_url, api_call, 4 * 60)
     except urllib2.HTTPError as e:
         if (e.code == 401):
             print "Invalid cluster admin/password"
@@ -329,7 +329,7 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams):
 def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     if not os.path.exists(pKeyFile): pKeyFile = None
     if pKeyFile == '': pKeyFile = None
-    
+
     begin = datetime.datetime.now()
     #start_time = datetime.datetime.now()
     ssh = paramiko.SSHClient()
@@ -346,7 +346,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         except paramiko.AuthenticationException:
             print pNodeIp + " - Authentication failed. Check the password or RSA key"
             sys.exit(1)
-    
+
     #time_connect = datetime.datetime.now() - start_time
     #time_connect = time_connect.microseconds + time_connect.seconds * 1000000
 
@@ -683,7 +683,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         if ":" in nic_name:
             usage.ClusterMaster = True
             break
-    
+
     #
     # Get resident size from /proc/[pid]/status
     #
@@ -775,7 +775,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
     info = ClusterInfo()
 
     log.debug("checking node info")
-    
+
     sf_version = 0
     for node_ip in pNodesInfo.keys():
         m = re.search(r'Ver=(\d+\.\d+)', pNodesInfo[node_ip].SfVersion)
@@ -973,7 +973,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
                     info.NewEvents.append("xUnknownBlockID")
                 elif ('xUnknownBlockID' not in info.OldEvents):
                     info.OldEvents.append("xUnknownBlockID")
-    
+
             if 'FOUND DATA ON FAKE READ EVENT' in event['message']:
                 event_time = ParseTimestamp(event['timeOfReport'])
                 if (event_time == None):
@@ -998,7 +998,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
                     if (int(m.group(1)) == gc_generation):
                         gc_start_time = ParseTimestamp(event['timeOfReport'])
                         break
-    
+
             if ("GCCompleted" in event["message"]):
                 details = event["details"]
                 pieces = details.split()
@@ -1230,7 +1230,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
         print '%5.1f%%' % (top.TotalCpu),
         screen.reset()
         print ' (%s)' % (top.CpuDetail)
-    
+
         # fourth line - mem usage
         current_line += 1
         screen.gotoXY(startx + 1, starty + current_line)
@@ -1296,7 +1296,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
         line += ('  %4d%%' % top.Processes[pid].CpuUsage)
         line += ('  %11s' % HumanizeBytes(top.Processes[pid].ResidentMemory, 2))
         line += ('  %11s' % SecondsToElapsedStr(top.Processes[pid].Uptime))
-# This theoretically should show the difference between NVRAM and SSD IO by the slice, but in practice does not give predictable numbers 
+# This theoretically should show the difference between NVRAM and SSD IO by the slice, but in practice does not give predictable numbers
 #        if ("slice" in top.Processes[pid].ProcessName):
 #            line += ('  %11s' % (HumanizeBytes(top.Processes[pid].ReadThroughput - top.Processes[pid].DeviceReadThroughput, 0) + "/" + HumanizeBytes(top.Processes[pid].DeviceReadThroughput, 0)))
 #            line += ('  %11s' % (HumanizeBytes(top.Processes[pid].WriteThroughput - top.Processes[pid].DeviceWriteThroughput, 0) + "/" + HumanizeBytes(top.Processes[pid].DeviceWriteThroughput, 0)))
@@ -1459,9 +1459,9 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     elif pClusterInfo.SfMajorVersion >= 4:
         screen.set_color(ConsoleColors.WhiteFore)
         print "  Cluster Full: ",
-        if "stage5" in pClusterInfo.ClusterFullThreshold or "stage4" in pClusterInfo.ClusterFullThreshold:
+        if "stage5" in str(pClusterInfo.ClusterFullThreshold) or "stage4" in str(pClusterInfo.ClusterFullThreshold):
             screen.set_color(ConsoleColors.RedFore)
-        elif "stage3" in pClusterInfo.ClusterFullThreshold:
+        elif "stage3" in str(pClusterInfo.ClusterFullThreshold):
             screen.set_color(ConsoleColors.RedFore)
         else:
             screen.reset()
@@ -1758,7 +1758,7 @@ def GatherNodeInfoThread(log, pNodeResults, pInterval, pNodeIpList, pNodeUser, p
                 for node_ip in pNodeIpList:
                     if node_results[node_ip]:
                         pNodeResults[node_ip] = copy.deepcopy(node_results[node_ip])
-                
+
                 time.sleep(pInterval)
             except KeyboardInterrupt: raise
             except Exception as e:
@@ -1774,7 +1774,7 @@ def ClusterInfoThread(log, pClusterResults, pNodeResults, pInterval, pMvip, pApi
                 cluster_info = GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodeResults)
                 if cluster_info: log.debug("got cluster info")
                 else: log.debug("no cluster info")
-                
+
                 pClusterResults[pMvip] = copy.deepcopy(cluster_info)
                 #if shutdown_event.is_set(): break
                 time.sleep(pInterval)
@@ -1857,7 +1857,7 @@ if __name__ == '__main__':
     parser.add_option("--export", action="store_true", dest="export", help="save the results in a file as well as print to the screen")
     parser.add_option("--output_dir", type="string", dest="output_dir", default=output_dir, help="the directory to save exported data")
     parser.add_option("--debug", action="store_true", dest="debug", help="write detailed debug info to a log file")
-    
+
     (options, args) = parser.parse_args()
     mvip = options.mvip
     ssh_user = options.ssh_user
@@ -1870,7 +1870,7 @@ if __name__ == '__main__':
     columns = options.columns
     output_dir = options.output_dir
     interval = float(options.interval)
-    
+
     log = DebugLog()
     log.Enable = options.debug
     log.debug("Starting main process " + str(os.getpid()))
@@ -1914,7 +1914,7 @@ if __name__ == '__main__':
 
     if (not os.path.exists(output_dir)):
         os.makedirs(output_dir)
-    
+
     # Make a default for the keyfile path on Windows
     if platform.system().lower() == 'windows' and not keyfile:
         keyfile = os.environ["HOMEDRIVE"] + os.environ["HOMEPATH"] + "\\ssh\\id_rsa"
@@ -1949,8 +1949,8 @@ if __name__ == '__main__':
     for n_ip in node_ips:
         node_results[n_ip] = None
     cluster_results = main_manager.dict()
-    
-    all_threads = dict()    
+
+    all_threads = dict()
     previous_table_height = 0
     table_height = 0
     try:
@@ -1960,7 +1960,7 @@ if __name__ == '__main__':
         th.start()
         log.debug("started GatherNodeInfoThread process " + str(th.pid))
         all_threads["GatherNodeInfoThread"] = th
-        
+
         # Wait for at least one good result to come in
         got_results = False
         while True:
@@ -1970,7 +1970,7 @@ if __name__ == '__main__':
                     break
             if got_results: break
             time.sleep(2)
-        
+
         previous_cell_height = 0
         while True:
             # Look for the mvip if we don't already know it
@@ -2008,7 +2008,7 @@ if __name__ == '__main__':
                     node_cell_height = 4 + 1 + len(node_results[node_ip].Processes.keys()) + 1 + (len(node_results[node_ip].Nics.keys()) - 4) - 1
                 if (node_cell_height > cell_height):
                     cell_height = node_cell_height
-            
+
             if not compact and mvip and cluster_results[mvip]:
                 if (cell_height < 9 + len(cluster_results[mvip].SliceServices)/2):
                     cell_height = 9 + len(cluster_results[mvip].SliceServices)/2
@@ -2023,7 +2023,7 @@ if __name__ == '__main__':
             if cell_height != previous_cell_height:
                 screen.clear()
                 previous_cell_height = cell_height
-            
+
             # Display/log node info
             for i in range(len(node_ips)):
                 node_ip = node_ips[i]
@@ -2047,7 +2047,7 @@ if __name__ == '__main__':
                 try:
                     DrawNodeInfoCell(cell_x, cell_y, cell_width, cell_height, compact, node_results[node_ip])
                 except KeyboardInterrupt: raise
-                except:
+                except Exception as e:
                     log.debug("exception in DrawNodeInfoCell: " + str(e) + " - " + traceback.format_exc())
 
             # Display/log cluster info
@@ -2068,7 +2068,7 @@ if __name__ == '__main__':
                 try:
                     DrawClusterInfoCell(cell_x, cell_y, cell_width, cell_height, cluster_results[mvip])
                 except KeyboardInterrupt: raise
-                except:
+                except Exception as e:
                     log.debug("exception in DrawClusterInfoCell: " + str(e) + " - " + traceback.format_exc())
 
             screen.reset()
