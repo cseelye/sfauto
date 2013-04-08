@@ -140,12 +140,25 @@ def main():
         mylog.error("Error cloning " + vm_name + " to " + clone_name + " - " + str(task_record["error_info"]))
         sys.exit(1)
 
-    # Select a host for the clone
+    # Get the new clone
     clone_ref = session.xenapi.VM.get_by_name_label(clone_name)
     if not clone_ref or len(clone_ref) <= 0:
         mylog.error("Could not find clone " + clone_name + " after creation")
         sys.exit(1)
     clone_ref = clone_ref[0]
+
+    # Set the description of the virtual disk
+    clone = session.xenapi.VM.get_record(clone_ref)
+    for vbd_ref in clone["VBDs"]:
+        vbd = session.xenapi.VBD.get_record(vbd_ref)
+        if vbd["type"] != "Disk":
+            continue
+        vdi_ref = vbd["VDI"]
+        #vdi = session.xenapi.VDI.get_record(vdi_ref)
+        session.xenapi.VDI.set_name_label(vdi_ref, clone_name + "-disk0")
+        session.xenapi.VDI.set_name_description(vdi_ref, "Boot disk for " + clone_name)
+
+    # Select a host for the clone
     host_ref_list = session.xenapi.VM.get_possible_hosts(clone_ref)
     min_vms = sys.maxint
     dest_host_ref = None
