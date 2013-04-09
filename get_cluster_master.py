@@ -81,7 +81,8 @@ def main():
     if not node_ip:
         sys.exit(1)
 
-    if csv:
+
+    if csv or bash:
         mylog.debug("Cluster " + mvip + " master node is " + node_ip + " (nodeID " + str(node_id) + ")")
         sys.stdout.write(node_ip + "\n")
         sys.stdout.flush()
