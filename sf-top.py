@@ -273,7 +273,7 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
     log.debug("Retreiving " + pUrl)
     response = None
     try:
-        response = urllib2.urlopen(pUrl, None, 4 * 60)
+        response = urllib2.urlopen(pUrl, None, 5 * 60)
     except KeyboardInterrupt: raise
     except: return None
 
@@ -292,7 +292,7 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams):
     response_obj = None
     api_resp = None
     try:
-        api_resp = urllib2.urlopen(rpc_url, api_call, 4 * 60)
+        api_resp = urllib2.urlopen(rpc_url, api_call, 3 * 60)
     except urllib2.HTTPError as e:
         if (e.code == 401):
             print "Invalid cluster admin/password"
