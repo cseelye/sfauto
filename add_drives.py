@@ -43,7 +43,7 @@ from libsf import mylog
 
 
 def main():
-    global mvip, username, password, node_ips, drive_slots, wait_threshold, email_notify
+    global mvip, username, password, node_ips, drive_slots
 
     # Pull in values from ENV if they are present
     env_enabled_vars = [ "mvip", "username", "password", "email_notify" ]
@@ -66,8 +66,6 @@ def main():
     username = options.username
     password = options.password
     by_node = options.by_node
-    wait_threshold = options.wait_threshold
-    email_notify = options.email_notify
     if not libsf.IsValidIpv4Address(mvip):
         mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
         sys.exit(1)

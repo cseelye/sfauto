@@ -42,7 +42,7 @@ from libsf import mylog
 
 
 def main():
-    global mvip, username, password, node_ips, drive_slots, wait_threshold, email_notify
+    global mvip, username, password, node_ips, drive_slots
 
     # Pull in values from ENV if they are present
     env_enabled_vars = [ "mvip", "username", "password", "email_notify" ]
@@ -58,15 +58,11 @@ def main():
     parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
     parser.add_option("--node_ips", type="string", dest="node_ips", default=",".join(node_ips), help="the IP addresses of the nodes")
     parser.add_option("--drive_slots", type="string", dest="drive_slots", default=",".join(drive_slots), help="the slots to add the drives from")
-    parser.add_option("--wait_threshold", type="int", dest="wait_threshold", default=wait_threshold, help="give a warning if bin sync takes longer than this many minutes")
-    parser.add_option("--email_notify", type="string", dest="email_notify", default=email_notify, help="email address to send the warning to")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, args) = parser.parse_args()
     mvip = options.mvip
     username = options.username
     password = options.password
-    wait_threshold = options.wait_threshold
-    email_notify = options.email_notify
     drive_slots = []
     drive_slots_str = options.drive_slots
     pieces = drive_slots_str.split(',')
