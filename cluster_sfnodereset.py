@@ -25,7 +25,7 @@ save_logs = True                # Save a copy of the sf logs before reset
 
 # ----------------------------------------------------------------------------
 
-import sys
+import sys, os
 import multiprocessing
 from multiprocessing import Queue
 import os
@@ -154,6 +154,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

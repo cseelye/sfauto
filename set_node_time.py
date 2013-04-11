@@ -20,7 +20,7 @@ new_time = "now"                # The new time to set - string passed directly t
 # ----------------------------------------------------------------------------
 
 
-import sys
+import sys, os
 from optparse import OptionParser
 import tempfile
 import json
@@ -75,6 +75,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

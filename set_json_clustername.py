@@ -28,7 +28,7 @@ rtfi = False                # Update the RTFI backup version (/sf/rtfi/conf/soli
 # ----------------------------------------------------------------------------
 
 
-import sys
+import sys, os
 from optparse import OptionParser
 import tempfile
 import json
@@ -85,6 +85,9 @@ def main():
         import logging
         mylog.console.setLevel(logging.DEBUG)
 
+
+    mylog.warning("This script is deprecated in favor of the per-node API in Boron and later!")
+    time.sleep(20)
 
     json_filename = "/etc/solidfire.json"
     if rtfi:
@@ -165,6 +168,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

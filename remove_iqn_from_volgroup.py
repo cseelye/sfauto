@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# This script will add an initator IQN to a VAG
+# This script will remove an initiator IQN from a VAG
 
 # ----------------------------------------------------------------------------
 # Configuration
@@ -15,18 +15,18 @@ username = "admin"                  # Admin account for the cluster
 password = "solidfire"              # Admin password for the cluster
                                     # --pass
 
-vag_name = ""                       # The name of the group to add to
+vag_name = ""                       # The name of the group to remove from
                                     # --vag_name
 
-vag_id = 0                          # The ID of the group to add to
+vag_id = 0                          # The ID of the group to remove from
                                     # --vag_id
 
-iqn = ""                            # The initiator IQN to add
+iqn = ""                            # The initiator IQN to remove
                                     # --iqn
 
 # ----------------------------------------------------------------------------
 
-import sys,os,os
+import sys,os
 from optparse import OptionParser
 import time
 import libsf
@@ -50,7 +50,7 @@ def main():
     parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
     parser.add_option("--vag_name", type="string", dest="vag_name", default=vag_name, help="the name of the group")
     parser.add_option("--vag_id", type="int", dest="vag_id", default=vag_id, help="the ID of the group")
-    parser.add_option("--iqn", type="string", dest="iqn", default=iqn, help="the initiator IQN to add to the group")
+    parser.add_option("--iqn", type="string", dest="iqn", default=iqn, help="the initiator IQN to remove from the group")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, args) = parser.parse_args()
     mvip = options.mvip
@@ -66,7 +66,7 @@ def main():
         mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
         sys.exit(1)
 
-    mylog.info("Adding " + iqn + " to group " + str(vag_name))
+    mylog.info("Removing " + iqn + " from group " + str(vag_name))
 
     # Find the group
     try:
@@ -75,23 +75,28 @@ def main():
         mylog.error(str(e))
         sys.exit(1)
 
+    found = False
     for existing_iqn in vag["initiators"]:
         if existing_iqn.lower() == iqn.lower():
-            mylog.passed("IQN is already in group")
-            sys.exit(0)
+            found = True
+            break
+    if not found:
+        mylog.passed("IQN is already not in group")
+        sys.exit(0)
 
     params = {}
     params["volumeAccessGroupID"] = vag["volumeAccessGroupID"]
     params["initiators"] = vag["initiators"]
-    params["initiators"].append(iqn)
+    params["initiators"].remove(iqn)
     libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=5.0)
 
-    mylog.passed("Added IQN to group")
+    mylog.passed("Removed IQN from group")
 
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

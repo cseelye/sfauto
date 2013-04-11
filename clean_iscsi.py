@@ -144,6 +144,7 @@ scripts/clean_iscsi.py --client_ips="192.168.140.47,192.168.140.122" --nodefault
 
     #-- Do Stuff --#
     try:
+        timer = libsf.ScriptTimer()
         main()
 
     except SystemExit:

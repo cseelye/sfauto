@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# This script will add clients to a VAG
+# This script will remove clients from a VAG
 
 # ----------------------------------------------------------------------------
 # Configuration
@@ -25,15 +25,15 @@ username = "admin"                  # Admin account for the cluster
 password = "solidfire"              # Admin password for the cluster
                                     # --pass
 
-vag_name = ""                       # The name of the group to add to
+vag_name = ""                       # The name of the group to remove from
                                     # --vag_name
 
-vag_id = 0                          # The ID of the group to add to
+vag_id = 0                          # The ID of the group to remove from
                                     # --vag_id
 
 # ----------------------------------------------------------------------------
 
-import sys,os,os
+import sys,os
 from optparse import OptionParser
 import time
 import libsf
@@ -116,23 +116,24 @@ def main():
     full_iqn_list = vag["initiators"]
     for iqn in new_iqn_list:
         if iqn.lower() in vag["initiators"]:
-            mylog.debug(iqn + " is already in group")
+            full_iqn_list.remove(iqn)
         else:
-            full_iqn_list.append(iqn)
+            mylog.debug(iqn + " is alreadynot in group")
 
     # Modify the VAG on the cluster
-    mylog.info("Adding clients to group")
+    mylog.info("Removing clients from group")
     params = {}
     params["volumeAccessGroupID"] = vag["volumeAccessGroupID"]
     params["initiators"] = full_iqn_list
     libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=5.0)
 
-    mylog.passed("Successfully added clients to group")
+    mylog.passed("Successfully removed clients from group")
 
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

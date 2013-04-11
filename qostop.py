@@ -149,6 +149,7 @@ def main():
 
 if __name__ == '__main__':
     try:
+        #timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

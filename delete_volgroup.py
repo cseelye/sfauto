@@ -26,7 +26,7 @@ strict = False                      # Fail if the group has already been deleted
 
 # ----------------------------------------------------------------------------
 
-import sys,os,os
+import sys,os
 from optparse import OptionParser
 import time
 import libsf
@@ -88,6 +88,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

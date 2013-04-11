@@ -72,7 +72,7 @@ except ImportError:
     print "WARNING: Missing module pysphere - you will not be able to run the vmware_* scripts."
 try:
     import os
-    import sys
+    import sys, os
 except ImportError:
     print "ERROR: Can't find module 'os' or 'sys'.  Your python installation is really messed up."
 else:

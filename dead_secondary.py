@@ -24,7 +24,7 @@ folder = "reports"               # The name of the directory to store the report
 # ----------------------------------------------------------------------------
 
 
-import sys
+import sys, os
 from optparse import OptionParser
 import json
 import urllib2
@@ -144,6 +144,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

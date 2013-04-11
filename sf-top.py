@@ -55,7 +55,7 @@ import urllib2
 import random
 import httplib
 import json
-import sys
+import sys, os
 import tarfile
 import traceback
 import multiprocessing

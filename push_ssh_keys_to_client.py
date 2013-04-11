@@ -19,7 +19,7 @@ client_pass = "password"           # The password for the client
 # ----------------------------------------------------------------------------
 
 
-import sys
+import sys, os
 from optparse import OptionParser
 import paramiko
 import re
@@ -128,6 +128,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

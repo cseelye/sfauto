@@ -32,7 +32,7 @@ vag_name = ""                   # SolidFire VAG name
 
 # ----------------------------------------------------------------------------
 
-import sys
+import sys, os
 from optparse import OptionParser
 import json
 import time
@@ -211,6 +211,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

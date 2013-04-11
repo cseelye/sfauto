@@ -21,7 +21,7 @@ output_file = 'bench.latest'                # File to save vdbench STDOUT to
 # ----------------------------------------------------------------------------
 
 
-import sys
+import sys, os
 from optparse import OptionParser
 import subprocess
 import os
@@ -122,6 +122,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        #timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

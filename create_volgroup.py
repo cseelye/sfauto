@@ -1,9 +1,6 @@
 #!/usr/bin/python
 
-# This script will get the capacity stats for a cluster.  The default behavior
-# is to print all stats to the screen.  When used with the "stat" parameter, the
-# behavior is to echo only that stat to the screen, such as for use in a bash
-# script to be saved into a variable
+# This script will create a volume access group on the cluster
 
 # ----------------------------------------------------------------------------
 # Configuration
@@ -15,11 +12,14 @@ mvip = "192.168.000.000"            # The management VIP of the cluster
 username = "admin"                  # Admin account for the cluster
                                     # --user
 
-password = "password"              # Admin password for the cluster
+password = "solidfire"              # Admin password for the cluster
                                     # --pass
 
-stat = ""                           # Which capacity stat to get.  Default is all
-                                    # --stat
+vag_name = ""                       # The name of the group to create
+                                    # --vag_name
+
+strict = False                      # Fail if the group already exists
+                                    # --strict
 
 # ----------------------------------------------------------------------------
 
@@ -27,11 +27,10 @@ import sys,os
 from optparse import OptionParser
 import time
 import libsf
-from libsf import mylog
-
+from libsf import mylog, SfError
 
 def main():
-    global mvip, username, password, stat
+    global mvip, username, password, vag_name, strict
 
     # Pull in values from ENV if they are present
     env_enabled_vars = [ "mvip", "username", "password" ]
@@ -45,23 +44,44 @@ def main():
     parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
     parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
     parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--stat", type="string", dest="stat", default=stat, help="the capacity stat to get")
+    parser.add_option("--vag_name", type="string", dest="vag_name", default=vag_name, help="the name for the group")
+    parser.add_option("--strict", action="store_true", dest="strict", help="fail if the account already exists")
+    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, args) = parser.parse_args()
     mvip = options.mvip
     username = options.username
     password = options.password
-    stat = options.stat
+    vag_name = options.vag_name
+    if options.strict: strict = True
+    if options.debug != None:
+        import logging
+        mylog.console.setLevel(logging.DEBUG)
     if not libsf.IsValidIpv4Address(mvip):
         mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
         sys.exit(1)
 
-    result = libsf.CallApiMethod(mvip, username, password, "GetClusterCapacity", {})
-    if stat != None and len(stat) > 0:
-        sys.stdout.write(str(result["clusterCapacity"][stat]) + "\n")
-    else:
-        for key, value in result["clusterCapacity"].iteritems():
-            mylog.info(str(key) + " = " + str(value))
-    exit(0)
+    mylog.info("Creating VAG '" + str(vag_name) + "'")
+
+    # See if the group already exists
+    try:
+        libsf.FindVolumeAccessGroup(mvip, username, password, VagName=vag_name)
+        if strict:
+            mylog.error("Group already exists")
+            sys.exit(1)
+        else:
+            mylog.passed("Group already exists")
+            sys.exit(0)
+    except SfError:
+        # Group does not exist
+        pass
+
+    # Create the group
+    params = {}
+    params["name"] = vag_name
+    params["initiators"] = []
+    result = libsf.CallApiMethod(mvip, username, password, "CreateVolumeAccessGroup", params, ApiVersion=5.0)
+
+    mylog.passed("Group created successfully")
 
 
 if __name__ == '__main__':
@@ -78,4 +98,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-

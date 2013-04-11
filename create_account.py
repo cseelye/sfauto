@@ -29,7 +29,7 @@ strict = False                      # Fail if the account already exists
 
 # ----------------------------------------------------------------------------
 
-import sys,os,os
+import sys,os
 from optparse import OptionParser
 import time
 import libsf
@@ -98,6 +98,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise

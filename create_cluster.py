@@ -30,7 +30,7 @@ node_count = 0                  # The required number of nodes to create the clu
 
 # ----------------------------------------------------------------------------
 
-import sys
+import sys, os
 import os
 from optparse import OptionParser
 import json
@@ -146,6 +146,7 @@ def main():
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
+        timer = libsf.ScriptTimer()
         main()
     except SystemExit:
         raise
