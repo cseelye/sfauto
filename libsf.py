@@ -56,6 +56,7 @@ class Bunch:
 class MyLogLevels:
     PASS = 21
     RAW = 22
+    TIME = 23
 for attr, value in vars(MyLogLevels).iteritems():
     logging.addLevelName(attr, value)
 
@@ -85,6 +86,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
         logging.CRITICAL: ('red', 'white', True),
         MyLogLevels.PASS: ('black', 'green', True),
         MyLogLevels.RAW: ('black', 'white', True),
+        MyLogLevels.TIME: ('black', 'cyan', False),
     }
     csi = '\x1b['
     reset = '\x1b[0m'
@@ -188,7 +190,7 @@ class MultiFormatter(logging.Formatter):
         self.std_format = fmt
         logging.Formatter.__init__(self, fmt)
     def format(self, record):
-        if record.levelno == MyLogLevels.RAW:
+        if record.levelno == MyLogLevels.RAW or record.levelno == MyLogLevels.TIME:
             self._fmt = self.raw_format
             result = logging.Formatter.format(self, record)
         else:
@@ -272,6 +274,13 @@ class mylog:
         lines = mylog._split_message(message)
         for line in lines:
             mylog.sftestlog.log(MyLogLevels.PASS, line)
+
+    @staticmethod
+    def time(message):
+        if mylog.silence: return
+        lines = mylog._split_message(message)
+        for line in lines:
+            mylog.sftestlog.log(MyLogLevels.TIME, line)
 
     @staticmethod
     def raw(message):
@@ -380,6 +389,14 @@ class LocalTimezone(datetime.tzinfo):
         stamp = time.mktime(tt)
         tt = time.localtime(stamp)
         return tt.tm_isdst > 0
+
+class ScriptTimer:
+    def __init__(self):
+        self.name = os.path.basename(inspect.stack()[-1][1])
+        self.startTime = time.time()
+    def __del__(self):
+        endTime = time.time()
+        mylog.time(self.name + " total run time " + SecondsToElapsedStr(endTime - self.startTime))
 
 def ParseDateTime(pTimeString):
     known_formats = [
