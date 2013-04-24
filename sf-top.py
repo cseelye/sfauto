@@ -339,12 +339,14 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         ssh.connect(pNodeIp, username=pNodeUser, password=pNodePass, key_filename=pKeyFile)
     except paramiko.BadAuthenticationType:
         print pNodeIp + " - You must use SSH host keys to connect to this node (try adding your key to the node, or disabling OTP)"
+        log.debug(pNodeIp + " - You must use SSH host keys to connect to this node (try adding your key to the node, or disabling OTP)")
         sys.exit(1)
     except paramiko.AuthenticationException:
         try:
             ssh.connect(pNodeIp, username=pNodeUser, password=pNodePass)
         except paramiko.AuthenticationException:
             print pNodeIp + " - Authentication failed. Check the password or RSA key"
+            log.debug(pNodeIp + " - Authentication failed. Check the password or RSA key")
             sys.exit(1)
 
     #time_connect = datetime.datetime.now() - start_time
@@ -1716,7 +1718,8 @@ def SingleNodeThread(log, pResults, pNodeIp, pNodeUser, pNodePass, pKeyFile=None
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         top = GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile)
         pResults[pNodeIp] = top
-    except: pass
+    except Exception as e:
+        log.debug("exception: " + str(e) + " - " + traceback.format_exc())
 
 def GatherNodeInfoThread(log, pNodeResults, pInterval, pNodeIpList, pNodeUser, pNodePass, pKeyFile=None):
     try:
