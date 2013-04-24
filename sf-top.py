@@ -359,7 +359,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     timestamp = TimestampToStr(START_TIME, "%Y%m%d%H%M.%S")
     command = ""
     command += "echo hostname=`\\hostname`"
-    command += ";/sf/bin/sfapp --Version"
+    command += ";/sf/bin/sfapp --Version -laAll 0"
     command += ";\\free -o"
     command += ";touch -t " + timestamp + " /tmp/timestamp;echo newcores=`find /sf -maxdepth 1 -name \"core*\" -newer /tmp/timestamp | wc -l`"
     command += ";echo allcores=`ls -1 /sf/core* | wc -l`"
