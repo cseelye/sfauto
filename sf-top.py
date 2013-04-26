@@ -55,8 +55,7 @@ import urllib2
 import random
 import httplib
 import json
-import sys, os
-import tarfile
+import sys
 import traceback
 import multiprocessing
 import signal
@@ -194,6 +193,9 @@ class ClusterInfo:
         self.AccountCount = 0
         self.BSCount = 0
         self.SSCount = 0
+        self.MSCount = 0
+        self.VSCount = 0
+        self.TSCount = 0
         self.CurrentIops = 0
         self.UsedSpace = 0
         self.TotalSpace = 0
@@ -274,8 +276,28 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
     response = None
     try:
         response = urllib2.urlopen(pUrl, None, 5 * 60)
-    except KeyboardInterrupt: raise
-    except: return None
+    except urllib2.HTTPError as e:
+        if (e.code == 401):
+            print "Invalid cluster admin/password"
+            sys.exit(1)
+        else:
+            if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
+                log.debug("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
+                return None
+            else:
+                log.debug("HTTPError: " + str(e.code))
+                return None
+    except urllib2.URLError as e:
+        log.debug("URLError on " + pUrl + " : " + str(e.reason))
+        return None
+    except httplib.BadStatusLine, e:
+        log.debug("httplib.BadStatusLine: " + str(e))
+        return None
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        log.debug("Unhandled exception in HttpRequest: " + str(e) + " - " + traceback.format_exc())
+        return None
 
     return response.read()
 
@@ -299,18 +321,21 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams):
             sys.exit(1)
         else:
             if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
-                #log.debug("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
+                log.debug("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
                 return None
             else:
-                #log.debug("HTTPError: " + str(e.code))
+                log.debug("HTTPError: " + str(e.code))
                 return None
     except urllib2.URLError as e:
-        #mylog.warning("URLError on " + rpc_url + " : " + str(e.reason))
+        log.debug("URLError on " + rpc_url + " : " + str(e.reason))
         return None
-    except httplib.BadStatusLine, e:
-        #log.debug("httplib.BadStatusLine: " + str(e))
+    except httplib.BadStatusLine as e:
+        log.debug("httplib.BadStatusLine: " + str(e))
         return None
-    except Exception, e:
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        log.debug("Unhandled exception in CallApiMethod: " + str(e) + " - " + traceback.format_exc())
         return None
 
     if (api_resp != None):
@@ -319,9 +344,11 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams):
         try:
             response_obj = json.loads(response_str)
         except ValueError:
+            log.debug("Invalid JSON received from cluster")
             return None
 
     if (response_obj == None or 'error' in response_obj):
+        log.debug("Missing or error response from cluster")
         return None
 
     return response_obj['result']
@@ -1534,14 +1561,20 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     screen.reset()
 
     # Slice load/scache
+    columns = 2
+    if len(pClusterInfo.SliceServices) > 20:
+        columns = 4
     count = 0
     for sliceid in sorted(pClusterInfo.SliceServices):
-        count += 1
         x_offset = 1
-        if count % 2 == 0:
-            x_offset = 40
-        else:
+        x_offset = count % columns * 40 + 1
+        if count % columns == 0:
             current_line += 1
+        count += 1
+        #if count % 2 == 0:
+        #    x_offset = 40
+        #else:
+        #    current_line += 1
 
         screen.gotoXY(pStartX + x_offset, pStartY + current_line)
         screen.set_color(ConsoleColors.WhiteFore)
@@ -1939,6 +1972,9 @@ if __name__ == '__main__':
     else:
         cell_width = 89
     cell_height = 0
+    cluster_cell_height = cell_height
+    cluster_cell_width = cell_width
+
     if (platform.system().lower() == 'windows'):
         originx = 0
         originy = 0
@@ -2013,15 +2049,19 @@ if __name__ == '__main__':
                     cell_height = node_cell_height
 
             if not compact and mvip and cluster_results[mvip]:
-                if (cell_height < 9 + len(cluster_results[mvip].SliceServices)/2):
-                    cell_height = 9 + len(cluster_results[mvip].SliceServices)/2
+                cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices)/2
+                if cluster_cell_height > cell_height:
+                    cluster_cell_width = cell_width * 2 - 1
 
-            # Determine table height, based on cell height, columns, number of nodes + 1 cell for cluster info
+            # Determine table height, based on cell height, columns, number of nodes + cell for cluster info
             previous_table_height = table_height
             if compact:
                 table_height =  math.ceil(float(len(node_ips)) / float(columns)) * (cell_height + 1) + originy
             else:
-                table_height =  math.ceil(float(len(node_ips) + 1) / float(columns)) * (cell_height + 1) + originy
+                if cluster_cell_width > cell_width:
+                    table_height =  math.ceil(float(len(node_ips) + 2) / float(columns)) * (cell_height + 1) + originy
+                else:
+                    table_height =  math.ceil(float(len(node_ips) + 1) / float(columns)) * (cell_height + 1) + originy
 
             if cell_height != previous_cell_height:
                 screen.clear()
@@ -2057,6 +2097,9 @@ if __name__ == '__main__':
             if not compact and mvip and cluster_results[mvip]:
                 cell_row = len(node_ips) / columns
                 cell_col = len(node_ips) % columns
+                if cluster_cell_width > cell_width and cell_col == columns - 1:
+                    cell_row += 1
+                    cell_col = 0
                 cell_x = cell_col * cell_width + originx
                 if cell_col > 1: cell_x -= (cell_col - 1) # overlap the borders
                 cell_y = cell_row * (cell_height + 1) + originy
@@ -2069,7 +2112,7 @@ if __name__ == '__main__':
                     except:
                         log.debug("exception in LogClusterResult: " + str(e) + " - " + traceback.format_exc())
                 try:
-                    DrawClusterInfoCell(cell_x, cell_y, cell_width, cell_height, cluster_results[mvip])
+                    DrawClusterInfoCell(cell_x, cell_y, cluster_cell_width, cell_height, cluster_results[mvip])
                 except KeyboardInterrupt: raise
                 except Exception as e:
                     log.debug("exception in DrawClusterInfoCell: " + str(e) + " - " + traceback.format_exc())
