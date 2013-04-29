@@ -83,6 +83,8 @@ class SfClient:
                     self.RemoteOsVersion = "ubuntu"
                 elif "el" in uname_str:
                     self.RemoteOsVersion = "redhat"
+                elif "fc" in uname_str:
+                    self.RemoteOsVersion = "redhat"
             elif "vmkernel" in uname_str:
                 self.RemoteOs = OsType.ESX
                 m = re.search(" (\d\.\d)\.\d+ ", uname_str)
@@ -156,6 +158,8 @@ class SfClient:
                         self.RemoteOsVersion = "ubuntu"
                     elif "el" in uname_str:
                         self.RemoteOsVersion = "redhat"
+                    elif "fc" in uname_str:
+                        self.RemoteOsVersion = "redhat"
                 elif "sunos" in uname_str:
                     self.RemoteOs = OsType.SunOS
                 else:
@@ -170,7 +174,7 @@ class SfClient:
         if self.Hostname == None:
             raise ClientError("Could not connect to client " + pClientIp)
 
-        self._debug("Client OS is " + str(self.RemoteOs))
+        self._debug("Client OS is " + str(self.RemoteOs) + " " + str(self.RemoteOsVersion))
 
         # Save a list of all the IPs on this client
         self.AllIpAddresses = self.GetIpv4Addresses()
@@ -1286,7 +1290,7 @@ class SfClient:
             if login_count > 0:
                 start_time = time.time()
                 while True:
-                    retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m session -P3 | egrep 'Target|scsi disk' | wc -l")
+                    retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m session -P3 | egrep 'Target:|scsi disk' | wc -l")
                     stdout = stdout.strip()
                     # This should generate two lines of output for every target
                     # Target: iqn.2010-01.com.solidfire:8m8z.kvm-templates.38537
@@ -1421,7 +1425,7 @@ class SfClient:
                 pass
 
         elif self.RemoteOs == OsType.Linux:
-            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m node -P 1 | grep Target")
+            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m node -P 1 | grep 'Target:'")
             targets = []
             for line in stdout.split("\n"):
                 line = line.strip()
