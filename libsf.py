@@ -1409,16 +1409,25 @@ def IpmiCommand(IpmiIp, IpmiUsername, IpmiPassword, IpmiCommand):
         raise SfError("ipmitool error: " + stdout + stderr)
 
 def ClusterIsBinSyncing(Mvip, Username, Password):
-    # Get the bin assignments report
-    result = HttpRequest("https://" + Mvip + "/reports/bins.json", Username, Password)
-    bin_report = json.loads(result)
+    version = CallApiMethod(Mvip, Username, Password, "GetClusterVersionInfo", {})
+    cluster_version = float(version["clusterVersion"])
+    if cluster_version >= 5.0:
+        # Get the bin assignments report
+        result = HttpRequest("https://" + Mvip + "/reports/bins.json", Username, Password)
+        bin_report = json.loads(result)
 
-    # Make sure that all bins are active and not syncing
-    for bsbin in bin_report:
-        for service in bsbin["services"]:
-            if service["status"] != "bsActive":
-                mylog.debug("Bin sync - one or more bins are not active")
-                return True
+        # Make sure that all bins are active and not syncing
+        for bsbin in bin_report:
+            for service in bsbin["services"]:
+                if service["status"] != "bsActive":
+                    mylog.debug("Bin sync - one or more bins are not active")
+                    return True
+    else:
+        # Get the bin syncing report
+        result = HttpRequest("https://" + Mvip + "/reports/binsyncing", Username, Password)
+        if "<table>" in result:
+            mylog.debug("Bin sync - entries in bin syncing report")
+            return True
 
     # Make sure there are no block related faults
     result = CallApiMethod(Mvip, Username, Password, "ListClusterFaults", {'faultTypes' : 'current'})
@@ -1430,26 +1439,37 @@ def ClusterIsBinSyncing(Mvip, Username, Password):
     return False
 
 def ClusterIsSliceSyncing(Mvip, Username, Password):
-    # Get the slice assignments report
-    result = HttpRequest("https://" + Mvip + "/reports/slices.json", Username, Password)
-    slice_report = json.loads(result)
-
-    # Make sure there are no unhealthy services
-    for ss in slice_report["services"]:
-        if ss["health"] != "good":
-            mylog.debug("Slice sync - one or more SS are unhealthy")
-            return True
-
-    # Make sure there are no volumes with multiple live secondaries or dead secondaries
-    for vol in slice_report["slices"]:
-        if "liveSecondaries" not in vol:
-            mylog.debug("Slice sync - one or more volumes have no live secondaries")
-            return True
-        if len(vol["liveSecondaries"]) > 1:
-            mylog.debug("Slice sync - one or more volumes have multiple live secondaries")
-            return True
-        if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
-            mylog.debug("Slice sync - one or more volumes have dead secondaries")
+    version = CallApiMethod(Mvip, Username, Password, "GetClusterVersionInfo", {})
+    cluster_version = float(version["clusterVersion"])
+    if cluster_version >= 5.0:
+        # Get the slice assignments report
+        result = HttpRequest("https://" + Mvip + "/reports/slices.json", Username, Password)
+        slice_report = json.loads(result)
+    
+        # Make sure there are no unhealthy services
+        if "service" in slice_report:
+            for ss in slice_report["services"]:
+                if ss["health"] != "good":
+                    mylog.debug("Slice sync - one or more SS are unhealthy")
+                    return True
+    
+        # Make sure there are no volumes with multiple live secondaries or dead secondaries
+        if "slice" in slice_report:
+            for vol in slice_report["slices"]:
+                if "liveSecondaries" not in vol:
+                    mylog.debug("Slice sync - one or more volumes have no live secondaries")
+                    return True
+                if len(vol["liveSecondaries"]) > 1:
+                    mylog.debug("Slice sync - one or more volumes have multiple live secondaries")
+                    return True
+                if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
+                    mylog.debug("Slice sync - one or more volumes have dead secondaries")
+                    return True
+    else:
+        # Get the slice syncing report
+        result = HttpRequest("https://" + Mvip + "/reports/slicesyncing", Username, Password)
+        if "<table>" in result:
+            mylog.debug("Slice sync - entries in slice syncing report")
             return True
 
     # Make sure there are no slice related faults
