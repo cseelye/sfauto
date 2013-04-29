@@ -61,7 +61,7 @@ def main():
     ipmi_ip = libsf.GetIpmiIp(node_ip, ssh_user, ssh_pass)
     
     if csv or bash:
-        sys.stdout.write(ipmi_ip)
+        sys.stdout.write(ipmi_ip + "\n")
         sys.stdout.flush()
     else:
         mylog.info("Node " + node_ip + " IPMI IP address is " + ipmi_ip)
