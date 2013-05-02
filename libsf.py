@@ -1127,6 +1127,8 @@ def WaitForGC(pMvip, pUsername, pPassword, pSince, pWaitThreshold = 30, pNotifyE
         for i in range(len(event_list['events'])-1, -1, -1):
             event = event_list['events'][i]
             if ("GCRescheduled" in event["message"]):
+                event_time = ParseTimestamp(event['timeOfReport'])
+                if event_time < pSince: continue
                 mylog.warning("GCRescheduled - GC was not run")
                 return (ParseTimestamp(event['timeOfReport']), 0, 0)
 
