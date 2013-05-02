@@ -18,6 +18,12 @@ password = "password"          # Admin password for the cluster
 source_account = ""             # Account to list volumes from
                                 # --source_account
 
+csv = False                     # Display minimal output that is suitable for piping into other programs
+                                # --csv
+
+bash = False                    # Display minimal output that is formatted for a bash array/for  loop
+                                # --bash
+
 # ----------------------------------------------------------------------------
 
 
@@ -37,7 +43,7 @@ from libclient import ClientError, SfClient
 
 
 def main():
-    global mvip, username, password, source_account
+    global mvip, username, password, source_account, csv, bash
 
     # Pull in values from ENV if they are present
     env_enabled_vars = [ "mvip", "username", "password" ]
@@ -52,12 +58,20 @@ def main():
     parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster  [%default]")
     parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster  [%default]")
     parser.add_option("--source_account", type="string", dest="source_account", default=source_account, help="the name of the account to list volumes from")
+    parser.add_option("--csv", action="store_true", dest="csv", help="display a minimal output that is formatted as a comma separated list")
+    parser.add_option("--bash", action="store_true", dest="bash", help="display a minimal output that is formatted for a bash array/for loop")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, args) = parser.parse_args()
     mvip = options.mvip
     username = options.username
     password = options.password
     source_account = options.source_account
+    if options.csv:
+        csv = True
+        mylog.silence = True
+    if options.bash:
+        bash = True
+        mylog.silence = True
     if options.debug != None:
         import logging
         mylog.console.setLevel(logging.DEBUG)
@@ -79,8 +93,18 @@ def main():
         sys.exit(1)
 
     volume_list = libsf.CallApiMethod(mvip, username, password, "ListVolumesForAccount", { "accountID" : account_id })
-    for vol in volume_list["volumes"]:
-        print vol["name"]
+    mylog.info("Found " + str(len(volume_list["volumes"])) + " volumes:")
+    if csv or bash:
+        separator = ","
+        if bash: separator = " "
+        vols = []
+        for vol in volume_list["volumes"]:
+            vols.append(vol["name"])
+        sys.stdout.write(separator.join(vols) + "\n")
+        sys.stdout.flush()
+    else:
+        for vol in volume_list["volumes"]:
+            mylog.info("  " + vol["name"])
 
 
 if __name__ == '__main__':
