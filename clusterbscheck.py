@@ -39,14 +39,14 @@ import datetime
 import calendar
 
 def NodeThread(node_ip, node_user, node_pass, results, index):
-    #mylog.console.setLevel(logging.DEBUG)
+    mylog.console.setLevel(logging.DEBUG)
     try:
         mylog.debug(node_ip + ": Connecting")
         #mylog.debug(node_ip + ": index = " + str(index))
         ssh = libsf.ConnectSsh(node_ip, node_user, node_pass)
         #mylog.info(node_ip + ": Checking for xUnknownBlockID")
-        command = "zgrep xUnknownBlock /var/log/sf-slice.info* | egrep -o 'bs [0-9]+ .+ sliceID=[0-9]+ lba=[0-9]+' | sort -u"
-        
+        command = "grep xUnknownBlock /var/log/sf-block.info | egrep -o 'bs [0-9]+ .+ sliceID=[0-9]+ lba=[0-9]+' | sort -u"
+
         stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
         results[index] = []
         for line in stdout.readlines():
@@ -79,27 +79,49 @@ def NodeThread(node_ip, node_user, node_pass, results, index):
         mylog.error(traceback.format_exc())
         results[index] = False
 
-def WaitForBsCheckThread(node_ip, node_user, node_pass, start_time, timeout, results, index):
+def WaitForBsCheckThread(node_ip, node_user, node_pass, ss_count, start_time, timeout, results, index):
+    #mylog.console.setLevel(logging.DEBUG)
     results[index] = False
     try:
         ssh = libsf.ConnectSsh(node_ip, node_user, node_pass)
-        command = "grep 'finished cluster bs check' /var/log/sf-slice.info | tail"
-        pattern = re.compile("^(?P<month>[a-zA-Z]{3})\s+(?P<day>\d\d?)\s(?P<hour>\d\d)\:(?P<minute>\d\d):(?P<second>\d\d)(?:\s(?P<suppliedhost>[a-zA-Z0-9_-]+))?\s(?P<host>[a-zA-Z0-9_-]+)\s(?P<process>[a-zA-Z0-9\/_-]+)(\[(?P<pid>\d+)\])?:\s(?P<message>.+)$")
-        finished = False
-        while not finished:
+        # Wait for BS check to start
+        command = "grep -c 'Starting ClusterBSCheck' /var/log/sf-slice.info"
+        while True:
             stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
-            for line in stdout.readlines():
-                m = pattern.match(line)
-                if m:
-                    datestring = m.group('month') + " " + ("%02d" % int(m.group('day'))) + " " + m.group('hour') + ":" + m.group('minute') + ":" + m.group('second')
-                    date = datetime.datetime.strptime(datestring, "%b %d %H:%M:S")
-                    timestamp = calendar.timegm(date_obj.timetuple())
-                    if timestamp >= start_time:
-                        results[index] = True
-                        return
+            if int(stdout.readlines()[0].strip()) >= ss_count:
+                break
+            time.sleep(2)
+        
+        # Wait for BS check to finish
+        mylog.info(node_ip + ": waiting for ClusterBSCheck to finish")
+        command = "grep -c 'finished cluster bs check' /var/log/sf-slice.info"
+        while True:
+            stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
+            if int(stdout.readlines()[0].strip()) >= ss_count:
+                break
+            time.sleep(10)
+
+        mylog.info(node_ip + ": ClusterBSCheck finished")
+        results[index] = True
+        return
+
+        #pattern = re.compile("^(?P<month>[a-zA-Z]{3})\s+(?P<day>\d\d?)\s(?P<hour>\d\d)\:(?P<minute>\d\d):(?P<second>\d\d)(?:\s(?P<suppliedhost>[a-zA-Z0-9_-]+))?\s(?P<host>[a-zA-Z0-9_-]+)\s(?P<process>[a-zA-Z0-9\/_-]+)(\[(?P<pid>\d+)\])?:\s(?P<message>.+)$")
+        #finished = False
+        #while not finished:
+        #    stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
+        #    for line in stdout.readlines():
+        #        m = pattern.match(line)
+        #        if m:
+        #            datestring = m.group('month') + " " + ("%02d" % int(m.group('day'))) + " " + m.group('hour') + ":" + m.group('minute') + ":" + m.group('second')
+        #            date = datetime.datetime.strptime(datestring, "%b %d %H:%M:S")
+        #            timestamp = calendar.timegm(date_obj.timetuple())
+        #            if timestamp >= start_time:
+        #                results[index] = True
+        #                return
     except KeyboardInterrupt:
         results[index] = False
     except Exception as e:
+        mylog.error(traceback.format_exc())
         results[index] = False
 
 def main():
@@ -129,7 +151,7 @@ def main():
     ssh_pass = options.ssh_pass
     timeout = options.timeout
     timeout = timeout * 60
-    
+
     if options.debug != None:
         import logging
         mylog.console.setLevel(logging.DEBUG)
@@ -138,26 +160,43 @@ def main():
         sys.exit(1)
 
     mylog.info("Checking cluster version on " + mvip)
-    
+
     result = libsf.CallApiMethod(mvip, username, password, "GetClusterVersionInfo", {})
     if not result["clusterVersion"].startswith("5"):
         mylog.error("This script only works with Boron and later")
         sys.exit(1)
-    if float(result["clusterVersion"]) < 5.735:
-        mylog.error("This script only works with build 735 or later")
-        sys.exit(1)
-    
+    #if float(result["clusterVersion"]) < 5.735:
+    #    mylog.error("This script only works with build 735 or later")
+    #    sys.exit(1)
+
     mylog.info("Getting a list of nodes in the cluster")
     node_ip_list = []
     result = libsf.CallApiMethod(mvip, username, password, "ListActiveNodes", {})
     for node in result["nodes"]:
         node_ip_list.append(node["mip"])
-    
+
+    node2ss = dict()
+    result = libsf.CallApiMethod(mvip, username, password, "ListServices", {})
+    for service in result["services"]:
+        if service["service"]["serviceType"] != "slice": continue
+        node_ip = service["node"]["mip"]
+        if node_ip in node2ss:
+            node2ss[node_ip] += 1
+        else:
+            node2ss[node_ip] = 1
+
+    for node_ip in node_ip_list:
+        mylog.info("Rotating logs on " + node_ip)
+        ssh = libsf.ConnectSsh(node_ip, ssh_user, ssh_pass)
+        libsf.ExecSshCommand(ssh, "/usr/sbin/logrotate -f /etc/logrotate.d/sfapp")
+        ssh.close()
+    time.sleep(10)
+
     mylog.info("Starting ClusterBSCheck")
     start_time = time.time()
     time.sleep(2)
     result = libsf.CallApiMethod(mvip, username, password, "StartClusterBSCheck", {}, ApiVersion=5.0)
-    
+
     mylog.info("Waiting for check to finish")
     manager = multiprocessing.Manager()
     results = manager.dict()
@@ -165,82 +204,97 @@ def main():
     thread_index = 0
     for node_ip in node_ip_list:
         results[thread_index] = False
-        th = multiprocessing.Process(target=WaitForBsCheckThread, name="Node-" + node_ip + "-" + str(thread_index), args=(node_ip, ssh_user, ssh_pass, start_time, timeout, results, thread_index))
+        th = multiprocessing.Process(target=WaitForBsCheckThread, name="Node-" + node_ip + "-" + str(thread_index), args=(node_ip, ssh_user, ssh_pass, node2ss[node_ip], start_time, timeout, results, thread_index))
         th.start()
         current_threads.append(th)
         thread_index += 1
     # Wait for all threads to stop
     for th in current_threads:
         th.join()
-    time.sleep(60)
-    
+    time.sleep(20)
+
     mylog.info("Looking for xUnknownBlockID")
-    
-    # Start one thread per node
-    mylog.info("Gathering information from nodes")
-    manager = multiprocessing.Manager()
-    results = manager.dict()
-    current_threads = []
-    thread_index = 0
+    found_xubid = False
     for node_ip in node_ip_list:
-        results[thread_index] = False
-        th = multiprocessing.Process(target=NodeThread, name="Node-" + node_ip + "-" + str(thread_index), args=(node_ip, ssh_user, ssh_pass, results, thread_index))
-        th.start()
-        current_threads.append(th)
-        thread_index += 1
-        #if thread_index > 1: break
+        ssh = libsf.ConnectSsh(node_ip, ssh_user, ssh_pass)
+        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "grep xUnknownBlockID /var/log/sf-block.info | grep -vi Recycling | wc -l")
+        if int(stdout.readlines()[0].strip()) > 0:
+            mylog.error("Found xUnknownBlockID on " + node_ip)
+            found_xubid = True
+        ssh.close()
 
-    # Wait for all threads to stop
-    for th in current_threads:
-        th.join()
-
-    mylog.debug("Getting a list of accounts in the cluster")
-    account_map = dict()
-    result = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
-    for account in result["accounts"]:
-        acc_id = account["accountID"]
-        acc_name = account["username"]
-        account_map[acc_id] = acc_name
-    
-    mylog.debug("Getting a list of volumes in the cluster")
-    vol_map = dict()
-    result = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
-    for vol in result["volumes"]:
-        vol_name = vol["name"]
-        vol_id = vol["volumeID"]
-        acc_id = vol["accountID"]
-        vol_map[vol_id] = dict()
-        vol_map[vol_id]["volumeID"] = vol_id
-        vol_map[vol_id]["accountID"] = acc_id
-        vol_map[vol_id]["volumeName"] = vol_name
-        vol_map[vol_id]["accountName"] = account_map[acc_id]
-
-    # Collate the results
-    broken_volumes = dict()
-    error = False
-    for res in results.values():
-        if res == False:
-            error = True
-        else:
-            for block in res:
-                slice_id = block["sliceID"]
-                if slice_id not in broken_volumes:
-                    broken_volumes[slice_id] = []
-                broken_volumes[slice_id].append(block)
-    
-    for volume_id, block_list in broken_volumes.iteritems():
-        volume_name = vol_map[volume_id]["volumeName"]
-        account_name = vol_map[volume_id]["accountName"]
-        account_id = vol_map[volume_id]["acountID"]
-        mylog.error("xUnknownBlockID on volume " + volume_name + " (" + volume_id + ") from account " + account_name + " (" + account_id + ")")
-        for block in block_list:
-            mylog.error("  blockID " + block["blockID"] + " from BS " + block["bs"] + " for LBA " + block["lba"])
-    
-    if len(broken_volumes) <= 0 and not error:
+    if found_xubid:
+        sys.exit(1)
+    else:
         mylog.passed("No xUnknownBlockID found")
         sys.exit(0)
-    else:
-        sys.exit(1)
+
+
+    ## Start one thread per node
+    #mylog.info("Gathering information from nodes")
+    #manager = multiprocessing.Manager()
+    #results = manager.dict()
+    #current_threads = []
+    #thread_index = 0
+    #for node_ip in node_ip_list:
+    #    results[thread_index] = False
+    #    th = multiprocessing.Process(target=NodeThread, name="Node-" + node_ip + "-" + str(thread_index), args=(node_ip, ssh_user, ssh_pass, results, thread_index))
+    #    th.start()
+    #    current_threads.append(th)
+    #    thread_index += 1
+    #    #if thread_index > 1: break
+    #
+    ## Wait for all threads to stop
+    #for th in current_threads:
+    #    th.join()
+    #
+    #mylog.debug("Getting a list of accounts in the cluster")
+    #account_map = dict()
+    #result = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
+    #for account in result["accounts"]:
+    #    acc_id = account["accountID"]
+    #    acc_name = account["username"]
+    #    account_map[acc_id] = acc_name
+    #
+    #mylog.debug("Getting a list of volumes in the cluster")
+    #vol_map = dict()
+    #result = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
+    #for vol in result["volumes"]:
+    #    vol_name = vol["name"]
+    #    vol_id = vol["volumeID"]
+    #    acc_id = vol["accountID"]
+    #    vol_map[vol_id] = dict()
+    #    vol_map[vol_id]["volumeID"] = vol_id
+    #    vol_map[vol_id]["accountID"] = acc_id
+    #    vol_map[vol_id]["volumeName"] = vol_name
+    #    vol_map[vol_id]["accountName"] = account_map[acc_id]
+    #
+    ## Collate the results
+    #broken_volumes = dict()
+    #error = False
+    #for res in results.values():
+    #    if res == False:
+    #        error = True
+    #    else:
+    #        for block in res:
+    #            slice_id = block["sliceID"]
+    #            if slice_id not in broken_volumes:
+    #                broken_volumes[slice_id] = []
+    #            broken_volumes[slice_id].append(block)
+    #
+    #for volume_id, block_list in broken_volumes.iteritems():
+    #    volume_name = vol_map[volume_id]["volumeName"]
+    #    account_name = vol_map[volume_id]["accountName"]
+    #    account_id = vol_map[volume_id]["acountID"]
+    #    mylog.error("xUnknownBlockID on volume " + volume_name + " (" + volume_id + ") from account " + account_name + " (" + account_id + ")")
+    #    for block in block_list:
+    #        mylog.error("  blockID " + block["blockID"] + " from BS " + block["bs"] + " for LBA " + block["lba"])
+    #
+    #if len(broken_volumes) <= 0 and not error:
+    #    mylog.passed("No xUnknownBlockID found")
+    #    sys.exit(0)
+    #else:
+    #    sys.exit(1)
 
 
 if __name__ == '__main__':
