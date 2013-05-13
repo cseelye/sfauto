@@ -1,122 +1,155 @@
 #!/usr/bin/python
 
-# This script will remove all the drives in a node from a cluster
+"""
+This action will remove all of the drives from the specified node
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+After drives are removed it will wait for syncing to be complete
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --user              The cluster admin username
+    SFUSER env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --pass              The cluster admin password
+    SFPASS env var
 
-node_ip = "192.168.000.000"         # The management IP of the node to with the drives to remove
-                                    # --node_ip
+    --node_ips          IP addresses of the nodes to remove drives from
+"""
 
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
 import time
-import libsf
-from libsf import mylog
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
+class RemoveDrivesFromNodeAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_REMOVE = "BEFORE_REMOVE"
+        AFTER_REMOVE = "AFTER_REMOVE"
+        BEFORE_SYNC = "BEFORE_SYNC"
+        AFTER_SYNC = "AFTER_SYNC"
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, node_ip
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "node_ips" : libsf.IsValidIpv4AddressList,
+                            },
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--node_ip", type="string", dest="node_ip", default=node_ip, help="the management IP(s) of the node(s) to remove")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    try:
-        node_ips = libsf.ParseIpsFromList(options.node_ip)
-    except TypeError as e:
-        mylog.error(e)
-        sys.exit(1)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
+    def Execute(self, mvip, node_ips, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Remove drives from the nodes
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
+        cluster = libsfcluster.SFCluster(mvip, username, password)
 
-    # Find the nodeID of the requested node
-    mylog.info("Searching for nodes")
-    node_ids = []
-    result = libsf.CallApiMethod(mvip, username, password, "ListActiveNodes", {})
-    for node_ip in node_ips:
-        found = False
-        for node in result["nodes"]:
-            if node["mip"] == node_ip:
-                node_ids.append(node["nodeID"])
-                found = True
-                break
-        if not found:
-            mylog.error("Could not find node " + node_ip + " in cluster " + mvip)
-            sys.exit(1)
+        # Find the requested nodes
+        mylog.info("Searching for nodes")
+        node_list = []
+        for node_ip in node_ips:
+            try:
+                node = cluster.GetNode(node_ip)
+            except libsf.SfUnknownObjectError:
+                mylog.error("Could not find node " + node_ip)
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+            except libsf.SfError as e:
+                mylog.error(str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+            node_list.append(node)
 
-    # Remove all active and failed drives from the nodes
-    mylog.info("Searching for drives")
-    drives_to_remove = []
-    result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
-    for drive in result["drives"]:
-        if (drive["status"].lower() == "active" or drive["status"].lower() == "failed") and drive["nodeID"] in node_ids:
-            drives_to_remove.append(drive["driveID"])
-    if len(drives_to_remove) > 0:
-        mylog.info("Removing " + str(len(drives_to_remove)) + " drives " + str(drives_to_remove))
-        libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': drives_to_remove})
+        # Find all of the active drives in the nodes
+        drive_list = []
+        for node in node_list:
+            node_drives = node.ListDrives()
+            for drive in node_drives:
+                if drive["status"].lower() == "active" or drive["status"].lower() == "failed":
+                    drive_list.append(drive["driveID"])
 
-        mylog.info("Waiting for syncing")
-        time.sleep(60)
-        # Wait for bin syncing
-        while libsf.ClusterIsBinSyncing(mvip, username, password):
-            time.sleep(30)
-        # Wait for slice syncing
-        while libsf.ClusterIsSliceSyncing(mvip, username, password):
-            time.sleep(30)
-    else:
-        mylog.info("Found no drives to remove")
+        # Remove the drives from the cluster
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE)
+        if len(drive_list) > 0:
+            mylog.info("Removing " + str(len(drive_list)) + " drives")
+            try:
+                libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': drive_list})
+            except libsf.SfError as e:
+                mylog.error("Failed to remove drives: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
 
-    mylog.passed("Successfully removed drives from node(s)")
+            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SYNC)
+            mylog.info("Waiting for syncing")
+            time.sleep(60)
+            try:
+                # Wait for bin syncing
+                while libsf.ClusterIsBinSyncing(mvip, username, password):
+                    time.sleep(30)
+                # Wait for slice syncing
+                while libsf.ClusterIsSliceSyncing(mvip, username, password):
+                    time.sleep(30)
+            except libsf.SfError as e:
+                mylog.error("Failed to wait for syncing: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SYNC)
 
+        else:
+            mylog.info("Found no drives to remove")
 
+        mylog.passed("Successfully removed drives")
+        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REMOVE)
+        return True
 
-
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("-n", "--node_ips", action="list", dest="node_ips", default=None, help="the IP addresses of the nodes to add drives from")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.node_ips, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

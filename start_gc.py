@@ -1,80 +1,128 @@
 #!/usr/bin/python
 
-# This script will start GC
+"""
+This action will start GC on a cluster and optionaly wait for it to finish.
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+If a GC is already in progress, this action wil not try to start another GC unless the force option is True
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --user              The cluster admin username
+    SFUSER env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --pass              The cluster admin password
+    SFPASS env var
 
-wait = False                        # Wait for GC to complete
-                                    # --wait
-# ----------------------------------------------------------------------------
+    --wait              Wait for GC to finish before continuing
 
-import sys,os
+    --timeout           How long to wait for GC to complete before giving up
+
+    --force             Start another GC even if one is already in progress
+"""
+
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
+class StartGcAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_START_GC = "BEFORE_START_GC"
+        GC_FINISHED = "GC_FINISHED"
+        GC_TIMEOUT = "GC_TIMEOUT"
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, wait
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--wait", action="store_true", dest="wait", default=wait, help="wait for GC to complete")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    wait = options.wait
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip=sfdefaults.mvip, force=False, wait=False, timeout=sfdefaults.gc_timeout, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Start a GC cycle
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    mylog.info("Starting GC on cluster " + str(mvip))
-    timestamp = time.time()
-    time.sleep(2)
-    libsf.CallApiMethod(mvip, username, password, "StartGC", {})
+        cluster = libsfcluster.SFCluster(mvip, username, password)
 
-    if wait:
-        libsf.WaitForGC(mvip, username, password, timestamp, 60)
+        # Start a GC cycle
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_START_GC)
+        try:
+            cluster.StartGC(force)
+        except libsf.SfError as e:
+            mylog("Failed to start GC: " + str(e))
+            return False
+
+        if wait:
+            # Wait for GC to complete
+            mylog.info("Waiting for GC to finish...")
+            try:
+                gc_info = cluster.WaitForGC(timeout)
+            except libsf.SfTimeoutError:
+                mylog.error("Timed out waiting for GC to finish")
+                super(self.__class__, self)._RaiseEvent(self.Events.GC_TIMEOUT)
+                return False
+            except libsf.SfError as e:
+                mylog("Failed to wait for GC: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+            mylog.info("GC generation " + str(gc_info.Generation) + " started " + libsf.TimestampToStr(gc_info.StartTime) + ", duration " + libsf.SecondsToElapsedStr(gc_info.EndTime - gc_info.StartTime) + ", " + libsf.HumanizeBytes(gc_info.DiscardedBytes) + " discarded")
+            mylog.info("    " + str(len(gc_info.ParticipatingSSSet)) + " participating SS: " + ",".join(map(str, gc_info.ParticipatingSSSet)) + "  " + str(len(gc_info.EligibleBSSet)) + " eligible BS: " + ",".join(map(str, gc_info.EligibleBSSet)) + "")
+            super(self.__class__, self)._RaiseEvent(self.Events.GC_FINISHED, GCInfo=gc_info)
+
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line options
+    parser = OptionParser(description="Add all of the available drives to the cluster and wait for syncing to complete.")
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
+    parser.add_option("--force", action="store_true", dest="force", default=False, help="try to start GC even if one is already in progress")
+    parser.add_option("--wait", action="store_true", dest="wait", default=False, help="wait for GC to complete")
+    parser.add_option("--timeout", type="int", dest="timeout", default=sfdefaults.gc_timeout, help="how long to wait for GC to complete before giving up")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+    if extra_args and len(extra_args) > 0:
+        mylog.error("Unknown arguments: " + ",".join(extra_args))
+        sys.exit(1)
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.force, options.wait, options.timeout, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

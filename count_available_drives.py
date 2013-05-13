@@ -1,106 +1,126 @@
 #!/usr/bin/env python
 
-# This script will count drives in the available pool and fail if there is more than the expected number
+"""
+This action will count the number of drives in the available pool and compare to the expected number
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.0.0"        # The management VIP for the cluster
-                            # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"          # The API username for the nodes
-                            # --api_user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"      # The API password for the nodes
-                            # --api_pass
+    --expected          The expected number of drives
 
-expected = 0                # The expected number of drives
-                            # --expected
+    --compare           Comparison method to use (lt, le, gt, ge, eq)
+"""
 
-compare = "le"              # Comparison method to use
-                            # lt, le, gt, ge, eq
-                            # --compare
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class CountAvailableDrivesAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, expected, compare
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "compare" : None,
+                            "expected" : libsf.IsInteger},
+            args)
 
-    # Parse command line options
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management VIP for the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the username for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the password for the cluster")
-    parser.add_option("--expected", type="string", dest="expected", default=expected, help="the expected number of drives")
-    parser.add_option("--compare", type="string", dest="compare", default=compare, help="the comparison operator to use")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    username = options.username
-    password = options.password
-    mvip = options.mvip
-    expected = options.expected
-    compare = options.compare
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, expected, compare, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Count available drives
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    if compare == "eq": op = "=="
-    elif compare == "lt": op = "<"
-    elif compare == "le": op = "<="
-    elif compare == "gt": op = ">"
-    elif compare == "ge": op = ">="
-    else:
-        mylog.error("Unknown operator '" + compare + "'")
-        sys.exit(1)
+        if compare == "eq":
+            op = "=="
+        elif compare == "lt":
+            op = "<"
+        elif compare == "le":
+            op = "<="
+        elif compare == "gt":
+            op = ">"
+        elif compare == "ge":
+            op = ">="
+        else:
+            raise libsf.SfArgumentError("Unknown comparison '" + str(compare) + "'")
 
-    mylog.info("Searching for available drives...")
-    available_count = 0
-    result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
-    for drive in result["drives"]:
-        if drive["status"] == "available":
-            available_count += 1
+        mylog.info("Searching for available drives...")
+        available_count = 0
+        try:
+            result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get drive list: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        for drive in result["drives"]:
+            if drive["status"] == "available":
+                available_count += 1
 
-    expression = str(available_count) + " " + op + " " + str(expected)
-    mylog.debug("Testing " + expression)
-    result = eval(expression)
+        expression = str(available_count) + " " + op + " " + str(expected)
+        mylog.debug("Testing " + expression)
+        result = eval(expression)
 
-    if result:
-        mylog.passed("Found " + str(available_count) + " drives")
-        sys.exit(0)
-    else:
-        mylog.error("Found " + str(available_count) + " drives but expected " + op + " " + str(expected))
-        sys.exit(1)
+        if result:
+            mylog.passed("Found " + str(available_count) + " drives")
+            return True
+        else:
+            mylog.error("Found " + str(available_count) + " drives but expected " + op + " " + str(expected))
+            return False
 
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line options
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster")
+    parser.add_option("--expected", type="string", dest="expected", default=0, help="the expected number of drives")
+    parser.add_option("--compare", type="choice", dest="compare", choices=['lt', 'le', 'gt', 'ge', 'eq'], default=None, help="the comparison operator to use")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.expected, options.compare, options.mvip, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

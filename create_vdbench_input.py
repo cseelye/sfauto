@@ -1,215 +1,192 @@
 #!/usr/bin/python
 
-# This script will create a simple vdbench input file based on the iscsi volumes
-# connected to a list of clients
+"""
+This action will create a simple vdbench input file based on the iscsi volumes connected to a list of clients
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --client_ips        The IP addresses of the clients
 
-client_ips = [                  # The IP addresses of the clients
-    "192.168.000.000",          # --client_ips
-    "192.168.000.000",
-]
+    --client_user       The username for the client
+    SFCLIENT_USER env var
 
-client_user = "root"            # The username for the client
-                                # --client_user
+    --client_pass       The password for the client
+    SFCLIENT_PASS env var
 
-client_pass = "password"       # The password for the client
-                                # --client_pass
+    --filename          The name of the file to create
 
-filename = "vdbench_input"      # The name of the file to create
-                                # --filename
+    --workload          The workload specification
 
-data_errors = 50                # The number of errors to halt the test after
-                                # --data_errors
+    --data_errors       The number of errors to halt the test after
 
-compratio = 2                   # the compression ratio to use
-                                # --compratio
+    --compratio         The compression ratio to use
 
-dedupratio = 1                  # the dedup ratio to use
-                                # --dedupratio
+    --dedupratio        The dedup ratio to use
 
-dedupunit = 4096                # the dedup unit to use
-                                # --dedupratio
+    --run_time          How long to run IO
 
-workload = "rdpct=80,seekpct=100,xfersize=4k"    # The workload specification
-                                # --workload
+    --interval          How often to report results
 
-run_time = "8h"               # Run time (how long to run IO)
-                                # --run_time
+    --threads           Queue depth per device
 
-interval = 10                   # How often to report results to the screen
-                                # --interval
+    --nodatavalidation  Skip data validation
 
-threads = 4                     # How many threads per sd (queue depth)
-                                # --threads
+    --volume_start      Volume number to start from
 
-nodatavalidation = False        # Skip data validation
-                                # --nodatavalidation
+    --volume_end        Volume to end at
+"""
 
-volume_start = 1                # Volume number to start from
-                                # --volume_start
-
-volume_end = 0                  # Volume to end at (0 means all volumes)
-                                # --volume_end
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import paramiko
-import re
-import socket
-import platform
-import time
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
 from libclient import SfClient, ClientError, OsType
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-def main():
-    global client_ips, client_user, client_pass, filename, data_errors, compratio, dedupratio, dedupunit, workload, run_time, interval, threads, volume_start, volume_end
+class CreateVdbenchInputAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "client_ips", "client_user", "client_pass" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
-    if isinstance(client_ips, basestring):
-        client_ips = client_ips.split(",")
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--client_ips", type="string", dest="client_ips", default=",".join(client_ips), help="the IP addresses of the clients")
-    parser.add_option("--client_user", type="string", dest="client_user", default=client_user, help="the username for the clients [%default]")
-    parser.add_option("--client_pass", type="string", dest="client_pass", default=client_pass, help="the password for the clients [%default]")
-    parser.add_option("--filename", type="string", dest="filename", default=filename, help="the file to create")
-    parser.add_option("--data_errors", type="string", dest="data_errors", default=data_errors, help="the workload specification")
-    parser.add_option("--compratio", type="int", dest="compratio", default=compratio, help="the compression ratio to use")
-    parser.add_option("--dedupratio", type="int", dest="dedupratio", default=dedupratio, help="the dedupratio ratio to use")
-    parser.add_option("--dedupunit", type="int", dest="dedupunit", default=dedupunit, help="the dedup unit to use")
-    parser.add_option("--workload", type="string", dest="workload", default=workload, help="the workload specification")
-    parser.add_option("--run_time", type="string", dest="run_time", default=run_time, help="the run time (how long to run vdbench/IO)")
-    parser.add_option("--interval", type="int", dest="interval", default=interval, help="how often to report results to the screen")
-    parser.add_option("--threads", type="int", dest="threads", default=threads, help="how many threads per sd (queue depth)")
-    parser.add_option("--nodatavalidation", action="store_true", dest="nodatavalidation", help="skip data validation")
-    parser.add_option("--volume_start", type="int", dest="volume_start", default=volume_start, help="sd number to start at")
-    parser.add_option("--volume_end", type="int", dest="volume_end", default=volume_end, help="sd number to finish at (0 means all sds)")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    client_user = options.client_user
-    client_pass = options.client_pass
-    filename = options.filename
-    data_errors = options.data_errors
-    workload = options.workload
-    run_time = options.run_time
-    interval = options.interval
-    threads = options.threads
-    compratio = options.compratio
-    dedupratio = options.dedupratio
-    dedupunit = options.dedupunit
-    nodatavalidation = options.nodatavalidation
-    volume_start = options.volume_start
-    volume_end = options.volume_end
-    try:
-        client_ips = libsf.ParseIpsFromList(options.client_ips)
-    except TypeError as e:
-        mylog.error(e)
-        sys.exit(1)
-    if not client_ips:
-        mylog.error("Please supply at least one client IP address")
-        sys.exit(1)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"client_ips" : libsf.IsValidIpv4AddressList,
+                            "filename" : None},
+            args)
 
+    def Execute(self, client_ips, filename, data_errors=sfdefaults.vdbench_data_errors, compratio=sfdefaults.vdbench_compratio, dedupratio=sfdefaults.vdbench_dedupratio, workload=sfdefaults.vdbench_workload, run_time=sfdefaults.vdbench_run_time, interval=sfdefaults.vdbench_interval, threads=sfdefaults.vdbench_threads, datavalidation=sfdefaults.vdbench_data_vaidation, volume_start=0, volume_end=0, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Create a vdbench input file
+        """
+        if not client_ips:
+            client_ips = sfdefaults.client_ips
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    # Open output file and write common params and hds
-    outfile = open(filename, 'w')
-    outfile.write("data_errors=" + str(data_errors) + "\n")
-    if not nodatavalidation:
-        outfile.write("validate=read_after_write" + "\n")
-    if compratio > 1:
-        outfile.write("compratio=" + str(compratio) + "\n")
-    if dedupratio > 1:
-        outfile.write("dedupratio=" + str(dedupratio) + "\n")
-        outfile.write("dedupunit=" + str(dedupunit) + "\n")
-
-    # Connect to clients
-    clients = dict()
-    for client_ip in client_ips:
-        mylog.info("Connecting to " + client_ip)
-        client = SfClient()
         try:
-            client.Connect(client_ip, client_user, client_pass)
-        except ClientError as e:
-            mylog.error(e.message)
-            sys.exit(1)
-        clients[client_ip] = client
+            # Open output file and write common params and hds
+            outfile = open(filename, 'w')
+            outfile.write("data_errors=" + str(data_errors) + "\n")
+            if datavalidation:
+                outfile.write("validate=read_after_write" + "\n")
+            if compratio > 1:
+                outfile.write("compratio=" + str(compratio) + "\n")
+            if dedupratio > 1:
+                outfile.write("dedupratio=" + str(dedupratio) + "\n")
+                outfile.write("dedupunit=4096\n")
 
-    # Write the correct hd line for each client based on client OS
-    host_number = 1
-    for client_ip in client_ips:
-        client = clients[client_ip]
-        if client.RemoteOs == OsType.Windows:
-            outfile.write("hd=hd" + str(host_number) + ",system=" + client_ip + ",vdbench=C:\\vdbench,shell=vdbench\n")
-        else:
-            outfile.write("hd=hd" + str(host_number) + ",system=" + client_ip + ",vdbench=/opt/vdbench,user=root,shell=ssh\n")
-        outfile.flush()
-        host_number += 1
+            # Connect to clients
+            clients = dict()
+            for client_ip in client_ips:
+                mylog.info("Connecting to " + client_ip)
+                client = SfClient()
+                try:
+                    client.Connect(client_ip, client_user, client_pass)
+                except ClientError as e:
+                    mylog.error(e.message)
+                    sys.exit(1)
+                clients[client_ip] = client
 
-    # Connect to each client and build the list of SDs
-    host_number = 1
-    for client_ip in client_ips:
-        client = clients[client_ip]
-        mylog.info("Querying connected iSCSI volumes on " + client.Hostname + "")
-        devices = client.GetVdbenchDevices()
-        if volume_start <= 0: volume_start = 1
-        if volume_end <= 0: volume_end = len(devices)
-        for sd_number in xrange(volume_start, volume_end + 1):
-            device = devices[sd_number - 1]
-            outfile.write("sd=sd" + str(host_number) + "_" + str(sd_number) + ",host=hd" + str(host_number))
-            if client.RemoteOs == OsType.Windows:
-                outfile.write(",lun=" + device + "\n")
-            elif client.RemoteOs == OsType.SunOS:
-                outfile.write(",lun=" + device + "\n")
-            else:
-                outfile.write(",lun=" + device + ",openflags=o_direct\n")
+            # Write the correct hd line for each client based on client OS
+            host_number = 1
+            for client_ip in client_ips:
+                client = clients[client_ip]
+                if client.RemoteOs == OsType.Windows:
+                    outfile.write("hd=hd" + str(host_number) + ",system=" + client_ip + ",vdbench=C:\\vdbench,shell=vdbench\n")
+                else:
+                    outfile.write("hd=hd" + str(host_number) + ",system=" + client_ip + ",vdbench=/opt/vdbench,user=root,shell=ssh\n")
+                outfile.flush()
+                host_number += 1
+
+            # Connect to each client and build the list of SDs
+            host_number = 1
+            for client_ip in client_ips:
+                client = clients[client_ip]
+                mylog.info("Querying connected iSCSI volumes on " + client.Hostname + "")
+                devices = client.GetVdbenchDevices()
+                if volume_start <= 0:
+                    volume_start = 1
+                if volume_end <= 0:
+                    volume_end = len(devices)
+                for sd_number in xrange(volume_start, volume_end + 1):
+                    device = devices[sd_number - 1]
+                    outfile.write("sd=sd" + str(host_number) + "_" + str(sd_number) + ",host=hd" + str(host_number))
+                    if client.RemoteOs == OsType.Windows:
+                        outfile.write(",lun=" + device + "\n")
+                    elif client.RemoteOs == OsType.SunOS:
+                        outfile.write(",lun=" + device + "\n")
+                    else:
+                        outfile.write(",lun=" + device + ",openflags=o_direct\n")
+                    outfile.flush()
+                host_number += 1
+
+            outfile.write("wd=default," + workload + ",sd=sd*\n")
+            host_number = 1
+            for client_ip in client_ips:
+                outfile.write("wd=wd" + str(host_number) + ",host=hd" + str(host_number) + "\n")
+                outfile.flush()
+                host_number += 1
+
+            outfile.write("rd=default,iorate=max,elapsed=" + str(run_time) + ",interval=" + str(interval) + ",threads=" + str(threads) + "\n")
+            outfile.write("rd=rd1,wd=wd*" + "\n")
             outfile.flush()
-        host_number += 1
+            outfile.close()
+            return True
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            mylog.error("Error creating vdbench file: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-    outfile.write("wd=default," + workload + ",sd=sd*\n")
-    host_number = 1
-    for client_ip in client_ips:
-        outfile.write("wd=wd" + str(host_number) + ",host=hd" + str(host_number) + "\n")
-        outfile.flush()
-        host_number += 1
-
-    outfile.write("rd=default,iorate=max,elapsed=" + run_time + ",interval=" + str(interval) + ",threads=" + str(threads) + "\n")
-    outfile.write("rd=rd1,wd=wd*" + "\n")
-    outfile.flush()
-    outfile.close()
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=sfdefaults.client_ips, help="the IP addresses of the clients")
+    parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
+    parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
+    parser.add_option("--filename", type="string", dest="filename", default=sfdefaults.vdbench_inputfile, help="the file to create")
+    parser.add_option("--data_errors", type="string", dest="data_errors", default=sfdefaults.vdbench_data_errors, help="the workload specification")
+    parser.add_option("--compratio", type="int", dest="compratio", default=sfdefaults.vdbench_compratio, help="the compression ratio to use")
+    parser.add_option("--dedupratio", type="int", dest="dedupratio", default=sfdefaults.vdbench_dedupratio, help="the dedupratio ratio to use")
+    parser.add_option("--workload", type="string", dest="workload", default=sfdefaults.vdbench_workload, help="the workload specification")
+    parser.add_option("--run_time", type="string", dest="run_time", default=sfdefaults.vdbench_run_time, help="the run time (how long to run vdbench/IO)")
+    parser.add_option("--interval", type="int", dest="interval", default=sfdefaults.vdbench_interval, help="how often to report results to the screen")
+    parser.add_option("--threads", type="int", dest="threads", default=sfdefaults.vdbench_threads, help="how many threads per sd (queue depth)")
+    parser.add_option("--nodatavalidation", action="store_false", dest="datavalidation", default=True, help="skip data validation")
+    parser.add_option("--volume_start", type="int", dest="volume_start", default=0, help="sd number to start at")
+    parser.add_option("--volume_end", type="int", dest="volume_end", default=0, help="sd number to finish at (0 means all sds)")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.client_ips, options.filename, options.data_errors, options.compratio, options.dedupratio, options.workload, options.run_time, options.interval, options.threads, options.datavalidation, options.volume_start, options.volume_end, options.client_user, options.client_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
+        Abort()
         exit(1)
     except:
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-
-
-
-
-
-

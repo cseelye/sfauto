@@ -1,107 +1,147 @@
 #!/usr/bin/python
 
-# This script will get information about a cluster.
+"""
+This action will get the OS of a client
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --client_ip        The IP address of the client
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --client_user       The username for the client
+    SFCLIENT_USER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --client_pass       The password for the client
+    SFCLIENT_PASS env var
+"""
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
-
-enable_sc = "False"                 # --sc
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class GetClusterInfoAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--sc", action="store_true", dest="enable_sc", help="collect SetConstants")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    enable_sc = options.enable_sc
-    if (enable_sc == None):
-        enable_sc = False
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show cluster info
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    # Get Cluster version and volume count
-    print "========= Cluster Version ========="
-    result = libsf.CallApiMethod(mvip, username, password, "GetClusterVersionInfo", {})
-    print "ClusterVersion: " + str(result["clusterVersion"])
-    print "ClusterSize: " + str(len(result["clusterVersionInfo"]))
-    nodeObj = result["clusterVersionInfo"]
-    for node in nodeObj:
-        print "NodeID: " + str(node["nodeID"]) + " " + "Version: " + str(node["nodeInternalRevision"])
-    volResult = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
-    print "NumVolumes: " + str(len(volResult["volumes"]))
+        # Get Cluster version and volume count
+        mylog.info( "========= Cluster Version =========")
+        try:
+            result = libsf.CallApiMethod(mvip, username, password, "GetClusterVersionInfo", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get cluster version: " + e.message)
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        mylog.info( "ClusterVersion: " + str(result["clusterVersion"]))
+        mylog.info("ClusterSize: " + str(len(result["clusterVersionInfo"])))
+        nodeObj = result["clusterVersionInfo"]
+        for node in nodeObj:
+            mylog.info( "NodeID: " + str(node["nodeID"]) + " " + "Version: " + str(node["nodeInternalRevision"]))
+        try:
+            volResult = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get volume list: " + e.message)
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        mylog.info( "NumVolumes: " + str(len(volResult["volumes"])))
 
-    # Get Cluster info
-    print "========= Cluster Info ========="
-    clusterResult =  libsf.CallApiMethod(mvip, username, password, "GetClusterInfo",{})
-    for key, value in clusterResult["clusterInfo"].iteritems():
-        print str(key) + " = " + str(value)
+        # Get Cluster info
+        mylog.info( "========= Cluster Info =========")
+        try:
+            clusterResult =  libsf.CallApiMethod(mvip, username, password, "GetClusterInfo", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get cluster info: " + e.message)
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        for key, value in clusterResult["clusterInfo"].iteritems():
+            mylog.info( str(key) + " = " + str(value))
 
-    # Get capacity info
-    print "========= Capacity Info ========="
-    capacityResult = libsf.CallApiMethod(mvip, username, password, "GetClusterCapacity", {})
-    for key, value in capacityResult["clusterCapacity"].iteritems():
-        print str(key) + " = " + str(value)
+        # Get capacity info
+        mylog.info( "========= Capacity Info =========")
+        try:
+            capacityResult = libsf.CallApiMethod(mvip, username, password, "GetClusterCapacity", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get cluster capacity: " + e.message)
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        for key, value in capacityResult["clusterCapacity"].iteritems():
+            mylog.info( str(key) + " = " + str(value))
 
-    # Get node info
-    print "========= Node Info ========="
-    nodeResult = libsf.CallApiMethod(mvip, username, password, "ListAllNodes", {})
-    nodeObj = nodeResult["nodes"]
-    for node in nodeObj:
-        print "Name: " + str(node["name"]) + "(" + str(node["nodeID"]) + ")" + " " + str(node["mip"])
+        # Get node info
+        mylog.info( "========= Node Info =========")
+        try:
+            nodeResult = libsf.CallApiMethod(mvip, username, password, "ListAllNodes", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get node list: " + e.message)
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        nodeObj = nodeResult["nodes"]
+        for node in nodeObj:
+            mylog.info(str(node["name"]) + " [" + str(node["nodeID"]) + "] " + str(node["mip"]))
 
-    # Get SetConstants if needed
-    if enable_sc:
-        print "========= Constants ========="
-        scResults =  libsf.CallApiMethod(mvip, username, password, "SetConstants", {})
+        # Get SetConstants if needed
+        mylog.info( "========= Constants =========")
+        try:
+            scResults =  libsf.CallApiMethod(mvip, username, password, "SetConstants", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get constsnts: " + e.message)
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
         for key, value in scResults.iteritems():
-            print str(key) + " = " + str(value)
+            mylog.info( str(key) + " = " + str(value))
 
-    exit(0)
+        return True
 
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
+        Abort()
         exit(1)
     except:
         mylog.exception("Unhandled exception")

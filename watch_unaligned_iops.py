@@ -1,29 +1,28 @@
 #!/usr/bin/python
 
-# This script will display unaligned IOPS per volume on a cluster
+"""
+This script will display unaligned reads/writes on volumes
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
+"""
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
 import time
 import subprocess
 import platform
-import libsf
-from libsf import mylog
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
 
 
 class VolumeDetails:
@@ -56,36 +55,31 @@ class VolumeDetails:
 
 def clear():
     p = subprocess.Popen( "cls" if platform.system() == "Windows" else "clear", shell=True)
-    p.wait();
+    p.wait()
 
-def main():
-    # Parse command line arguments
-    parser = OptionParser()
-    global mvip, username, password
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    if options.debug != None:
-        import logging
+def ValidateArgs(args):
+    libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                        "username" : None,
+                        "password" : None},
+        args)
+
+def Execute(mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    """
+    Continuously show unaligned IOPS
+    """
+    ValidateArgs(locals())
+    if debug:
         mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
 
     previous_sample = dict()
-    
+
     while True:
         # Get the list of accounts
         account_list = dict()
         acc_obj = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
         for account in acc_obj["accounts"]:
             account_list[int(account["accountID"])] = account["username"]
-    
+
         # Get the list of volumes
         volume_list = dict()
         vols_obj = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
@@ -102,7 +96,7 @@ def main():
                 v.MaxIOPS = int(vol["qos"]["maxIOPS"])
                 v.MinIOPS = int(vol["qos"]["minIOPS"])
             volume_list[v.ID] = v
-    
+
         # Get the volume stats for all volumes
         stats_obj = libsf.CallApiMethod(mvip, username, password, "ListVolumeStatsByVolume", {})
         for vol in stats_obj["volumeStats"]:
@@ -115,11 +109,11 @@ def main():
             volume_list[vol_id].UnalignedReads = int(vol["unalignedReads"])
             volume_list[vol_id].UnalignedWrites = int(vol["unalignedWrites"])
             volume_list[vol_id].Timestamp = libsf.ParseDateTime(vol["timestamp"])
-            if volume_list[vol_id].Timestamp == None: 
+            if volume_list[vol_id].Timestamp == None:
                 raise Exception("Could not parse timestamp '" + vol["timestamp"] + "'")
             if volume_list[vol_id].ReadOps > 0: volume_list[vol_id].UnalignedReadPercent = (volume_list[vol_id].UnalignedReads * 100) / volume_list[vol_id].ReadOps
             if volume_list[vol_id].WriteOps > 0: volume_list[vol_id].UnalignedWritePercent = (volume_list[vol_id].UnalignedWrites * 100) / volume_list[vol_id].WriteOps
-        
+
         # Calculate the differences
         for vol_id in volume_list.keys():
             if vol_id in previous_sample:
@@ -129,38 +123,49 @@ def main():
                 volume_list[vol_id].WriteIOPS = (current.WriteOps - previous.WriteOps) / (current.Timestamp - previous.Timestamp).total_seconds()
                 volume_list[vol_id].UnalignedReadIOPS = (current.UnalignedReads - previous.UnalignedReads) / (current.Timestamp - previous.Timestamp).total_seconds()
                 volume_list[vol_id].UnalignedWriteIOPS = (current.UnalignedWrites - previous.UnalignedWrites) / (current.Timestamp - previous.Timestamp).total_seconds()
-        
+
         # Display the results
         clear()
         print "---------------------- Current Sample ----------------------------- | --------------------------- To Date ---------------------------"
         print "                                               Unaligned  Unaligned                        Unaligned  Unaligned  Unaligned  Unaligned"
         print "    VolumeName  VolumeID  ReadIOPS  WriteIOPS   ReadIOPS  WriteIOPS      Reads     Writes      Reads     Writes     Read %    Write %"
-        for vol_id in volume_list.keys():            
+        for vol_id in volume_list.keys():
             volume = volume_list[vol_id]
             print "%-14s  %8d  %8d  %9d  %9d  %9d  %9d  %9d  %9d  %9d  %9d  %9d" % (volume.Name, vol_id, volume.ReadIOPS, volume.WriteIOPS, volume.UnalignedReadIOPS, volume.UnalignedWriteIOPS, volume.ReadOps, volume.WriteOps, volume.UnalignedReads, volume.UnalignedWrites, volume.UnalignedReadPercent, volume.UnalignedWritePercent)
-            
-        
+
+
         # Save the results
         for vol_id in volume_list.keys():
             previous_sample[vol_id] = volume_list[vol_id]
-        
+
         time.sleep(5)
-
-
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
-        #timer = libsf.ScriptTimer()
-        main()
+        timer = libsf.ScriptTimer()
+        if Execute(options.mvip, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
-        print "\n\n"
-        #mylog.warning("Aborted by user")
-        exit(1)
+        mylog.warning("Aborted by user")
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

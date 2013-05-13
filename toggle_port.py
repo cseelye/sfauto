@@ -39,8 +39,8 @@ import subprocess
 import sys,os
 import re
 import time
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
 
 
 def WaitForPrompt(process, prompt):
@@ -65,7 +65,7 @@ def SelectPort(process, portname):
 
 
 def main():
-    parser = OptionParser()
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
     global switch_ip, switch_user, switch_pass, down_time, port_desc, port_mac, port_name
     parser.add_option("--switch_ip", type="string", dest="switch_ip", default=switch_ip, help="the IP addresses of the switch")
     parser.add_option("--switch_user", type="string", dest="switch_user", default=switch_user, help="the user name for the switch")
@@ -75,7 +75,7 @@ def main():
     parser.add_option("--port_mac", type="string", dest="port_mac", default=port_mac, help="the MAC connected to the port on the switch to be disabled")
     parser.add_option("--port_name", type="string", dest="port_name", default=port_name, help="the name of the port on the switch to be disabled")
 
-    (options, args) = parser.parse_args()
+    (options, extra_args) = parser.parse_args()
     switch_ip = options.switch_ip
     switch_user = options.switch_user
     switch_pass = options.switch_pass
@@ -145,15 +145,19 @@ def main():
     p.wait()
 
 
+def Abort():
+    pass
+
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     try:
-        timer = libsf.ScriptTimer()
+        
         main()
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
+        Abort()
         exit(1)
     except:
         mylog.exception("Unhandled exception")

@@ -20,7 +20,7 @@ ssh_pass = "password"              # The SSH password for the nodes
 api_user = "admin"                  # The API username for the nodes
                                     # --api_user
 
-api_pass = "password"              # The API password for the nodes
+api_pass = "solidfire"              # The API password for the nodes
                                     # --api_pass
 
 keyfile = ""                        # Keyfile where your RSA key is stored. Mostly interesting for Windows.
@@ -28,9 +28,6 @@ keyfile = ""                        # Keyfile where your RSA key is stored. Most
 
 interval = 1                        # The number of seconds between each refresh
                                     # --interval
-
-cluster_interval = 0                # Refresh interval for cluster info - zero means use the same interval
-                                    # --cluster_interval
 
 columns = 3                         # The number of columns to use for display
                                     # --columns
@@ -41,7 +38,7 @@ output_dir = "sf-top-out"           # The directory to save exported data/report
 # ----------------------------------------------------------------------------
 
 # cover a couple different ways of doing this
-__version__ = '2.2'
+__version__ = '2.1'
 VERSION = __version__
 version = __version__
 
@@ -59,6 +56,7 @@ import random
 import httplib
 import json
 import sys
+import tarfile
 import traceback
 import multiprocessing
 import signal
@@ -138,7 +136,6 @@ class NodeInfo:
         self.CoresTotal = 0
         self.NodeId = -1
         self.NvramMounted = False
-        self.NvramDevice = ""
         self.EnsembleNode = False
         self.ClusterMaster = False
         self.Processes = dict()
@@ -197,9 +194,6 @@ class ClusterInfo:
         self.AccountCount = 0
         self.BSCount = 0
         self.SSCount = 0
-        self.MSCount = 0
-        self.VSCount = 0
-        self.TSCount = 0
         self.CurrentIops = 0
         self.UsedSpace = 0
         self.TotalSpace = 0
@@ -210,7 +204,6 @@ class ClusterInfo:
         self.SameSoftwareVersions = True
         self.DebugSoftware = False
         self.NvramNotMounted = []
-        self.NvramRamdrive = []
         self.OldCores = []
         self.NewCores = []
         self.SliceSyncing = "No"
@@ -293,7 +286,7 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
                 log.debug("HTTPError: " + str(e.code))
                 return None
     except urllib2.URLError as e:
-        log.debug("URLError on " + pUrl + " : " + str(e.reason))
+        log.debug("URLError on " + rpc_url + " : " + str(e.reason))
         return None
     except httplib.BadStatusLine, e:
         log.debug("httplib.BadStatusLine: " + str(e))
@@ -397,13 +390,12 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     command += ";\\free -o"
     command += ";touch -t " + timestamp + " /tmp/timestamp;echo newcores=`find /sf -maxdepth 1 -name \"core*\" -newer /tmp/timestamp | wc -l`"
     command += ";echo allcores=`ls -1 /sf/core* | wc -l`"
-    command += ";\\cat /proc/mounts | \\egrep '^/dev|pendingDirtyBlocks'"
+    command += ";\\cat /proc/mounts | \\grep dev"
     command += ";grep nodeID /etc/solidfire.json"
     ver_string = ""
     volumes = dict()
     stdin, stdout, stderr = ssh.exec_command(command)
     data = stdout.readlines()
-    #log.debug("\n".join(data))
     for line in data:
         m = re.search(r'^hostname=(.+)', line)
         if (m):
@@ -429,21 +421,17 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         if (m):
             usage.CoresTotal = int(m.group(1))
             continue
-        if line.startswith("/dev") or "pendingDirtyBlocks" in line:
+        if line.startswith("/dev"):
             pieces = line.split()
-            if pieces[0].startswith("/dev"):
-                volumes[pieces[1]] = pieces[0].split("/")[-1]
-            else:
-                volumes[pieces[1]] = pieces[0]
+            volumes[pieces[1]] = pieces[0].split("/")[-1]
             continue
         m = re.search(r'nodeID" : (\d+)', line)
         if (m):
             usage.NodeId = int(m.group(1))
             continue
 
-    if "/mnt/pendingDirtyBlocks" in volumes:
+    if "nvdisk" in volumes["/mnt/pendingDirtyBlocks"]:
         usage.NvramMounted = True
-        usage.NvramDevice = volumes["/mnt/pendingDirtyBlocks"]
     else:
         usage.NvramMounted = False
 
@@ -871,8 +859,6 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
         if pNodesInfo[node_ip] == None: continue
         if not pNodesInfo[node_ip].NvramMounted:
             info.NvramNotMounted.append(pNodesInfo[node_ip].Hostname)
-        if "ram" in pNodesInfo[node_ip].NvramDevice:
-            info.NvramRamdrive.append(pNodesInfo[node_ip].Hostname)
 
     log.debug("gathering cluster info")
 
@@ -1619,15 +1605,6 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
             sys.stdout.write(" " + node)
         print " "
         screen.reset()
-    if (len(pClusterInfo.NvramRamdrive) > 0):
-        current_line += 1
-        screen.gotoXY(pStartX + 1, pStartY + current_line)
-        screen.set_color(ConsoleColors.YellowFore)
-        sys.stdout.write(" NVRAM is a RAMdrive on")
-        for node in pClusterInfo.NvramRamdrive:
-            sys.stdout.write(" " + node)
-        print " "
-        screen.reset()
 
     # core files
     if (len(pClusterInfo.OldCores) > 0):
@@ -1872,7 +1849,7 @@ class DebugLog():
         if not self.Enable: return
         caller = inspect.stack()[1][3]
         with open("sf-top-debug.txt", 'a') as debug_out:
-            message = TimestampToStr(time.time(), "%Y-%m-%d-%H-%M-%S", LOCAL_TZ) + "  " + caller + ": " + str(message)
+            message = TimestampToStr(time.time(), "%Y-%m-%d-%H-%M-%S", LOCAL_TZ) + "  " + caller + ": " + message
             if not message.endswith("\n"): message += "\n"
             debug_out.write(message)
             debug_out.flush()
@@ -1902,7 +1879,7 @@ if __name__ == '__main__':
         node_ips = node_ips.split(",")
 
     # Parse command line arguments
-    parser = OptionParser(version="%prog Version " + __version__, description="Monitor a SolidFire cluster, including cluster stats, process resource utilization, etc.")
+    parser = OptionParser(version="%prog Version " + __version__)
 
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=mvip, help="the MVIP of the cluster")
     parser.add_option("-n", "--node_ips", type="string", dest="node_ips", default=node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
@@ -1910,12 +1887,10 @@ if __name__ == '__main__':
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes [%default]")
     parser.add_option("--api_user", type="string", dest="api_user", default=api_user, help="the API username for the cluster [%default]")
     parser.add_option("--api_pass", type="string", dest="api_pass", default=api_pass, help="the API password for the cluster [%default]")
-    parser.add_option("--keyfile", type="string", dest="keyfile", default=keyfile, help="the full path to your RSA key (Windows only)")
+    parser.add_option("--keyfile", type="string", dest="keyfile", default=keyfile, help="the full path to your RSA key")
     parser.add_option("--interval", type="int", dest="interval", default=interval, help="the number of seconds between each refresh [%default]")
-    parser.add_option("--cluster_interval", type="int", dest="cluster_interval", default=cluster_interval, help="the number of seconds between each cluster refresh (leave at zero to use the same interval) [%default]")
     parser.add_option("--columns", type="int", dest="columns", default=columns, help="the number of columns to use for display [%default]")
     parser.add_option("--compact", action="store_true", dest="compact", help="show a compact view (useful for large clusters)")
-    parser.add_option("--noclusterinfo", action="store_false", dest="clusterinfo", default=True, help="do not gather/show cluster information (node info only)")
     parser.add_option("--export", action="store_true", dest="export", help="save the results in a file as well as print to the screen")
     parser.add_option("--output_dir", type="string", dest="output_dir", default=output_dir, help="the directory to save exported data")
     parser.add_option("--debug", action="store_true", dest="debug", help="write detailed debug info to a log file")
@@ -1928,16 +1903,10 @@ if __name__ == '__main__':
     api_pass = options.api_pass
     keyfile = options.keyfile
     compact = options.compact
-    showclusterinfo = options.clusterinfo
     export = options.export
     columns = options.columns
     output_dir = options.output_dir
     interval = float(options.interval)
-    cluster_interval = float(options.cluster_interval)
-    if cluster_interval <= 0:
-        cluster_interval = interval
-    if compact:
-        showclusterinfo = False
 
     log = DebugLog()
     log.Enable = options.debug
@@ -2062,9 +2031,9 @@ if __name__ == '__main__':
                         break
 
             # Start the cluster info thread if we haven't already
-            if showclusterinfo and mvip and "ClusterInfoThread" not in all_threads:
+            if not compact and mvip and "ClusterInfoThread" not in all_threads:
                 cluster_results[mvip] = None
-                cluster_info_thread = multiprocessing.Process(target=ClusterInfoThread, name="ClusterInfoThread", args=(log, cluster_results, node_results, cluster_interval, mvip, api_user, api_pass))
+                cluster_info_thread = multiprocessing.Process(target=ClusterInfoThread, name="ClusterInfoThread", args=(log, cluster_results, node_results, interval, mvip, api_user, api_pass))
                 cluster_info_thread.start()
                 log.debug("started ClusterInfoThread process " + str(cluster_info_thread.pid))
                 all_threads["ClusterInfoThread"] = cluster_info_thread
@@ -2080,9 +2049,9 @@ if __name__ == '__main__':
                 if (node_cell_height > cell_height):
                     cell_height = node_cell_height
 
-            if showclusterinfo and cluster_results.get(mvip):
+            if not compact and mvip and cluster_results[mvip]:
                 cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices)/2
-                if cluster_cell_height > cell_height or len(cluster_results[mvip].SliceServices) > 20:
+                if cluster_cell_height > cell_height:
                     cluster_cell_width = cell_width * 2 - 1
 
             # Determine table height, based on cell height, columns, number of nodes + cell for cluster info
@@ -2126,7 +2095,7 @@ if __name__ == '__main__':
                     log.debug("exception in DrawNodeInfoCell: " + str(e) + " - " + traceback.format_exc())
 
             # Display/log cluster info
-            if not compact and cluster_results.get(mvip):
+            if not compact and mvip and cluster_results[mvip]:
                 cell_row = len(node_ips) / columns
                 cell_col = len(node_ips) % columns
                 if cluster_cell_width > cell_width and cell_col == columns - 1:

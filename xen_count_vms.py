@@ -1,119 +1,130 @@
 #!/usr/bin/python
 
-# This script will count the number of VMs that match a prefix
+"""
+This action will count the number of VMs that match a prefix
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --vmhost            The IP address of the hypervisor host
 
-vmhost = "172.25.106.000"        # The IP address of the hypervisor
-                                # --host_ip
+    --host_user         The username for the hypervisor
 
-host_user = "root"                # The username for the hypervisor
-                                # --client_user
+    --host_pass         The password for the hypervisor
 
-host_pass = "solidfire"           # The password for the hypervisor
-                                # --client_pass
+    --vm_prefix         The prefix of the VM names to match
 
-vm_prefix = ""                    # The prefix of the VM names to match
-                                # --vm_name
+    --csv               Display minimal output that is suitable for piping into other programs
 
-csv = False                     # Display minimal output that is suitable for piping into other programs
-                                # --csv
+    --bash              Display minimal output that is formatted for a bash array/for loop
+"""
 
-bash = False                    # Display minimal output that is formatted for a bash array/for  loop
-                                # --bash
-
-# ----------------------------------------------------------------------------
-
-import sys, os
+import sys
 from optparse import OptionParser
-import json
-import time
+import logging
 import re
-import libsf
-from libsf import mylog
-import libxen
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.XenAPI as XenAPI
+import lib.libxen as libxen
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-def main():
-    # Parse command line arguments
-    parser = OptionParser()
-    global vmhost, host_user, host_pass, vm_prefix, csv, bash
-    parser.add_option("--vmhost", type="string", dest="vmhost", default=vmhost, help="the management IP of the hypervisor")
-    parser.add_option("--host_user", type="string", dest="host_user", default=host_user, help="the username for the hypervisor [%default]")
-    parser.add_option("--host_pass", type="string", dest="host_pass", default=host_pass, help="the password for the hypervisor [%default]")
-    parser.add_option("--vm_prefix", type="string", dest="vm_prefix", default=vm_prefix, help="the prefix of the VM names to match")
-    parser.add_option("--csv", action="store_true", dest="csv", help="display minimal output in comma separated format")
-    parser.add_option("--bash", action="store_true", dest="bash", help="display minimal output in space separated format")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    vmhost = options.vmhost
-    host_user = options.host_user
-    host_pass = options.host_pass
-    vm_prefix = options.vm_prefix
-    if options.csv:
-        csv = True
-        mylog.silence = True
-    if options.bash:
-        bash = True
-        mylog.silence = True
-    if options.debug:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(vmhost):
-        mylog.error("'" + vmhost + "' does not appear to be a valid hypervisor IP")
-        sys.exit(1)
+class XenCountVmsAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Connect to the host/pool
-    mylog.info("Connecting to " + vmhost)
-    session = None
-    try:
-        session = libxen.Connect(vmhost, host_user, host_pass)
-    except libxen.XenError as e:
-        mylog.error(str(e))
-        sys.exit(1)
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    mylog.info("Searching for matching VMs")
-    # Get a list of all VMs
-    try:
-        vm_ref_list = session.xenapi.VM.get_all()
-    except XenAPI.Failure as e:
-        mylog.error("Could not get VM list: " + str(e))
-        sys.exit(1)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"vmhost" : libsf.IsValidIpv4Address,
+                            "host_user" : None,
+                            "host_pass" : None,
+                            "vm_prefix" : None},
+            args)
 
-    # Count the VMs that have the specified prefix and end in a number
-    matching_vms = 0
-    for vm_ref in vm_ref_list:
-        vm = session.xenapi.VM.get_record(vm_ref)
-        m = re.search("^" + vm_prefix + "0*(\d+)$", vm["name_label"])
-        if m: matching_vms += 1
+    def Execute(self, vm_prefix, vmhost=sfdefaults.vmhost_xen, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+        """
+        Count the VMs that match the prefix
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+        if bash or csv:
+            mylog.silence = True
 
-    # Show the number of VMs found
-    if bash or csv:
-        sys.stdout.write(str(matching_vms))
-        sys.stdout.write("\n")
-        sys.stdout.flush()
-    else:
-        mylog.info("There are " + str(matching_vms) + " VMs with prefix " + vm_prefix)
+        # Connect to the host/pool
+        mylog.info("Connecting to " + vmhost)
+        session = None
+        try:
+            session = libxen.Connect(vmhost, host_user, host_pass)
+        except libxen.XenError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-    sys.exit(0)
+        mylog.info("Searching for matching VMs")
+        # Get a list of all VMs
+        try:
+            vm_ref_list = session.xenapi.VM.get_all()
+        except XenAPI.Failure as e:
+            mylog.error("Could not get VM list: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
+        # Count the VMs that have the specified prefix and end in a number
+        matching_vms = 0
+        for vm_ref in vm_ref_list:
+            vm = session.xenapi.VM.get_record(vm_ref)
+            m = re.search("^" + vm_prefix + r"0*(\d+)$", vm["name_label"])
+            if m:
+                matching_vms += 1
 
+        # Show the number of VMs found
+        if bash or csv:
+            sys.stdout.write(str(matching_vms))
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        else:
+            mylog.info("There are " + str(matching_vms) + " VMs with prefix " + vm_prefix)
 
+        return True
 
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_xen, help="the management IP of the hypervisor [%default]")
+    parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
+    parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
+    parser.add_option("--vm_prefix", type="string", dest="vm_prefix", default=None, help="the prefix of the VM names to match")
+    parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
+    parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.vm_prefix, options.vmhost, options.csv, options.bash, options.host_user, options.host_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+

@@ -1,195 +1,197 @@
 #!/usr/bin/python
 
-# This script will set QoS on volumes in a cluster
+"""
+This action will set QoS on a list of volumes
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"        # The management VIP of the cluster
-                                # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"              # Admin account for the cluster
-                                # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"          # Admin password for the cluster
-                                # --pass
+    --min_iops          The minIOPS to set
 
-volume_name = ""                # The name of the volume to change
-                                # --volume_name
+    --max_iops          The maxIOPS to set
 
-volume_id = 0                   # The volumeID of the volume to change
-                                # --volume_id
+    --burstIOPS         The burstIOPS to set
 
-volume_prefix = ""              # Prefix for the volumes to change
-                                # volume_name or volume_id will supercede this
-                                # --volume_prefix
+    --volumeName       The name of the volume to select
 
-volume_regex = ""               # Regex to search for volumes to delete
-                                # --volume_regex
+    --volume_id         The ID of the volume to select
 
-volume_count = 0                # The max number of volumes to clone (o for all matches)
-                                # --volume_count
+    --volume_prefix     Prefix for the volumes to select
 
-source_account = ""             # Account to use to search for volumes to change
-                                # Can be used with volume_prefix
-                                # volume_name or volume_id will supercede this
-                                # --source_account
+    --volume_regex      Regex to search for volumes to select
 
-max_iops = 0                    # QoS max IOPs
-                                # --max_iops
+    --volume_count      The max number of volumes to select
 
-min_iops = 0                    # QoS min IOPs
-                                # --min_iops
+    --source_account    Name of the account to select volumes from
 
-burst_iops = 0                  # QoS burst IOPs
-                                # --burst_iops
+    --paralell_thresh   Do not thread calls unless there are more than this many
+    SFPARALLEL_THRESH env var
 
-parallel_thresh = 1             # Do not thread calls unless there are more than this many
-                                # --parallel_thresh
+    --parallel_max       Max number of threads to use
+    SFPARALLEL_MAX env var
+"""
 
-parallel_max = 100               # Max number of threads to use
-                                # --parallel_max
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import re
 import multiprocessing
-import libsf
-from libsf import mylog, SfApiError
+import logging
+import signal
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
-def ApiCallThread(mvip, username, password, volume_name, volume_id, max_iops, min_iops, burst_iops, results, index):
-    mylog.info("Updating QoS on " + volume_name)
-    params = {}
-    params["volumeID"] = volume_id
-    qos = {}
-    if max_iops > 0: qos["maxIOPS"] = max_iops
-    if min_iops > 0: qos["minIOPS"] = min_iops
-    if burst_iops > 0: qos["burstIOPS"] = burst_iops
-    params["qos"] = qos
-    try:
-        result = libsf.CallApiMethod(mvip, username, password, "ModifyVolume", params, ExitOnError=False)
-    except SfApiError as e:
-        mylog.error("[" + e.name + "]: " + e.message)
+class SetVolumeQosAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_UPDATE_VOLUMES = "BEFORE_UPDATE_VOLUMES"
+        AFTER_UPDATE_VOLUMES = "AFTER_UPDATE_VOLUMES"
+        VOLUME_UPDATE_FAILED = "VOLUME_UPDATE_FAILED"
+
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
+
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"nodeIPs" : libsf.IsValidIpv4AddressList,
+                            "newTime" : None},
+            args)
+
+    def _ApiCallThread(self, mvip, username, password, volumeName, volumeID, maxIOPS, minIOPS, burstIOPS, results):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        myname = multiprocessing.current_process().name
+        results[myname] = False
+
+        mylog.info("Updating QoS on " + volumeName)
+        params = {}
+        params["volumeID"] = volumeID
+        qos = {}
+        if maxIOPS > 0:
+            qos["maxIOPS"] = maxIOPS
+        if minIOPS > 0:
+            qos["minIOPS"] = minIOPS
+        if burstIOPS > 0:
+            qos["burstIOPS"] = burstIOPS
+        params["qos"] = qos
+        try:
+            libsf.CallApiMethod(mvip, username, password, "ModifyVolume", params)
+        except libsf.SfApiError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.VOLUME_UPDATE_FAILED, volumeName=volumeName, exception=e)
+            return
+
+        results[myname] = True
         return
 
-    results[index] = True
-    return
+    def Execute(self, mvip=sfdefaults.mvip, minIOPS=sfdefaults.min_iops, maxIOPS=sfdefaults.max_iops, burstIOPS=sfdefaults.burst_iops, volumeName=None, volumeID=0, volumePrefix=None, volumeRegex=None, volumeCount=0, sourceAccount=None, sourceAccountID=0, test=False, username=sfdefaults.username, password=sfdefaults.password, parallelThresh=sfdefaults.parallel_calls_thresh, parallelMax=sfdefaults.parallel_calls_max, debug=False):
+        """
+        Set QoS on volumes
+        """
 
-def main():
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password", "parallel_thresh", "parallel_max" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+        cluster = libsfcluster.SFCluster(mvip, username, password)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    global mvip, username, password, source_account, volume_id, volume_name, volume_id, volume_prefix, volume_regex, volume_count, max_iops, min_iops, burst_iops, parallel_thresh, parallel_max
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--volume_name", type="string", dest="volume_name", default=volume_name, help="the volume to delete")
-    parser.add_option("--volume_id", type="int", dest="volume_id", default=volume_id, help="the volume to delete")
-    parser.add_option("--volume_prefix", type="string", dest="volume_prefix", default=volume_prefix, help="the prefix of volumes to delete")
-    parser.add_option("--volume_regex", type="string", dest="volume_regex", default=volume_regex, help="regex to search for volumes to delete")
-    parser.add_option("--volume_count", type="int", dest="volume_count", default=volume_count, help="the max number of volumes to update")
-    parser.add_option("--source_account", type="string", dest="source_account", default=source_account, help="the name of the account to select volumes from")
-    parser.add_option("--max_iops", type="int", dest="max_iops", default=max_iops, help="the max sustained IOPS to allow on this volume")
-    parser.add_option("--min_iops", type="int", dest="min_iops", default=min_iops, help="the min sustained IOPS to guarentee on this volume")
-    parser.add_option("--burst_iops", type="int", dest="burst_iops", default=burst_iops, help="the burst IOPS to allow on this volume")
-    parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=parallel_thresh, help="do not thread calls unless there are more than this many [%default]")
-    parser.add_option("--parallel_max", type="int", dest="parallel_max", default=parallel_max, help="the max number of threads to use [%default]")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    max_iops = options.max_iops
-    min_iops = options.min_iops
-    burst_iops = options.burst_iops
-    volume_name = options.volume_name
-    volume_id = options.volume_id
-    volume_prefix = options.volume_prefix
-    volume_regex = options.volume_regex
-    volume_count = options.volume_count
-    source_account = options.source_account
-    parallel_thresh = options.parallel_thresh
-    parallel_max = options.parallel_max
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+        # Get a list of volumes to modify
+        mylog.info("Searching for volumes")
+        try:
+            volumes = cluster.SearchForVolumes(volumeID=volumeID, volumeName=volumeName, volumeRegex=volumeRegex, volumePrefix=volumePrefix, accountName=sourceAccount, accountID=sourceAccountID, volumeCount=volumeCount)
+        except libsf.SfError as e:
+            mylog.error(e.message)
+            return False
 
-    # Get a list of volumes to modify
-    mylog.info("Searching for volumes")
-    try:
-        volumes = libsf.SearchForVolumes(mvip, username, password, VolumeId=volume_id, VolumeName=volume_name, VolumeRegex=volume_regex, VolumePrefix=volume_prefix, AccountName=source_account, VolumeCount=volume_count)
-    except SfError as e:
-        mylog.error(e.message)
-        sys.exit(1)
+        names = []
+        for vol in volumes.values():
+            names.append(vol["name"])
+        mylog.info("Setting QoS " + str(len(names)) + " volumes: " + ",".join(sorted(names)))
 
-    # Run the API operations in parallel if there are enough
-    if len(volumes.keys()) <= parallel_thresh:
-        parallel_calls = 1
-    else:
-        parallel_calls = parallel_max
+        if test:
+            mylog.info("Test option set; volumes will not be modified")
+            return True
 
-    # Start the client threads
-    manager = multiprocessing.Manager()
-    results = manager.dict()
-    current_threads = []
-    thread_index = 0
-    for volume_name,volume_id in volumes.items():
-        results[thread_index] = False
-        th = multiprocessing.Process(target=ApiCallThread, args=(mvip, username, password, volume_name, volume_id, max_iops, min_iops, burst_iops, results, thread_index))
-        th.start()
-        current_threads.append(th)
-        thread_index += 1
+        # Run the API operations in parallel if there are enough
+        if len(volumes.keys()) <= parallelThresh:
+            parallel_calls = 1
+        else:
+            parallel_calls = parallelMax
 
-        # Wait for at least one thread to finish
-        while len(current_threads) >= parallel_calls:
-            for i in range(len(current_threads)):
-                if not current_threads[i].is_alive():
-                    del current_threads[i]
-                    break
+        # Start the client threads
+        manager = multiprocessing.Manager()
+        results = manager.dict()
+        self._threads = []
+        for volumeName, volumeID in volumes.items():
+            thread_name = "volume-" + str(volumeID)
+            results[thread_name] = False
+            th = multiprocessing.Process(target=self._ApiCallThread, args=(mvip, username, password, volumeName, volumeID, maxIOPS, minIOPS, burstIOPS, results))
+            th.deamon = True
+            self._threads.append(th)
 
-    # Wait for all threads to be done
-    for th in current_threads:
-        th.join()
-    # Check the results
-    all_success = True
-    for res in results.values():
-        if not res:
-            all_success = False
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_UPDATE_VOLUMES)
+        allgood = libsf.ThreadRunner(self._threads, results, parallel_calls)
 
-    if all_success:
-        mylog.passed("Successfully updated QoS on all volumes")
-        sys.exit(0)
-    else:
-        mylog.error("Could not update QoS on all volumes")
-        sys.exit(1)
+        if allgood:
+            mylog.passed("Successfully updated Qos on all volumes")
+            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_UPDATE_VOLUMES)
+            return True
+        else:
+            mylog.error("Could not update QoS on all volumes")
+            return False
 
-
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--min_iops", type="int", dest="min_iops", default=sfdefaults.min_iops, help="the min sustained IOPS to guarantee on this volume")
+    parser.add_option("--max_iops", type="int", dest="max_iops", default=sfdefaults.max_iops, help="the max sustained IOPS to allow on this volume")
+    parser.add_option("--burst_iops", type="int", dest="burst_iops", default=sfdefaults.burst_iops, help="the burst IOPS to allow on this volume")
+    parser.add_option("--volume_name", type="string", dest="volume_name", default=None, help="the volume to modify")
+    parser.add_option("--volume_id", type="int", dest="volume_id", default=0, help="the volume to modify")
+    parser.add_option("--volume_prefix", type="string", dest="volume_prefix", default=None, help="the prefix of volumes to modify")
+    parser.add_option("--volume_regex", type="string", dest="volume_regex", default=None, help="regex to search for volumes to modify")
+    parser.add_option("--volume_count", type="int", dest="volume_count", default=0, help="the number of volumes to modify")
+    parser.add_option("--source_account", type="string", dest="source_account", default=None, help="the name of the account to select volumes from")
+    parser.add_option("--source_account_id", type="int", dest="source_account_id", default=0, help="the ID of the account to select volumes from")
+    parser.add_option("--test", action="store_true", dest="test", default=False, help="show the volumes that would be modified but don't actually modify them")
+    parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=sfdefaults.parallel_calls_thresh, help="do not thread calls unless there are more than this many [%default]")
+    parser.add_option("--parallel_max", type="int", dest="parallel_max", default=sfdefaults.parallel_calls_max, help="the max number of threads to use [%default]")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.min_iops, options.max_iops, options.burst_iops, options.volume_name, options.volume_id, options.volume_prefix, options.volume_regex, options.volume_count, options.source_account, options.source_account_id, options.test, options.username, options.password, options.parallel_thresh, options.parallel_max, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+

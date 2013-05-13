@@ -1,154 +1,170 @@
 #!/usr/bin/python
 
-# This script will rename KVM hostnames to match VM names
+"""
+This action will rename VM hostnames to match VM names
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --vmhost            The IP address of the hypervisor host
 
-vmhost = "172.25.106.000"      # The IP address of the hypervisor
-                                # --vmhost
+    --host_user         The username for the hypervisor
 
-host_user = "root"              # The username for the hypervisor
-                                # --host_user
+    --host_pass         The password for the hypervisor
 
-host_pass = "password"         # The password for the hypervisor
-                                # --host_pass
+    --client_user       The username for the client VMs
+    SFCLIENT_USER env var
 
-vm_user = "root"                # The username for the clients
-                                # --vm_user
+    --client_pass       The password for the client VMs
+    SFCLIENT_PASS env var
+"""
 
-vm_pass = "password"           # The password for the clients
-                                # --vm_pass
-
-# ----------------------------------------------------------------------------
-
-import sys, os
+import sys
 from optparse import OptionParser
-import json
-import time
-import re
+import logging
 from xml.etree import ElementTree
 import platform
 if "win" in platform.system().lower():
     sys.path.insert(0, "C:\\Program Files (x86)\\Libvirt\\python27")
 import libvirt
 sys.path.insert(0, "..")
-import libsf
-from libsf import mylog
-import libclient
-from libclient import ClientError, SfClient
-import libclientmon
-from libclientmon import SfautoClientMon
+import lib.libsf as libsf
+from lib.libsf import mylog
+from lib.libclient import ClientError, SfClient
+from clientmon.libclientmon import ClientMon
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-def main():
-    # Parse command line arguments
-    parser = OptionParser()
-    global vmhost, host_user, host_pass, vm_user, vm_pass
-    parser.add_option("--vmhost", type="string", dest="vmhost", default=vmhost, help="the management IP of the hypervisor")
-    parser.add_option("--host_user", type="string", dest="host_user", default=host_user, help="the username for the hypervisor [%default]")
-    parser.add_option("--host_pass", type="string", dest="host_pass", default=host_pass, help="the password for the hypervisor [%default]")
-    parser.add_option("--vm_user", type="string", dest="vm_user", default=vm_user, help="the username for the client [%default]")
-    parser.add_option("--vm_pass", type="string", dest="vm_pass", default=vm_pass, help="the password for the client [%default]")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    vmhost = options.vmhost
-    host_user = options.host_user
-    host_pass = options.host_pass
-    vm_user = options.vm_user
-    vm_pass = options.vm_pass
-    if options.debug:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(vmhost):
-        mylog.error("'" + vmhost + "' does not appear to be a valid IP")
-        sys.exit(1)
+class KvmRenameVmsAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Get a list of vm info from the monitor
-    monitor = SfautoClientMon()
-    vm_list = monitor.GetGroupVmInfo("KVM")
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    mylog.info("Connecting to " + vmhost)
-    try:
-        conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
-    except libvirt.libvirtError as e:
-        mylog.error(str(e))
-        sys.exit(1)
-    if conn == None:
-        mylog.error("Failed to connect")
-        sys.exit(1)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"vmhost" : libsf.IsValidIpv4Address,
+                            "host_user" : None,
+                            "host_pass" : None},
+            args)
 
-    try:
-        vm_ids = conn.listDomainsID()
-        running_vm_list = map(conn.lookupByID, vm_ids)
-        running_vm_list = sorted(running_vm_list, key=lambda vm: vm.name())
-    except libvirt.libvirtError as e:
-        mylog.error(str(e))
-        sys.exit(1)
+    def Execute(self, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Power on VMs
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    updated = 0
-    for vm in running_vm_list:
-        mylog.info("Updating hostname on " + vm.name())
-        # Find the VM alphabetically first MAC address from the XML config
-        vm_xml = ElementTree.fromstring(vm.XMLDesc(0))
-        mac_list = []
-        for node in vm_xml.findall("devices/interface/mac"):
-            mac_list.append(node.get("address"))
-        mac_list.sort()
-        mac = mac_list[0]
+        # Get a list of vm info from the monitor
+        monitor = ClientMon()
+        vm_list = monitor.ListClientStatusByGroup("KVM")
 
-        # Get the IP of this VM from the monitor info
-        ip = ""
-        for vm_info in vm_list:
-            if vm_info.MacAddress == mac.replace(":", ""):
-                ip = vm_info.IpAddress
-                break
-        if not ip:
-            mylog.warning("Could not find IP for " + vm.name())
-            continue
-
-        client = SfClient()
-        #mylog.info("Connecting to client '" +ip + "'")
+        mylog.info("Connecting to " + vmhost)
         try:
-            client.Connect(ip, vm_user, vm_pass)
-        except ClientError as e:
-            mylog.error(e)
-            continue
+            conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        if conn == None:
+            mylog.error("Failed to connect")
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            return False
 
-        if (client.Hostname == vm.name()):
-            mylog.passed("  Hostname is correct")
+        try:
+            vm_ids = conn.listDomainsID()
+            running_vm_list = map(conn.lookupByID, vm_ids)
+            running_vm_list = sorted(running_vm_list, key=lambda vm: vm.name())
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+
+        updated = 0
+        for vm in running_vm_list:
+            mylog.info("Updating hostname on " + vm.name())
+            # Find the VM alphabetically first MAC address from the XML config
+            vm_xml = ElementTree.fromstring(vm.XMLDesc(0))
+            mac_list = []
+            for node in vm_xml.findall("devices/interface/mac"):
+                mac_list.append(node.get("address"))
+            mac_list.sort()
+            mac = mac_list[0]
+
+            # Get the IP of this VM from the monitor info
+            ip = ""
+            for vm_info in vm_list:
+                if vm_info.MacAddress == mac.replace(":", ""):
+                    ip = vm_info.IpAddress
+                    break
+            if not ip:
+                mylog.warning("Could not find IP for " + vm.name())
+                continue
+
+            client = SfClient()
+            #mylog.info("Connecting to client '" +ip + "'")
+            try:
+                client.Connect(ip, client_user, client_pass)
+            except ClientError as e:
+                mylog.error(e)
+                continue
+
+            if (client.Hostname == vm.name()):
+                mylog.passed("  Hostname is correct")
+                updated += 1
+                continue
+
+            try:
+                client.UpdateHostname(vm.name())
+            except ClientError as e:
+                mylog.error(e.message)
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+
+            mylog.passed("  Successfully set hostname")
             updated += 1
-            continue
 
-        try:
-            client.UpdateHostname(vm.name())
-        except ClientError as e:
-            mylog.error(e.message)
-            sys.exit(1)
+        if updated == len(vm_ids):
+            mylog.passed("Successfully updated hostname on all running VMs")
+            return True
+        else:
+            mylog.error("Could not update hostname on all running VMs")
+            return False
 
-        mylog.passed("  Successfully set hostname")
-        updated += 1
-
-    if updated == len(vm_ids):
-        mylog.passed("Successfully updated hostname on all running VMs")
-        sys.exit(0)
-    else:
-        mylog.error("Could not update hostname on all running VMs")
-        sys.exit(1)
-
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_kvm, help="the management IP of the KVM hypervisor [%default]")
+    parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
+    parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
+    parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the VM clients [%default]")
+    parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the VM clients [%default]")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.vmhost, options.host_user, options.host_pass, options.client_user, options.client_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+

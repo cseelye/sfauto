@@ -1,121 +1,136 @@
 #!/usr/bin/python
 
-# This script will reboot one or more servers
+"""
+This action will reboot a list of clients
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --client_ips        The IP addresses of the clients
 
-client_ips = [                      # The IP addresses of the clients
-    "192.168.000.000",              # --client_ips
-]
+    --client_user       The username for the client
+    SFCLIENT_USER env var
 
-client_user = "root"                # The username for the client
-                                    # --client_user
+    --client_pass       The password for the client
+    SFCLIENT_PASS env var
+"""
 
-client_pass = "password"           # The password for the client
-                                    # --client_pass
-
-wait_time = 4 * 60;                 # The amount of time to wait for a client to
-                                    # come back before trying the alternate IP
-                                    # address, in seconds
-
-# ----------------------------------------------------------------------------
-
-
-import sys,os
+import sys
 from optparse import OptionParser
-import paramiko
-import re
-import socket
 import time
-import libsf
-from libsf import mylog
-import libclient
+import lib.libsf as libsf
+from lib.libsf import mylog
 from libclient import SfClient, ClientError
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-def main():
-    global client_ips, client_user, client_pass
+class RebootClientAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_REBOOT = "BEFORE_REBOOT"
+        AFTER_REBOOT = "AFTER_REBOOT"
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "client_ips", "client_user", "client_pass" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
-    if isinstance(client_ips, basestring):
-        client_ips = client_ips.split(",")
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"client_ips" : libsf.IsValidIpv4AddressList,
+                            },
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--client_ips", type="string", dest="client_ips", default=",".join(client_ips), help="the IP addresses of the clients")
-    parser.add_option("--client_user", type="string", dest="client_user", default=client_user, help="the username for the clients [%default]")
-    parser.add_option("--client_pass", type="string", dest="client_pass", default=client_pass, help="the password for the clients [%default]")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    client_user = options.client_user
-    client_pass = options.client_pass
-    try:
-        client_ips = libsf.ParseIpsFromList(options.client_ips)
-    except TypeError as e:
-        mylog.error(e)
-        sys.exit(1)
-    if not client_ips:
-        mylog.error("Please supply at least one client IP address")
-        sys.exit(1)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
+    def Execute(self, client_ips=None, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Reboot a list of clients
+        """
+        if not client_ips:
+            client_ips = sfdefaults.client_ips
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    clients = dict()
-    for client_ip in client_ips:
-        # Connect to client
-        mylog.info(client_ip + ": Connecting")
-        client = SfClient()
-        try:
-            client.Connect(client_ip, client_user, client_pass)
-        except ClientError as e:
-            mylog.error(client_ip + ": " + e.message)
-            sys.exit(1)
-        clients[client_ip] = client
+        allgood = True
 
-        # Reboot the client and wait for it to go down
-        mylog.info(client_ip + ": Rebooting")
-        try:
-            client.RebootSoft()
-        except ClientError as e:
-            mylog.error(client_ip + ": " + e.message)
-            sys.exit(1)
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REBOOT)
+        clients = dict()
+        for client_ip in client_ips:
+            # Connect to client
+            mylog.info(client_ip + ": Connecting")
+            client = SfClient()
+            try:
+                client.Connect(client_ip, client_user, client_pass)
+            except ClientError as e:
+                mylog.error(client_ip + ": " + e.message)
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                allgood = False
+                continue
 
-    mylog.info("Waiting a while before checking...")
-    time.sleep(30)
+            # Reboot the client and wait for it to go down
+            mylog.info(client_ip + ": Rebooting")
+            try:
+                client.RebootSoft()
+            except ClientError as e:
+                mylog.error(client_ip + ": " + e.message)
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                allgood = False
+                continue
+            clients[client_ip] = client
 
-    # Wait for each client to come back up
-    for client_ip in sorted(clients.keys()):
-        client = clients[client_ip]
-        client.WaitTillUp()
-        mylog.passed(client_ip + ": Rebooted successfully")
+        mylog.info("Waiting a while before checking...")
+        time.sleep(30)
 
+        # Wait for each client to come back up
+        for client_ip in sorted(clients.keys()):
+            client = clients[client_ip]
+            try:
+                client.WaitTillUp()
+            except ClientError as e:
+                mylog.error(client_ip + ": " + e.message)
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                allgood = False
+                continue
+            mylog.passed(client_ip + ": Rebooted successfully")
 
+        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REBOOT)
+        if allgood:
+            mylog.passed("All clients rebooed successfully")
+            return True
+        else:
+            mylog.error("Failed to reboot all clients")
+            return False
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=",".join(sfdefaults.client_ips), help="the IP addresses of the clients")
+    parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
+    parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.client_ips, options.client_user, options.client_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
-
-
-
-
-
+        sys.exit(1)
 

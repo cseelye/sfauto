@@ -1,199 +1,183 @@
 #!/usr/bin/python
 
-# This script will create volumes on an sf cluster
+"""
+This action will create volumes for an account
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"        # The management VIP of the cluster
-                                # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"              # Admin account for the cluster
-                                # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"          # Admin password for the cluster
-                                # --pass
+    --volume_prefix     Prefix for the volumes to create
 
-volume_prefix = "a"             # Prefix for the volume. Name will be generated as volume_prefix + "%05d"
-                                # --volume_prefix
+    --volume_count      The number of volumes to create
 
-volume_count = 20               # The number of volumes to create
-                                # --volume_count
+    --volume_size       The size of the volumes, in GB
 
-volume_size = 0                 # The volume size in GB
-                                # --volume_size
+    --volume_start      The volume number to start from
 
-volume_start = 1                # The volume number to start from
-                                # --volume_start
+    --512e              Use 512e
 
-enable_512 = False              # Use 512e on the volumes
-                                # --512e
+    --max_iops          QoS maxIOPS
 
-max_iops = 100000               # QoS max IOPs
-                                # --max_iops
+    --min_iops          QoS minIOPS
 
-min_iops = 100                  # QoS min IOPs
-                                # --min_iops
+    --burst_iops        QoS burstIOPS
 
-burst_iops = 100000             # QoS burst IOPs
-                                # --burst_iops
+    --account_name      Name of the account to create the volumes for
 
-account_name = "myhostname"     # The name of the account to create the volumes for
-                                # If account_id > 0 is specified, it will be used instead of account_name
-                                # Either account_name or account_id must be specified
-                                # --account_name
+    --account_id        ID of the account to create the volumes for
 
-account_id = 0                  # The account ID to create the volumes for
-                                # Values <= 0 will be ignored and account_name will be used instead
-                                # Either account_name or account_id must be specified
-                                # --account_id
+    --wait              How long to pause between creating each volume
+"""
 
-wait = 0                        # How long to wait between creating each volume (seconds)
-                                # --wait
-# ----------------------------------------------------------------------------
-
-
-import sys,os
+import sys
 from optparse import OptionParser
-import json
-import urllib2
-import random
-import platform
 import time
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-def main():
-    global mvip, username, password, volume_prefix, volume_count, volume_size, volume_start, max_iops, min_iops, burst_iops, account_name, account_id, wait
+class CreateVolumesAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--volume_prefix", type="string", dest="volume_prefix", default=volume_prefix, help="the prefix for the volume (volume name will be volume prefix + %05d)")
-    parser.add_option("--volume_count", type="int", dest="volume_count", default=volume_count, help="the number of volumes to create")
-    parser.add_option("--volume_size", type="int", dest="volume_size", default=volume_size, help="the volume size in GB")
-    parser.add_option("--volume_start", type="int", dest="volume_start", default=volume_start, help="the volume number to start from")
-    parser.add_option("--max_iops", type="int", dest="max_iops", default=max_iops, help="the max sustained IOPS to allow on this volume")
-    parser.add_option("--min_iops", type="int", dest="min_iops", default=min_iops, help="the min sustained IOPS to guarentee on this volume")
-    parser.add_option("--burst_iops", type="int", dest="burst_iops", default=burst_iops, help="the burst IOPS to allow on this volume")
-    parser.add_option("--512e", action="store_true", dest="enable_512", help="use 512 sector emulation")
-    parser.add_option("--account_name", type="string", dest="account_name", default=account_name, help="the account to create the volumes for (either name or id must be specified)")
-    parser.add_option("--account_id", type="int", dest="account_id", default=account_id, help="the account to create the volumes for (either name or id must be specified)")
-    parser.add_option("--wait", type="int", dest="wait", default=wait, help="how long to wait between creating each volume (seconds)")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "volume_prefix" : None,
+                            "volume_size" : None,
+                            "volume_count" : None,
+                            "min_iops" : libsf.IsInteger,
+                            "max_iops" : libsf.IsInteger,
+                            "burst_iops" : libsf.IsInteger
+                            },
+                    args)
 
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    volume_prefix = options.volume_prefix
-    volume_count = options.volume_count
-    volume_size = options.volume_size
-    volume_start = options.volume_start
-    max_iops = options.max_iops
-    min_iops = options.min_iops
-    burst_iops = options.burst_iops
-    enable_512 = options.enable_512
-    account_name = options.account_name.lower()
-    account_id = options.account_id
-    wait = options.wait
-    if (enable_512 == None):
-        enable_512 = False
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip, volume_prefix, volume_size, volume_count, volume_start=1, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=None, account_id=0, wait=0, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Create volumes
+        """
 
-    mylog.info("Management VIP = " + mvip)
-    mylog.info("Username       = " + username)
-    mylog.info("Password       = " + password)
-    mylog.info("Volume prefix  = " + volume_prefix)
-    mylog.info("Volume size    = " + str(volume_size) + " GB")
-    mylog.info("Volume count   = " + str(volume_count))
-    mylog.info("Max IOPS       = " + str(max_iops))
-    mylog.info("Min IOPS       = " + str(min_iops))
-    mylog.info("Burst IOPS     = " + str(burst_iops))
-    mylog.info("512e           = " + str(enable_512))
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
+        mylog.info("Management VIP = " + mvip)
+        mylog.info("Username       = " + username)
+        mylog.info("Password       = " + password)
+        mylog.info("Volume prefix  = " + volume_prefix)
+        mylog.info("Volume size    = " + str(volume_size) + " GB")
+        mylog.info("Volume count   = " + str(volume_count))
+        mylog.info("Max IOPS       = " + str(max_iops))
+        mylog.info("Min IOPS       = " + str(min_iops))
+        mylog.info("Burst IOPS     = " + str(burst_iops))
+        mylog.info("512e           = " + str(enable_512))
 
-    # Search for account name/id
-    if (account_id > 0):
-        account_name = None
-    accounts_obj = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
-    for account in accounts_obj["accounts"]:
-        if (account_id <= 0):
-            if (account["username"].lower() == account_name.lower()):
-                account_id = account["accountID"]
-                break
+        # Find the account
+        if account_id > 0:
+            account_name = None
+        mylog.info("Searching for account")
+        try:
+            account = libsf.FindAccount(mvip, username, password, AccountName=account_name, AccountId=account_id)
+        except libsf.SfError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        account_name = account["username"]
+        account_id = account["accountID"]
+
+        mylog.info("Account name   = " + account_name)
+        mylog.info("Account ID     = " + str(account_id))
+
+        # Create the requested volumes
+        created = 0
+        for vol_num in range(volume_start, volume_start + volume_count):
+            volume_name = volume_prefix + "%05d" % vol_num
+            params = {}
+            params["name"] = volume_name
+            params["accountID"] = account_id
+            params["totalSize"] = int(volume_size * 1000 * 1000 * 1000)
+            params["enable512e"] = enable_512
+            qos = {}
+            qos["maxIOPS"] = max_iops
+            qos["minIOPS"] = min_iops
+            qos["burstIOPS"] = burst_iops
+            params["qos"] = qos
+            try:
+                libsf.CallApiMethod(mvip, username, password, "CreateVolume", params)
+            except libsf.SfError as e:
+                mylog.error(str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+            mylog.info("Created volume " + volume_name)
+            created += 1
+            if (wait > 0):
+                time.sleep(wait)
+
+        if (created == volume_count):
+            mylog.passed("Successfully created " + str(volume_count) + " volumes")
+            return True
         else:
-            if (account["accountID"] == account_id):
-                account_name = account["username"]
-                break
+            mylog.error("Could not create all volumes")
+            return False
 
-    if (account_id <= 0):
-        mylog.error("Could not find account with name '" + account_name + "'")
-        sys.exit(1)
-    if (account_name == None):
-        mylog.error("Could not find account '" + account_id + "'")
-        sys.exit(1)
-
-    mylog.info("Account name   = " + account_name)
-    mylog.info("Account ID     = " + str(account_id))
-
-
-    # Create the requested volumes
-    created = 0
-    for vol_num in range(volume_start, volume_start + volume_count):
-        volume_name = volume_prefix + "%05d" % vol_num
-        params = {}
-        params["name"] = volume_name
-        params["accountID"] = account_id
-        params["totalSize"] = int(volume_size * 1000 * 1000 * 1000)
-        params["enable512e"] = enable_512
-        qos = {}
-        qos["maxIOPS"] = max_iops
-        qos["minIOPS"] = min_iops
-        qos["burstIOPS"] = burst_iops
-        params["qos"] = qos
-        volume_obj = libsf.CallApiMethod(mvip, username, password, "CreateVolume", params)
-        mylog.info("Created volume " + volume_name)
-        created += 1
-        if (wait > 0):
-            time.sleep(wait)
-
-    if (created == volume_count):
-        mylog.passed("Successfully created " + str(volume_count) + " volumes")
-        exit(0)
-    else:
-        mylog.red("Could not create all volumes")
-        exit(1)
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--volume_prefix", type="string", dest="volume_prefix", default=None, help="the prefix for the volume (volume name will be volume prefix + %05d)")
+    parser.add_option("--volume_count", type="int", dest="volume_count", default=None, help="the number of volumes to create")
+    parser.add_option("--volume_size", type="int", dest="volume_size", default=None, help="the volume size in GB")
+    parser.add_option("--volume_start", type="int", dest="volume_start", default=1, help="the volume number to start from")
+    parser.add_option("--max_iops", type="int", dest="max_iops", default=100000, help="the max sustained IOPS to allow on this volume")
+    parser.add_option("--min_iops", type="int", dest="min_iops", default=100, help="the min sustained IOPS to guarentee on this volume")
+    parser.add_option("--burst_iops", type="int", dest="burst_iops", default=100000, help="the burst IOPS to allow on this volume")
+    parser.add_option("--512e", action="store_true", dest="enable_512", default=False, help="use 512 sector emulation")
+    parser.add_option("--account_name", type="string", dest="account_name", default=None, help="the account to create the volumes for (either name or id must be specified)")
+    parser.add_option("--account_id", type="int", dest="account_id", default=0, help="the account to create the volumes for (either name or id must be specified)")
+    parser.add_option("--wait", type="int", dest="wait", default=0, help="how long to wait between creating each volume (seconds)")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.volume_prefix, options.volume_size, options.volume_count, options.volume_start, options.enable_512, options.min_iops, options.max_iops, options.burst_iops, options.account_name, options.account_id, options.wait, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
+        Abort()
         exit(1)
     except:
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-

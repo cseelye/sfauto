@@ -1,99 +1,115 @@
 #!/usr/bin/python
 
-# This script will clear the SolidFire logs on one or more nodes
+"""
+This action will clear the logs on a set of nodes
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --node_ips          The list of node management IP addresses
+    SFNODE_IPS
 
-node_ips = [                        # The IP addresses of the nodes to monitor
-    #"192.168.133.0",               # --node_ips
-]
+    --ssh_user          The nodes SSH username
+    SFSSH_USER env var
 
-save_bundle = False                 # Save a support bundle before clearning the logs
-                                    # --save_bundle
+    --ssh_pass          The nodes SSH password
+    SFSSH_PASS
 
-ssh_user = "root"                   # The SSH username for the nodes
-                                    # --ssh_user
+    --save_bundle       Save a support bundle before clearing the logs
+"""
 
-ssh_pass = "password"              # The SSH password for the nodes
-                                    # --ssh_pass
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import paramiko
-import re
-import socket
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-def main():
-    global node_ips, ssh_user, ssh_pass, save_bundle
+class CleanLogsAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "node_ips" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
-    if isinstance(node_ips, basestring):
-        node_ips = node_ips.split(",")
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"node_ips" : libsf.IsValidIpv4AddressList},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--node_ips", type="string", dest="node_ips", default=",".join(node_ips), help="the IP addresses of the nodes")
-    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=ssh_user, help="the SSH username for the nodes")
-    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes")
-    parser.add_option("--save_bundle", action="store_true", dest="save_bundle", default=save_bundle, help="save a support bundle before clearing logs")
-    (options, args) = parser.parse_args()
-    ssh_user = options.ssh_user
-    ssh_pass = options.ssh_pass
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("Please enter a valid MVIP")
-        sys.exit(1)
-    try:
-        node_ips = libsf.ParseIpsFromList(options.node_ips)
-    except TypeError as e:
-        mylog.error(e)
-        sys.exit(1)
-    if not node_ips:
-        mylog.error("Please supply at least one node IP address")
-        sys.exit(1)
+    def Execute(self, node_ips=None, save_bundle=False, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+        """
+        Clear the logs on a list of nodes
+        """
+        if not node_ips:
+            node_ips = sfdefaults.node_ips
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    for node_ip in node_ips:
-        mylog.info("Connecting to node '" + node_ip + "'")
-        ssh = libsf.ConnectSsh(node_ip, ssh_user, ssh_pass)
+        allgood = True
+        for node_ip in node_ips:
+            mylog.info(node_ip + ": Connecting to node")
+            try:
+                ssh = libsf.ConnectSsh(node_ip, ssh_user, ssh_pass)
 
-        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "hostname")
-        node_hostname = stdout.readlines()[0].strip()
+                if save_bundle:
+                    mylog.info(node_ip + ": Saving support bundle")
+                    libsf.ExecSshCommand(ssh, "/sf/scripts/sf_make_support_bundle `date +%Y-%m-%d-%H-%M-%S` 2>&1 >/dev/null")
 
-        if save_bundle:
-            stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "/sf/scripts/sf_make_support_bundle `date +%Y-%m-%d-%H-%M-%S`-`hostname`-supportbundle.tar")
-            data = stdout.readlines()
+                mylog.info(node_ip + ": Clearing SF logs")
 
-        mylog.info("Clearing SF logs on '" + node_hostname + "'")
-        # get rid of old logs
-        libsf.ExecSshCommand(ssh, "rm -f /var/log/sf-*.gz")
-        # empty current logs
-        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "ls -1 /var/log/sf-*")
-        data = stdout.readlines()
-        for filename in data:
-            libsf.ExecSshCommand(ssh, "cat \"Log cleared on `date +%Y-%m-%d-%H-%M-%S`\" > " + filename)
+                # get rid of old logs
+                libsf.ExecSshCommand(ssh, "rm -f /var/log/sf-*.gz")
 
-        ssh.close()
+                # empty current logs
+                libsf.ExecSshCommand(ssh, "for f in `ls -1 /var/log/sf-*`; do echo \"Log cleared on `date +%Y-%m-%d-%H-%M-%S`\" > f; done")
+
+                ssh.close()
+            except libsf.SfError as e:
+                mylog.error("Failed to clear logs on " + node_ip + ": " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+                allgood = False
+                continue
+
+        if allgood:
+            mylog.passed("Successfully cleared logs on all nodes")
+            return True
+        else:
+            mylog.error("Could not clear logs on all nodes")
+            return False
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-n", "--node_ips", action="list", dest="node_ips", default=None, help="the IP addresses of the nodes")
+    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes")
+    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes")
+    parser.add_option("--save_bundle", action="store_true", dest="save_bundle", default=False, help="save a support bundle before clearing logs")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.node_ips, options.save_bundle, options.ssh_user, options.ssh_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
+        Abort()
         exit(1)
     except:
         mylog.exception("Unhandled exception")

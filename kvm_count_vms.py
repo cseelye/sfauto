@@ -1,139 +1,145 @@
 #!/usr/bin/python
 
-# This script will count the number of VMs that match a prefix
+"""
+This action will count the number of VMs that match a prefix
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --vmhost            The IP address of the hypervisor host
 
-vmhost = "172.25.106.000"        # The IP address of the hypervisor
-                                # --host_ip
+    --host_user         The username for the hypervisor
 
-host_user = "root"                # The username for the hypervisor
-                                # --client_user
+    --host_pass         The password for the hypervisor
 
-host_pass = "password"           # The password for the hypervisor
-                                # --client_pass
+    --vm_prefix         The prefix of the VM names to match
 
-vm_prefix = ""                    # The prefix of the VM names to match
-                                # --vm_name
+    --csv               Display minimal output that is suitable for piping into other programs
 
-csv = False                     # Display minimal output that is suitable for piping into other programs
-                                # --csv
+    --bash              Display minimal output that is formatted for a bash array/for loop
+"""
 
-bash = False                    # Display minimal output that is formatted for a bash array/for  loop
-                                # --bash
-
-# ----------------------------------------------------------------------------
-
-import sys, os
+import sys
 from optparse import OptionParser
-import json
-import time
 import re
 import platform
 if "win" in platform.system().lower():
     sys.path.insert(0, "C:\\Program Files (x86)\\Libvirt\\python27")
 import libvirt
-sys.path.insert(0, "..")
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class KvmCountVmsAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-def main():
-    # Parse command line arguments
-    parser = OptionParser()
-    global vmhost, host_user, host_pass, vm_prefix, csv, bash
-    parser.add_option("--vmhost", type="string", dest="vmhost", default=vmhost, help="the management IP of the hypervisor")
-    parser.add_option("--host_user", type="string", dest="host_user", default=host_user, help="the username for the hypervisor [%default]")
-    parser.add_option("--host_pass", type="string", dest="host_pass", default=host_pass, help="the password for the hypervisor [%default]")
-    parser.add_option("--vm_prefix", type="string", dest="vm_prefix", default=vm_prefix, help="the prefix of the VM names to match")
-    parser.add_option("--csv", action="store_true", dest="csv", help="display minimal output in comma separated format")
-    parser.add_option("--bash", action="store_true", dest="bash", help="display minimal output in space separated format")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    vmhost = options.vmhost
-    host_user = options.host_user
-    host_pass = options.host_pass
-    vm_prefix = options.vm_prefix
-    if options.csv:
-        csv = True
-        mylog.silence = True
-    if options.bash:
-        bash = True
-        mylog.silence = True
-    if options.debug:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(vmhost):
-        mylog.error("'" + vmhost + "' does not appear to be a valid hypervisor IP")
-        sys.exit(1)
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    mylog.info("Connecting to " + vmhost)
-    try:
-        conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
-    except libvirt.libvirtError as e:
-        mylog.error(str(e))
-        sys.exit(1)
-    if conn == None:
-        mylog.error("Failed to connect")
-        sys.exit(1)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"vmhost" : libsf.IsValidIpv4Address,
+                            "host_user" : None,
+                            "host_pass" : None,
+                            "vm_prefix" : None},
+            args)
 
-    mylog.info("Searching for matching VMs")
-    matching_vms = 0
+    def Execute(self, vm_prefix, vmhost=sfdefaults.vmhost_kvm, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+        """
+        Count the VMs that match the prefix
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+        if bash or csv:
+            mylog.silence = True
 
-    # Get a list of stopped VMs
-    try:
-        vm_ids = conn.listDefinedDomains()
-        stopped_vm_list = map(conn.lookupByName, vm_ids)
-        stopped_vm_list = sorted(stopped_vm_list, key=lambda vm: vm.name())
-    except libvirt.libvirtError as e:
-        mylog.error(str(e))
-        sys.exit(1)
-    for vm in stopped_vm_list:
-        m = re.search("^" + vm_prefix + "0*(\d+)$", vm.name())
-        if m:
-            matching_vms += 1
+        mylog.info("Connecting to " + vmhost)
+        try:
+            conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        if conn == None:
+            mylog.error("Failed to connect")
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            return False
 
-    # Get a list of running VMs
-    try:
-        vm_ids = conn.listDomainsID()
-        running_vm_list = map(conn.lookupByID, vm_ids)
-        running_vm_list = sorted(running_vm_list, key=lambda vm: vm.name())
-    except libvirt.libvirtError as e:
-        mylog.error(str(e))
-        sys.exit(1)
-    for vm in running_vm_list:
-        m = re.search("^" + vm_prefix + "0*(\d+)$", vm.name())
-        if m:
-            matching_vms += 1
+        mylog.info("Searching for matching VMs")
+        matching_vms = 0
 
-    # Show the number of VMs found
-    if bash or csv:
-        sys.stdout.write(str(matching_vms))
-        sys.stdout.write("\n")
-        sys.stdout.flush()
-    else:
-        mylog.info("There are " + str(matching_vms) + " VMs with prefix " + vm_prefix)
+        # Get a list of stopped VMs
+        try:
+            vm_ids = conn.listDefinedDomains()
+            stopped_vm_list = map(conn.lookupByName, vm_ids)
+            stopped_vm_list = sorted(stopped_vm_list, key=lambda vm: vm.name())
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            return False
+        for vm in stopped_vm_list:
+            m = re.search("^" + vm_prefix + r"0*(\d+)$", vm.name())
+            if m:
+                matching_vms += 1
 
-    sys.exit(0)
+        # Get a list of running VMs
+        try:
+            vm_ids = conn.listDomainsID()
+            running_vm_list = map(conn.lookupByID, vm_ids)
+            running_vm_list = sorted(running_vm_list, key=lambda vm: vm.name())
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        for vm in running_vm_list:
+            m = re.search("^" + vm_prefix + r"0*(\d+)$", vm.name())
+            if m:
+                matching_vms += 1
 
+        # Show the number of VMs found
+        if bash or csv:
+            sys.stdout.write(str(matching_vms))
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        else:
+            mylog.info("There are " + str(matching_vms) + " VMs with prefix " + vm_prefix)
+        return True
 
-
-
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_kvm, help="the management IP of the KVM hypervisor [%default]")
+    parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
+    parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
+    parser.add_option("--vm_prefix", type="string", dest="vm_prefix", default=None, help="the prefix of the VM names to match")
+    parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
+    parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.vm_prefix, options.vmhost, options.csv, options.bash, options.host_user, options.host_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+

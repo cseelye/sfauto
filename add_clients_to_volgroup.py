@@ -1,146 +1,149 @@
 #!/usr/bin/python
 
-# This script will add clients to a VAG
+"""
+This action will add clients to a volume access group
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+The action connects to each specified client, queries the iSCSI IQN, then adds that IQN to the volume access group on the cluster
 
-client_ips = [                  # The IP addresses of the clients
-    "192.168.000.000",          # --client_ips
-]
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-client_user = "root"            # The username for the client
-                                # --client_user
+    --user              The cluster admin username
+    SFUSER env var
 
-client_pass = "solidfire"       # The password for the client
-                                # --client_pass
+    --pass              The cluster admin password
+    SFPASS env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --client_ips        The IP addresses of the clients
+    SFCLIENT_IPS env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --client_user       The username for the client
+    SFCLIENT_USER env var
 
-password = "solidfire"              # Admin password for the cluster
-                                    # --pass
+    --client_pass       The password for the client
+    SFCLIENT_PASS env var
 
-vag_name = ""                       # The name of the group to add to
-                                    # --vag_name
+    --volgroup_name     The name of the volume group
 
-vag_id = 0                          # The ID of the group to add to
-                                    # --vag_id
+    --volgroup_id       The ID of the volume group
+"""
 
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog, SfError
-import libclient
-from libclient import ClientError, SfClient, OsType
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog, SfError
+from lib.libclient import ClientError, SfClient
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
+class AddClientsToVolgroupAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_ADD = "BEFORE_ADD"
+        AFTER_ADD = "AFTER_ADD"
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, client_ips, client_user, client_pass, vag_name, vag_id
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password", "client_ips", "client_user", "client_pass" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
-    if isinstance(client_ips, basestring):
-        client_ips = client_ips.split(",")
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "client_ips" : libsf.IsValidIpv4AddressList},
+            args)
+        if not args["volgroup_name"] and args["volgroup_id"] <= 0:
+            raise libsf.SfArgumentError("Please specify a volgroup name or ID")
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--client_ips", type="string", dest="client_ips", default=",".join(client_ips), help="the IP addresses of the clients")
-    parser.add_option("--client_user", type="string", dest="client_user", default=client_user, help="the username for the clients [%default]")
-    parser.add_option("--client_pass", type="string", dest="client_pass", default=client_pass, help="the password for the clients [%default]")
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--vag_name", type="string", dest="vag_name", default=vag_name, help="the name of the group")
-    parser.add_option("--vag_id", type="int", dest="vag_id", default=vag_id, help="the ID of the group")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    vag_name = options.vag_name
-    vag_id = options.vag_id
-    client_user = options.client_user
-    client_pass = options.client_pass
-    try:
-        client_ips = libsf.ParseIpsFromList(options.client_ips)
-    except TypeError as e:
-        mylog.error(e)
-        sys.exit(1)
-    if not client_ips:
-        mylog.error("Please supply at least one client IP address")
-        sys.exit(1)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip=sfdefaults.mvip, client_ips=None, volgroup_name=None, volgroup_id=0, username=sfdefaults.username, password=sfdefaults.password, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Add the specified clients to the specified volume access group
+        """
+        if not client_ips:
+            client_ips = sfdefaults.client_ips
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    # Find the group
-    try:
-        vag = libsf.FindVolumeAccessGroup(mvip, username, password, VagName=vag_name, VagId=vag_id)
-    except SfError as e:
-        mylog.error(str(e))
-        sys.exit(1)
-
-    # Get a list of initiator IQNs from the clients
-    new_iqn_list = []
-    for client_ip in client_ips:
-        client = SfClient()
-        mylog.info("Connecting to client '" + client_ip + "'")
+        # Find the group
         try:
-            client.Connect(client_ip, client_user, client_pass)
-        except ClientError as e:
-            mylog.error(e)
-            sys.exit(1)
-        iqn = client.GetInitiatorName()
-        mylog.info(client.Hostname + " has IQN " + iqn)
-        if iqn in new_iqn_list:
-            mylog.error("Duplicate IQN")
-            sys.exit(1)
-        new_iqn_list.append(iqn)
+            volgroup = libsfcluster.SFCluster(mvip, username, password).FindVolumeAccessGroup(volgroupName=volgroup_name, volgroupID=volgroup_id)
+        except SfError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-    # Append the new IQNs to the list
-    full_iqn_list = vag["initiators"]
-    for iqn in new_iqn_list:
-        if iqn.lower() in vag["initiators"]:
-            mylog.debug(iqn + " is already in group")
-        else:
-            full_iqn_list.append(iqn)
+        # Get a list of initiator IQNs from the clients
+        new_iqn_list = []
+        for client_ip in client_ips:
+            client = SfClient()
+            mylog.info("Connecting to client '" + client_ip + "'")
+            try:
+                client.Connect(client_ip, client_user, client_pass)
+            except ClientError as e:
+                mylog.error(e)
+                return False
+            iqn = client.GetInitiatorName()
+            mylog.info("  " + client.Hostname + " has IQN " + iqn)
+            if iqn in new_iqn_list:
+                mylog.error("Duplicate IQN")
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                return False
+            new_iqn_list.append(iqn)
 
-    # Modify the VAG on the cluster
-    mylog.info("Adding clients to group")
-    params = {}
-    params["volumeAccessGroupID"] = vag["volumeAccessGroupID"]
-    params["initiators"] = full_iqn_list
-    libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=5.0)
+        mylog.info("Adding clients to group")
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+        try:
+            volgroup.AddInitiators(new_iqn_list)
+        except SfError as e:
+            mylog.error("Failed to modify group: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-    mylog.passed("Successfully added clients to group")
+        mylog.passed("Successfully added clients to group")
+        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ADD)
+        return True
 
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=None, help="the IP addresses of the clients")
+    parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
+    parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster [%default]")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster [%default]")
+    parser.add_option("--volgroup_name", type="string", dest="volgroup_name", default=None, help="the name of the group")
+    parser.add_option("--volgroup_id", type="int", dest="volgroup_id", default=0, help="the ID of the group")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.client_ips, options.volgroup_name, options.volgroup_id, options.username, options.password, options.client_user, options.client_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)

@@ -1,222 +1,246 @@
 #!/usr/bin/env python
 
-# This script saves a copy of cluster reports to a file at a specified interval
+"""
+This action will save the cluster reports periodically
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.154.1"        # The management VIP of the cluster
-                                # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"              # Admin account for the cluster
-                                # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"          # Admin password for the cluster
-                                # --pass
+    --folder            The folder to save the reports in
 
-interval = 10                   # How long to wait between each round of gathering reports
-                                # --interval
+    --label             A label to prepend to the report files
 
-folder = "reports"              # The name of the directory to store the reports in.
+    --interval          How often to save reports (-1 to only save one time instead of periodically)
 
-label = ""                      # A label to prepend to the name of the report file
-                                # --label
+    --reports           A list of reports to save
+"""
 
-reports = [                     # A list of reports to save.  If this is empty, save all reports
-]
-# ----------------------------------------------------------------------------
-
-import sys, os
+import sys
 from optparse import OptionParser
 import json
-import urllib2
-import random
-import platform
 import time
 import datetime
 import tarfile
 import os
 import re
-import shutil
+import signal
+import platform
+import logging
+import inspect
 import multiprocessing
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class SaveReportsAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_GATHER_REPORTS = "BEFORE_GATHER_REPORTS"
+        AFTER_GATHER_REPORTS = "AFTER_GATHER_REPORTS"
+        REPORT_FAILED = "REPORT_FAILED"
 
-def main():
-    global mvip, username, password, interval, folder, label, reports
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "interval" : libsf.IsInteger},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster. Default is " + str(username))
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster. Default is " + str(password))
-    parser.add_option("--interval", type="int", dest="interval", default=interval, help="how long to wait between each round of gathering reports. Default is " + str(interval))
-    parser.add_option("--folder", type="string", dest="folder", default=folder, help="the name of the directory to store the reports in.  Default is " + str(folder))
-    parser.add_option("--label", type="string", dest="label", default=label, help="a label to prepend to the name of the report file")
-    parser.add_option("--reports", type="string", dest="reports", default=reports, help="list of reports to save.  Default is all except the event and mutex timing reports")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    interval = options.interval
-    folder = options.folder
-    label = options.label
-    reports = options.reports
-    if (type(options.reports) is list):
-        reports = options.reports
-    else:
-        pieces = reports.split(",")
-        reports = []
-        for report in pieces:
-            report = report.strip()
-            reports.append(report)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Shutdown(self):
+        self.Abort()
+        sys.exit(0)
 
-    # create the reports directory
-    if (folder == None):
-        logdir = "reports_" + mvip + "_" + time.strftime("%Y-%m-%d-%H-%M-%S")
-    else:
-        logdir = folder
+    def Execute(self, mvip, folder="reports", label = None, interval=-1, reports=None, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Save the cluster reports
+        """
 
-    if (not os.path.exists(logdir)):
-        os.makedirs(logdir)
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    def Shutdown():
-        exit(0)
-
-    # Install signal handlers so we can run this script in the background
-    import signal
-    def shutdown_handler(signal, frame):
-        Shutdown()
-    signal.signal(signal.SIGINT, shutdown_handler)
-    signal.signal(signal.SIGTERM, shutdown_handler)
-    signal.signal(signal.SIGHUP, shutdown_handler)
-
-
-    if label != None and len(label) > 0:
-        label = label + "_"
-
-    def ReportThread(file_name, timestamp, url):
-        report_html = libsf.HttpRequest(url, username, password)
-        if (report_html == None): return
-        f = open(file_name, 'w')
-        f.write(report_html)
-        f.close()
-
-    def ApiThread(file_name, timestamp, mvip, username, password, method):
-        result = libsf.CallApiMethod(mvip, username, password, method, {})
-        if result == None: return
-        stats_json = json.dumps(result)
-        f = open(file_name, 'w')
-        f.write(stats_json)
-        f.close()
-
-    done = False
-    while True:
-        # Make a list of reports to gather
-        reports_to_get = []
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        if reports == None or len(reports) <= 0 or reports[0] == None or len(reports[0]) <= 0:
-            mylog.info("Getting a list of available reports")
-            base_url = "https://" + str(mvip) + "/reports"
-            base_html = libsf.HttpRequest(base_url, username, password)
-            if (base_html == None):
-                time.sleep(interval)
-                continue
-            for m in re.finditer("href=\"(.+)\"", base_html):
-                url = "https://" + str(mvip) + m.group(1)
-                if "events" in url: continue # skip the event report
-                if "mutexes" in url: continue # skip the mutex timing report
-                if "rpcTimeReset" in url: continue # skip the rpc timing reset
-                reports_to_get.append(url)
+        # create the reports directory
+        if (folder == None):
+            logdir = "reports_" + mvip + "_" + time.strftime("%Y-%m-%d-%H-%M-%S")
         else:
-            for report in reports:
-                url = "https://" + str(mvip) + "/reports/" + report
-                reports_to_get.append(url)
+            logdir = folder
+        if (not os.path.exists(logdir)):
+            os.makedirs(logdir)
 
-        # Create one thread per report
-        mylog.info("Pulling reports from %s" % (mvip))
-        report_threads = []
-        report_files = []
-        for url in reports_to_get:
-            report_name = url.split("/")[-1]
-            file_name = logdir + "/" + label + "report_" + timestamp + "_" + report_name + ".html"
-            th = multiprocessing.Process(target=ReportThread, args=(file_name, timestamp, url))
-            report_threads.append(th)
-            report_files.append(file_name)
+        if label != None and len(label) > 0:
+            label = label + "_"
 
-        # Pull a snapshot of some API stats as well
-        if reports == None or len(reports) <= 0 or reports[0] == None or len(reports[0]) <= 0:
-            api_calls = [
-                "GetCompleteStats",
-                "GetClusterCapacity",
-                "GetClusterInfo",
-                "GetClusterVersionInfo",
-                "ListActiveNodes"
-            ]
-            for method in api_calls:
-                file_name = logdir + "/" + label + "api_" + timestamp + "_" + method + ".html"
-                th = multiprocessing.Process(target=ApiThread, args=(file_name, timestamp, mvip, username, password, method))
-                report_threads.append(th)
+        def ReportThread(file_name, url):
+            try:
+                report_html = libsf.HttpRequest(url, username, password)
+                if (report_html == None):
+                    return
+                f = open(file_name, 'w')
+                f.write(report_html)
+                f.close()
+            except KeyboardInterrupt:
+                return
+            except Exception:
+                mylog.error("Failed to get report from " + url)
+                super(self.__class__, self)._RaiseEvent(self.Events.REPORT_FAILED)
+                return
+
+        def ApiThread(file_name, mvip, username, password, method):
+            try:
+                result = libsf.CallApiMethod(mvip, username, password, method, {})
+                if result == None:
+                    return
+                stats_json = json.dumps(result)
+                f = open(file_name, 'w')
+                f.write(stats_json)
+                f.close()
+            except KeyboardInterrupt:
+                return
+            except Exception:
+                mylog.error("Failed to get API call " + method)
+                super(self.__class__, self)._RaiseEvent(self.Events.REPORT_FAILED)
+                return
+
+        while True:
+
+            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_GATHER_REPORTS)
+
+            # Make a list of reports to gather
+            reports_to_get = []
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            if reports == None or len(reports) <= 0 or reports[0] == None or len(reports[0]) <= 0:
+                mylog.info("Getting a list of available reports")
+                base_url = "https://" + str(mvip) + "/reports"
+                base_html = None
+                try:
+                    base_html = libsf.HttpRequest(base_url, username, password)
+                except libsf.SfError:
+                    pass
+                if (base_html == None):
+                    time.sleep(interval)
+                    continue
+                for m in re.finditer("href=\"(.+)\"", base_html):
+                    url = "https://" + str(mvip) + m.group(1)
+                    if "events" in url: continue # skip the event report
+                    if "mutexes" in url: continue # skip the mutex timing report
+                    if "rpcTimeReset" in url: continue # skip the rpc timing reset
+                    reports_to_get.append(url)
+            else:
+                for report in reports:
+                    url = "https://" + str(mvip) + "/reports/" + report
+                    reports_to_get.append(url)
+
+            # Create one thread per report
+            mylog.info("Pulling reports from %s" % (mvip))
+            self._threads = []
+            report_files = []
+            for url in reports_to_get:
+                report_name = url.split("/")[-1]
+                file_name = logdir + "/" + label + "report_" + timestamp + "_" + report_name + ".html"
+                th = multiprocessing.Process(target=ReportThread, args=(file_name, url))
+                th.daemon = True
+                self._threads.append(th)
                 report_files.append(file_name)
 
-        # Start all threads
-        for th in report_threads:
-            th.start()
+            # Pull a snapshot of some API stats as well
+            if reports == None or len(reports) <= 0 or reports[0] == None or len(reports[0]) <= 0:
+                api_calls = [
+                    "GetCompleteStats",
+                    "GetClusterCapacity",
+                    "GetClusterInfo",
+                    "GetClusterVersionInfo",
+                    "ListActiveNodes"
+                ]
+                for method in api_calls:
+                    file_name = logdir + "/" + label + "api_" + timestamp + "_" + method + ".json"
+                    th = multiprocessing.Process(target=ApiThread, args=(file_name, mvip, username, password, method))
+                    self._threads.append(th)
+                    report_files.append(file_name)
 
-        # Wait for all threads to finish
-        for th in report_threads:
-            th.join()
+            # Start all threads
+            for th in self._threads:
+                th.start()
 
-        # Tarball all of the reports together
-        if len(report_files) > 1:
-            mylog.info("Creating tarball")
-            tar_name = logdir + "/" + label + "reports_" + timestamp + "_" + mvip + ".tgz"
-            tgz = tarfile.open(tar_name, "w:gz")
-            for file_name in report_files:
-                if os.path.exists(file_name):
-                    tgz.add(file_name)
-            tgz.close()
-            for file_name in report_files:
-                if os.path.exists(file_name):
-                    os.unlink(file_name)
+            # Wait for all threads to finish
+            for th in self._threads:
+                th.join()
 
-        if interval < 0:
-            exit(0)
-        if interval > 0:
-            mylog.info("Waiting for %d seconds..." % (interval))
-            time.sleep(interval)
+            # Tarball all of the reports together
+            if len(report_files) > 1:
+                mylog.info("Creating tarball")
+                tar_name = logdir + "/" + label + "reports_" + timestamp + "_" + mvip + ".tgz"
+                tgz = tarfile.open(tar_name, "w:gz")
+                for file_name in report_files:
+                    if os.path.exists(file_name):
+                        tgz.add(file_name)
+                tgz.close()
+                for file_name in report_files:
+                    if os.path.exists(file_name):
+                        os.unlink(file_name)
 
+            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_GATHER_REPORTS)
+            if interval < 0:
+                break
+            if interval > 0:
+                mylog.info("Waiting for %d seconds..." % (interval))
+                time.sleep(interval)
+
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--folder", type="string", dest="folder", default="bundles", help="the name of the directory to store the reports in.")
+    parser.add_option("--label", type="string", dest="label", default="bundle", help="a label to prepend to the name of the report file.")
+    parser.add_option("--interval", type="int", dest="interval", default=-1, help="how long to wait between each round of gathering reports, in sec. Use -1 to only save one time instead of periodically [%default]")
+    parser.add_option("--reports", action="list", dest="reports", default=None, help="list of reports to save.  Default is all except the event and mutex timing reports")
+    parser.add_option("--debug", action="store_true", default=False, dest="debug", help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
+    # Install signal handlers so we can run this script in the background
+    signal.signal(signal.SIGINT, Shutdown)
+    signal.signal(signal.SIGTERM, Shutdown)
+    if "windows" not in platform.system().lower():
+        signal.signal(signal.SIGHUP, Shutdown)
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.folder, options.label, options.interval, options.reports, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
-
-
+        sys.exit(1)
 

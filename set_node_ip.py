@@ -1,166 +1,126 @@
 #!/usr/bin/python
 
-# This script will set the network configuration of a node
+"""
+This action will set the network info of an available node
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --node_ip           The node management IP
 
-node_ip = "192.168.000.000"     # The current IP addresse of the node
-                                # --node_ip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"              # Admin account for the cluster
-                                # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"          # Admin password for the cluster
-                                # --pass
+    --oneg_ip           The new 1G (management) IP address for the node
 
-oneg_ip = ""                    # The new IP address for the node
-                                # --oneg_ip
+    --oneg_netmask      The new 1G netmask for the node
 
-oneg_netmask = ""               # The new netmask for the node
-                                # --oneg_netmask
+    --oneg_gateway      The new 1G gateway for the node
 
-oneg_gateway = ""               # The new gateway for the node
-                                # --oneg_gateway
+    --teng_ip           The new 10G (storage, cluster) IP address for the node
 
-teng_ip = ""                    # The new IP address for the node
-                                # --teng_ip
+    --teng_netmask      The new 10G netmask for the node
 
-teng_netmask = ""               # The new netmask for the node
-                                # --teng_netmask
+    --dns_ip            The new DNS server for the node
 
-dns_ip = ""                     # The DNS IP address for the node
-                                # --dns_search
+    --dns_search        The new DNS search path for the node
+"""
 
-dns_search = ""                 # The DNS search path for the node
-                                # --dns_search
-
-# ----------------------------------------------------------------------------
-
-
-import sys,os
+import sys
 from optparse import OptionParser
-import paramiko
-import re
-import socket
-import multiprocessing
-import time
 import logging
-import libsf
-from libsf import mylog
-import libclient
-from libclient import ClientError, SfClient
+import lib.libsf as libsf
+from lib.libsf import mylog
+from lib.action_base import ActionBase
+import lib.libsfnode as libsfnode
 
 
-def NodeThread(node_ip, oneg_ip, oneg_netmask, oneg_gateway, dns_ip, dns_search, teng_ip, teng_netmask, status, debug):
-    if debug:
-        mylog.console.setLevel(logging.DEBUG)
-    params = {}
-    params["network"] = {}
-    params["network"]["Bond1G"] = {}
-    params["network"]["Bond1G"]["address"] = oneg_ip
-    params["network"]["Bond1G"]["netmask"] = oneg_netmask
-    params["network"]["Bond1G"]["gateway"] = oneg_gateway
-    params["network"]["Bond1G"]["dns-nameservers"] = dns_ip
-    params["network"]["Bond1G"]["dns-search"] = dns_search
-    params["network"]["Bond10G"] = {}
-    params["network"]["Bond10G"]["address"] = teng_ip
-    params["network"]["Bond10G"]["netmask"] = teng_netmask
-    try:
-        result = libsf.CallNodeApiMethod(node_ip, username, password, "SetConfig", params, ExitOnError=False)
-        status = 0
-    except libsf.SfApiError as e:
-        status = 1
-        mylog.error(str(e))
+class SetNodeIpAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_SET_NETINFO = "BEFORE_SET_NETINFO"
+        AFTER_SET_NETINFO = "AFTER_SET_NETINFO"
+        SET_NETINFO_FAILED = "SET_NETINFO_FAILED"
 
-def main():
-    global node_ip, username, password, oneg_ip, oneg_netmask, oneg_gateway, teng_ip, teng_netmask, dns_ip, dns_search
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Parse command line arguments
-    parser = OptionParser(description="Set the network information of a node")
-    parser.add_option("--node_ip", type="string", dest="node_ip", default=node_ip, help="the current IP address of the node")
-    parser.add_option("--username", type="string", dest="username", default=username, help="the username for the node [%default]")
-    parser.add_option("--password", type="string", dest="password", default=password, help="the password for the node [%default]")
-    parser.add_option("--oneg_ip", type="string", dest="oneg_ip", default=oneg_ip, help="the new 1G IP address for the node")
-    parser.add_option("--oneg_netmask", type="string", dest="oneg_netmask", default=oneg_netmask, help="the new 1G netmask for the node")
-    parser.add_option("--oneg_gateway", type="string", dest="oneg_gateway", default=oneg_gateway, help="the new 1G gateway for the node")
-    parser.add_option("--teng_ip", type="string", dest="teng_ip", default=teng_ip, help="the new 10G IP address for the node")
-    parser.add_option("--teng_netmask", type="string", dest="teng_netmask", default=teng_netmask, help="the new 10G netmask for the node")
-    parser.add_option("--dns_ip", type="string", dest="dns_ip", default=dns_ip, help="the new DNS IP address for the node")
-    parser.add_option("--dns_search", type="string", dest="dns_search", default=dns_search, help="the new DNS search path for the node")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    node_ip = options.node_ip
-    username = options.username
-    passowrd = options.password
-    oneg_ip = options.oneg_ip
-    oneg_netmask = options.oneg_netmask
-    oneg_gateway = options.oneg_gateway
-    teng_ip = options.teng_ip
-    teng_netmask = options.teng_netmask
-    dns_ip = options.dns_ip
-    dns_search = options.dns_search
-    debug = options.debug
-    if debug:
-        mylog.console.setLevel(logging.DEBUG)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"nodeIP" : libsf.IsValidIpv4Address,
+                            "onegIP" : libsf.IsValidIpv4Address,
+                            "tengIP" : libsf.IsValidIpv4Address,
+                            "dnsIP" : libsf.IsValidIpv4Address},
+            args)
 
-    mylog.info("Setting the following network config on " + node_ip)
-    mylog.info("  1G IP     : " + oneg_ip)
-    mylog.info("  1G mask   : " + oneg_netmask)
-    mylog.info("  1G gw     : " + oneg_gateway)
-    mylog.info("  10G IP    : " + teng_ip)
-    mylog.info("  10G mask  : " + teng_netmask)
-    mylog.info("  DNS server: " + dns_ip)
-    mylog.info("  DNS search: " + dns_search)
-    mylog.info("This may take up to 90 seconds")
-    
-    start_time = time.time()
-    status = multiprocessing.Value('i')
-    status = 1
-    th = multiprocessing.Process(target=NodeThread, args=(node_ip, oneg_ip, oneg_netmask, oneg_gateway, dns_ip, dns_search, teng_ip, teng_netmask, status, debug))
-    th.daemon = True
-    th.start()
-    while True:
-        if not th.is_alive():
-            break
+    def Execute(self, nodeIP, onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch, debug):
+        """
+        Set the network info of an available node
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-        if time.time() - start_time > 30:
-            mylog.debug("Terminating subprocess")
-            th.terminate()
-            status = 0
-            break
+        mylog.info("Setting the following network config on " + nodeIP)
+        mylog.info("  1G IP     : " + onegIP)
+        mylog.info("  1G mask   : " + onegNetmask)
+        mylog.info("  1G gw     : " + onegGateway)
+        mylog.info("  10G IP    : " + tengIP)
+        mylog.info("  10G mask  : " + tengNetmask)
+        mylog.info("  DNS server: " + dnsIP)
+        mylog.info("  DNS search: " + dnsSearch)
+        mylog.info("This may take up to 90 seconds")
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_NETINFO, nodeIP=nodeIP)
 
-    if status != 0:
-        mylog.error("Could not set network info")
-        sys.exit(1)
+        node = libsfnode.SFNode(nodeIP)
+        try:
+            node.SetNetworkInfo(onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch)
+        except libsf.SfApiError as e:
+            mylog.error(str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.SET_NETINFO_FAILED, nodeIP=nodeIP)
+            return False
 
-    start_time = time.time()
-    pingable = False
-    while not pingable:
-        pingable = libsf.Ping(oneg_ip)
-        if time.time() - start_time > 60:
-            break
-
-    if pingable:
         mylog.passed("Successfully set network info")
-        sys.exit(0)
-    else:
-        mylog.error("Could not ping node at new IP address")
-        sys.exit(1)
+        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_NETINFO, nodeIP=nodeIP)
+        return True
 
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    parser = OptionParser(description="Set the network information of a node")
+    parser.add_option("-n", "--node_ip", type="string", dest="node_ip", default=None, help="the current IP address of the node")
+    parser.add_option("--oneg_ip", type="string", dest="oneg_ip", default=None, help="the new 1G IP address for the node")
+    parser.add_option("--oneg_netmask", type="string", dest="oneg_netmask", default=None, help="the new 1G netmask for the node")
+    parser.add_option("--oneg_gateway", type="string", dest="oneg_gateway", default=None, help="the new 1G gateway for the node")
+    parser.add_option("--teng_ip", type="string", dest="teng_ip", default=None, help="the new 10G IP address for the node")
+    parser.add_option("--teng_netmask", type="string", dest="teng_netmask", default=None, help="the new 10G netmask for the node")
+    parser.add_option("--dns_ip", type="string", dest="dns_ip", default=None, help="the new DNS IP address for the node")
+    parser.add_option("--dns_search", type="string", dest="dns_search", default=None, help="the new DNS search path for the node")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.node_ip, options.oneg_ip, options.oneg_netmask, options.oneg_gateway, options.teng_ip, options.teng_netmask, options.dns_ip, options.dns_search, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+

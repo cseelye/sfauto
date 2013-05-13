@@ -1,130 +1,144 @@
 #!/usr/bin/python
 
-# This script will delete CHAP accounts on the cluster that correspond to the specified clients
+"""
+This action will delete the CHAP account that corresponds to the specified clients
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --client_ips        The IP addresses of the clients
+    SFCLIENT_IPS env var
 
-client_ips = [                      # The IP addresses of the clients
-    "192.168.000.000",              # --client_ips
-]
+    --client_user       The username for the client
+    SFCLIENT_USER env var
 
-client_user = "root"                # The username for the client
-                                    # --client_user
+    --client_pass       The password for the client
+    SFCLIENT_PASS env var
 
-client_pass = "password"           # The password for the client
-                                    # --client_pass
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"    # The management VIP of the cluster
-                            # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"          # Admin account for the cluster
-                            # --user
+    --pass              The cluster admin password
+    SFPASS env var
+"""
 
-password = "password"      # Admin password for the cluster
-                            # --pass
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog
-import libclient
+import lib.libsf as libsf
+from lib.libsf import mylog
 from libclient import SfClient, ClientError
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-def main():
-    global client_ips, client_user, client_pass, mvip, username, password
+class DeleteAccountForClientAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password", "client_ips", "client_user", "client_pass" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
-    if isinstance(client_ips, basestring):
-        client_ips = client_ips.split(",")
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "client_ips" : libsf.IsValidIpv4AddressList
+                            },
+                    args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--client_ips", type="string", dest="client_ips", default=",".join(client_ips), help="the IP addresses of the clients")
-    parser.add_option("--client_user", type="string", dest="client_user", default=client_user, help="the username for the clients [%default]")
-    parser.add_option("--client_pass", type="string", dest="client_pass", default=client_pass, help="the password for the clients [%default]")
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    client_user = options.client_user
-    client_pass = options.client_pass
-    try:
-        client_ips = libsf.ParseIpsFromList(options.client_ips)
-    except TypeError as e:
-        mylog.error(e)
-        sys.exit(1)
-    if not client_ips:
-        mylog.error("Please supply at least one client IP address")
-        sys.exit(1)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip=sfdefaults.mvip, client_ips=None, username=sfdefaults.username, password=sfdefaults.password, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Delete CHAP accounts for a list of clients
+        """
+        if not client_ips:
+            client_ips = sfdefaults.client_ips
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    # Find the account to delete
-    mylog.info("Getting a list of accounts")
-    accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
-    
-    for client_ip in client_ips:
-        mylog.info(client_ip + ": Connecting to client")
-        client = SfClient()
+        # Get a list of accounts from the cluster
+        mylog.info("Getting a list of accounts")
         try:
-            client.Connect(client_ip, client_user, client_pass)
-        except ClientError as e:
-            mylog.error(client_ip + ": " + e.message)
-            return
+            accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get account list: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-        account_id = 0
-        for account in accounts_list["accounts"]:
-            if account["username"].lower() == client.Hostname.lower():
-                account_id = account["accountID"]
-                break
-        if account_id == 0:
-            mylog.passed(client_ip + ": Account does not exist or has already been deleted")
-            continue
-    
-        mylog.info(client_ip + ": Deleting account ID " + str(account_id))
-        result = libsf.CallApiMethod(mvip, username, password, "RemoveAccount", {"accountID" : account_id})
+        allgood = True
+        for client_ip in client_ips:
+            mylog.info(client_ip + ": Connecting to client")
+            client = SfClient()
+            try:
+                client.Connect(client_ip, client_user, client_pass)
+            except ClientError as e:
+                mylog.error(client_ip + ": " + e.message)
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                return False
 
-        mylog.passed(client_ip + ": Successfully deleted account " + client.Hostname)
+            account_id = 0
+            for account in accounts_list["accounts"]:
+                if account["username"].lower() == client.Hostname.lower():
+                    account_id = account["accountID"]
+                    break
+            if account_id == 0:
+                mylog.passed(client_ip + ": Account does not exist or has already been deleted")
+                continue
 
-    mylog.passed("Successfully deleted all accounts")
+            mylog.info(client_ip + ": Deleting account ID " + str(account_id))
+            try:
+                libsf.CallApiMethod(mvip, username, password, "RemoveAccount", {"accountID" : account_id})
+                mylog.passed(client_ip + ": Successfully deleted account " + client.Hostname)
+            except libsf.SfError as e:
+                mylog.error(client_ip + ": Failed to delete account: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                allgood = False
+
+        if allgood:
+            mylog.passed("Successfully deleted all accounts")
+            return True
+        else:
+            mylog.error("Could not delete all accounts")
+            return False
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=None, help="the IP addresses of the clients")
+    parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
+    parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.client_ips, options.username, options.password, options.client_user, options.client_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
+        Abort()
         exit(1)
     except:
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
-
-
-
-
-
-

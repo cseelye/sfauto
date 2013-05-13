@@ -1,124 +1,150 @@
 #!/usr/bin/python
 
-# This script will wait for there to be no active cluster faults
+"""
+This action will wait until there are no active cluster faults
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --fault_whitelist   Ignore these faults if they are present
+    SFFAULT_WHITELIST env var
 
-whitelist = [                       # Ignore these faults and do not wait for them to clear
-    "clusterFull",                  # --whitelist
-    "clusterIOPSAreOverProvisioned",
-    "nodeHardwareFault"
-]
+    --fault_blacklist   Immediately fail if any of these faults are present
+"""
 
-blacklist = [                       # Immediately fail if any of these faults are present
-                                    # --blacklist
-]
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
 import time
-import libsf
-from libsf import mylog
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
+class WaitForNoFaultsAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_WAIT = "BEFORE_WAIT"
+        AFTER_WAIT = "AFTER_WAIT"
+        FAULT_LIST_CHANGED = "FAULT_LIST_CHANGED"
+        BLACKLISTED_FAULT_FOUND = "BLACKLISTED_FAULT_FOUND"
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, whitelist, blacklist
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password", "whitelist", "blacklist" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            },
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--whitelist", type="string", dest="whitelist", default=",".join(whitelist), help="ignore these faults and do not wait for them to clear")
-    parser.add_option("--blacklist", type="string", dest="blacklist", default=",".join(blacklist), help="immediately fail if these faults are present")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    whitelist = set()
-    whitelist_str = options.whitelist
-    pieces = whitelist_str.split(',')
-    for fault in pieces:
-        fault = fault.strip()
-        if fault:
-            whitelist.add(fault)
-    blacklist = set()
-    blacklist_str = options.blacklist
-    pieces = blacklist_str.split(',')
-    for fault in pieces:
-        fault = fault.strip()
-        if fault:
-            blacklist.add(fault)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip=sfdefaults.mvip, faultWhitelist=None, faultBlacklist=None, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Wait until there are no active cluster faults
+        """
+        if faultWhitelist == None:
+            faultWhitelist = sfdefaults.fault_whitelist
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
+        mylog.info("Waiting for no unresolved cluster faults on cluster " + mvip)
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_WAIT)
 
-    mylog.info("Waiting for no unresolved cluster faults on cluster " + mvip)
-    if len(whitelist) > 0: mylog.info("  If these faults are present, they will be ignored: " + ", ".join(whitelist))
-    if len(blacklist) > 0: mylog.info("  If these faults are present, they will cause the script to immediately fail: " + ", ".join(blacklist))
+        if faultWhitelist == None:
+            faultWhitelist = set()
+        else:
+            faultWhitelist = set(faultWhitelist)
+        if len(faultWhitelist) > 0:
+            mylog.info("  If these faults are present, they will be ignored: " + ", ".join(faultWhitelist))
+        if faultBlacklist == None:
+            faultBlacklist = set()
+        else:
+            faultBlacklist = set(faultBlacklist)
+        if len(faultBlacklist) > 0:
+            mylog.info("  If these faults are present, they will cause an immediately fail: " + ", ".join(faultBlacklist))
 
-    fault_list = set()
-    while True:
-        result = libsf.CallApiMethod(mvip, username, password, "ListClusterFaults", {"exceptions": 1, "faultTypes": "current"})
-        if len(result["faults"]) <= 0: break
-        previous_fault_list = fault_list
-        fault_list = set()
-        for fault in result["faults"]:
-            if fault["code"] not in fault_list:
-                fault_list.add(fault["code"])
+        cluster = libsfcluster.SFCluster(mvip, username, password)
+        previous_faults = set()
+        while True:
+            # Get a list of current faults
+            try:
+                current_faults = cluster.GetCurrentFaultSet()
+            except libsf.SfError as e:
+                mylog.error("Failed to get list of faults: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                return False
 
-        # Break if the only current faults are ignored faults
-        if fault_list & whitelist == fault_list: break
+            # Break if there are no faults
+            if len(current_faults) <= 0:
+                break
 
-        # Print the list of faults if it is the first time or if it has changed
-        if previous_fault_list == set() or fault_list & previous_fault_list != previous_fault_list:
-            mylog.info("   Current faults: " + ",".join(fault_list))
+            # Break if the only current faults are ignored faults
+            if current_faults & faultWhitelist == current_faults:
+                break
 
-        # Abort if there are any blacklisted faults
-        if len(fault_list & blacklist) > 0:
-            mylog.error("Blacklisted fault found")
-            sys.exit(1)
+            # Print the list of faults if it is the first time or if it has changed
+            if previous_faults == set() or current_faults & previous_faults != previous_faults:
+                mylog.info("   Current faults: " + ",".join(current_faults))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAULT_LIST_CHANGED)
 
-        time.sleep(60)
+            # Abort if there are any blacklisted faults
+            if len(current_faults & faultBlacklist) > 0:
+                mylog.error("Blacklisted fault found")
+                super(self.__class__, self)._RaiseEvent(self.Events.BLACKLISTED_FAULT_FOUND)
+                return False
 
-    mylog.passed("There are no current cluster faults on " + mvip)
+            previous_faults = current_faults
+            time.sleep(60)
 
+        mylog.passed("There are no current cluster faults on " + mvip)
+        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_WAIT)
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
+    parser.add_option("--fault_whitelist", action="list", dest="fault_whitelist", default=None, help="ignore these faults and do not wait for them to clear")
+    parser.add_option("--fault_blacklist", action="list", dest="fault_blacklist", default=None, help="immediately fail if any of these faults are present")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.fault_whitelist, options.fault_blacklist, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+

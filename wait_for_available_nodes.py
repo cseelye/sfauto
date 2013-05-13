@@ -1,118 +1,134 @@
 #!/usr/bin/python
 
-# This script will wait for nodes to be in the avaialble nodes list
+"""
+This action will wait for a given list of pending nodes to be present
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --node_ips          The management IPs of the nodes to wait for
 
-node_ips = [
-    "192.168.000.000"               # The management IPs of the nodes to wait for
-]                                   # --node_ips
+    --timeout           How long to wait (sec)
+"""
 
-timeout = 300                       # How long to wait (in sec)
-                                    # --timeout
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
 import time
-import libsf
-from libsf import mylog
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
+class WaitForAvailableNodesAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_WAIT = "BEFORE_WAIT"
+        PENDING_LIST_CHANGED = "PENDING_LIST_CHANGED"
+        ALL_NODES_FOUND = "ALL_NODES_FOUND"
+        WAIT_TIMEOUT = "WAIT_TIMEOUT"
 
-def main():
-    global mvip, username, password, node_ips, timeout
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "nodeIPs" : libsf.IsValidIpv4AddressList,
+                            "timeout" : libsf.IsInteger},
+            args)
+        if args["timeout"] < 0:
+            raise libsf.SfArgumentError("timeout must be a positive integer")
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--node_ips", type="string", dest="node_ips", default=",".join(node_ips), help="the IP addresses of the nodes")
-    parser.add_option("--timeout", type="int", dest="timeout", default=timeout, help="how long to wait (in sec)")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    timeout = options.timeout
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
-    try:
-        node_ips = libsf.ParseIpsFromList(options.node_ips)
-    except TypeError as e:
-        mylog.error(e)
-        sys.exit(1)
-    if not node_ips:
-        mylog.error("Please supply at least one node IP address")
-        sys.exit(1)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, nodeIPs, timeout=300, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Wait for the given list of pending nodes
+        """
+        if not nodeIPs:
+            nodeIPs = []
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
+        nodeIPs = set(nodeIPs)
 
-    mylog.info("Waiting " + str(timeout) + " sec for nodes " + str(node_ips) + " to be available in cluster " + mvip)
-    start_time = time.time()
-    while True:
-        # Make a list of the available nodes
-        avail_nodes = set()
-        result = libsf.CallApiMethod(mvip, username, password, "ListPendingNodes", {})
-        for node in result["pendingNodes"]:
-            avail_nodes.add(node["mip"])
+        mylog.info("Waiting up to " + str(timeout) + " sec for nodes " + ",".join(nodeIPs) + " to be available in cluster " + mvip)
+        cluster = libsfcluster.SFCluster(mvip, username, password)
+        start_time = time.time()
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_WAIT)
+        previous_pending = set()
+        while True:
+            try:
+                available = cluster.ListPendingNodes()
+            except libsf.SfError as e:
+                mylog.error(str(e))
+                return False
 
-        mylog.debug("Pending node list: " + str(avail_nodes))
+            avail_ips = set()
+            for node in available:
+                avail_ips.add(node["mip"])
 
-        # Check that the requested nodes are all present
-        all_found = True
-        for node_ip in node_ips:
-            if node_ip not in avail_nodes:
-                all_found = False
-                break
+            # Display the list if it has changed
+            if previous_pending & avail_ips != previous_pending:
+                mylog.info("Pending node list: " + ",".join(avail_ips))
+                super(self.__class__, self)._RaiseEvent(self.Events.PENDING_LIST_CHANGED)
+            previous_pending = avail_ips
 
-        if all_found: break
-        time.sleep(10)
-        if time.time() - start_time > timeout:
-            mylog.error("Did not find node " + node_ip + " in pending list")
-            sys.exit(1)
+            # Break if the list contains all of the requested nodes
+            if nodeIPs & avail_ips == nodeIPs:
+                super(self.__class__, self)._RaiseEvent(self.Events.ALL_NODES_FOUND)
+                return True
 
-    mylog.passed("All requested nodes are available")
+            time.sleep(10)
+            if time.time() - start_time > timeout:
+                mylog.error("Timeout waiting for pending nodes")
+                super(self.__class__, self)._RaiseEvent(self.Events.WAIT_TIMEOUT)
+                return False
 
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("-n", "--node_ips", action="list", dest="node_ips", default=None, help="the management IPs of the nodes to wait for")
+    parser.add_option("--timeout", type="int", dest="timeout", default=300, help="how long to wait (sec) before giving up [%default]")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.node_ips, options.timeout, options.mvip, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

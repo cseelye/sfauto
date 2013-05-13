@@ -1,110 +1,127 @@
 #!/usr/bin/env python
 
-# This script will find all drives in the available pool and add them to the cluster
+"""
+This action will find all drives in the available pool and add them to the cluster.
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.0.0"        # The management VIP for the cluster
-                            # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"          # The cluster username
-                            # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"      # The cluster password
-                            # --pass
+    --no-sync           Do not wait for syncing after adding drives
+"""
 
-no_sync = False             # Do not wait for syncing after adding drives.
-                            # --no_sync
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
 import time
-import libsf
-from libsf import mylog
-import json
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
-def main():
-    global mvip, username, password, no_sync
+class AddAvailableDrivesAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_ADD = "BEFORE_ADD"
+        AFTER_ADD = "AFTER_ADD"
+        BEFORE_SYNC = "BEFORE_SYNC"
+        AFTER_SYNC = "AFTER_SYNC"
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Parse command line options
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management VIP for the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the username for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the password for the cluster")
-    parser.add_option("--no_sync", action="store_true", dest="no_sync", help="do not wait for syncing after adding the drives")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    username = options.username
-    password = options.password
-    mvip = options.mvip
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
-    if options.no_sync:
-        no_sync = True
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None},
+            args)
 
-    mylog.info("Searching for available drives...")
-    params = dict()
-    params["drives"] = []
-    result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
-    for drive in result["drives"]:
-        if drive["status"] == "available":
-            mylog.debug("Adding driveID " + str(drive["driveID"]) + " (slot " + str(drive["slot"]) + ") from nodeID " + str(drive["nodeID"]))
-            newdrive = {}
-            newdrive["driveID"] = drive["driveID"]
-            newdrive["type"] = "automatic"
-            params["drives"].append(newdrive)
+    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, waitForSync=True, debug=False):
+        """
+        Find all of the drives in the available pool and add them to the cluster, optionally waiting for syncing to complete.
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    if len(params["drives"]) <= 0:
-        mylog.passed("There are no available drives to add")
+        cluster = libsfcluster.SFCluster(mvip, username, password)
 
-    mylog.info("Adding " + str(len(params["drives"])) + " drives to cluster")
-    add_time = time.time();
-    time.sleep(2)
-    result = libsf.CallApiMethod(mvip, username, password, "AddDrives", params)
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+        try:
+            added = cluster.AddAvailableDrives()
+        except libsf.SfError as e:
+            mylog.error("Failed to get drive list: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        if added <= 0:
+            return True
 
-    if not no_sync:
-        mylog.info("Waiting to make sure syncing has started")
-        time.sleep(60)
+        if waitForSync:
+            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SYNC)
+            mylog.info("Waiting a minute to make sure syncing has started")
+            time.sleep(60)
 
-        mylog.info("Waiting for slice syncing")
-        while libsf.ClusterIsSliceSyncing(mvip, username, password):
-            time.sleep(20)
+            try:
+                mylog.info("Waiting for slice syncing")
+                while cluster.IsSliceSyncing():
+                    time.sleep(20)
 
-        mylog.info("Waiting for bin syncing")
-        # Make sure bin sync is done
-        while libsf.ClusterIsBinSyncing(mvip, username, password):
-            time.sleep(20)
+                mylog.info("Waiting for bin syncing")
+                while cluster.IsBinSyncing():
+                    time.sleep(20)
+            except libsf.SfError as e:
+                mylog.error("Failed wait for syncing: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SYNC)
 
-    mylog.passed("Successfully added drives to the cluster")
+        mylog.passed("Successfully added drives to the cluster")
+        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ADD)
+        return True
 
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line options
+    parser = OptionParser(description="Add all of the available drives to the cluster and wait for syncing to complete.")
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
+    parser.add_option("--no_sync", action="store_false", dest="wait_for_sync", default=True, help="do not wait for syncing after adding the drives")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+    if extra_args and len(extra_args) > 0:
+        mylog.error("Unknown arguments: " + str(extra_args))
+        sys.exit(1)
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.username, options.password, options.wait_for_sync, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
-
+        sys.exit(1)

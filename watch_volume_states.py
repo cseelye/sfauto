@@ -1,55 +1,40 @@
 #!/usr/bin/python
 
-# This script will watch for degraded volumes on the cluster
+"""
+This script will display volume states as they change
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
+"""
 
-password = "solidfire"              # Admin password for the cluster
-                                    # --pass
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog
+import logging
 import json
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
 
-def main():
-    global mvip, username, password
+def ValidateArgs(args):
+    libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                        "username" : None,
+                        "password" : None},
+        args)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
-
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    if options.debug != None:
-        import logging
+def Execute(mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    """
+    Continuously show changing volume states
+    """
+    ValidateArgs(locals())
+    if debug:
         mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
 
     volmap = dict()
     result = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
@@ -118,16 +103,30 @@ def main():
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
-        #timer = libsf.ScriptTimer()
-        main()
+        timer = libsf.ScriptTimer()
+        if Execute(options.mvip, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

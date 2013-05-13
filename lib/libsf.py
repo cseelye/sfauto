@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import logging
 from logging.handlers import SysLogHandler
+import optparse
+from optparse import Option
 import ctypes
 import sys
 import platform
@@ -14,6 +16,9 @@ import httplib
 import random
 import socket
 if "win" not in platform.system().lower(): import syslog
+import multiprocessing
+import multiprocessing.connection
+from multiprocessing.connection import Listener
 import re
 import os, subprocess
 import commands
@@ -33,24 +38,102 @@ try:
 except ImportError:
     import paramiko as ssh
 
-# Generic exception for all errors
 class SfError(Exception):
+    """
+    Exception thrown when an error occurs
+    """
     def __init__(self, message):
         self.message = message
     def __str__(self):
         return self.message
 
-# Exception for API errors
+class SfArgumentError(SfError):
+    """
+    Exception thrown when invalid arguments are passed
+    """
+    def __init__(self, message):
+        self.message = message
+    def __str__(self):
+        return self.message
+
 class SfApiError(SfError):
+    """
+    Exception thrown when there is a SolidFire API error
+    """
     def __init__(self, pErrorName, pErrorMessage):
         self.name = pErrorName
         self.message = pErrorMessage
     def __str__(self):
         return self.name + ": " + self.message
 
+class SfTimeoutError(SfError):
+    """
+    Exception thrown when there is a timeout
+    """
+
+class SfUnknownObjectError(SfError):
+    """
+    Exception thrown when an object could not be found
+    """
+
+def ModuleNameToActionName(moduleName):
+    action_name = ""
+    pieces = moduleName.split("_")
+    for piece in pieces:
+        action_name += (piece[:1].upper() + piece[1:].lower())
+    action_name += "Action"
+    return action_name
+
+def FileNameToActionName(fileName):
+    action_name = ""
+    fileName = os.path.basename(fileName)
+    fileName, ext = os.path.splitext(fileName)
+    pieces = fileName.split("_")
+    for piece in pieces:
+        action_name += (piece[:1].upper() + piece[1:].lower())
+    action_name += "Action"
+    return action_name
+
+def PopulateActionModule(module):
+    try:
+        module.action = getattr(module, FileNameToActionName(module.__file__))()
+    except AttributeError:
+        mylog.error("Could not find action class for module " + module.__file__)
+        sys.exit(1)
+    for attr_name in dir(module.action):
+        attr = getattr(module.action, attr_name)
+        if inspect.isbuiltin(attr):
+            continue
+        if inspect.ismodule(attr):
+            continue
+        if attr_name.startswith("_"):
+            continue
+        setattr(module, attr_name, attr)
+
+class ListOption(Option):
+
+    ACTIONS = Option.ACTIONS + ("list",)
+    STORE_ACTIONS = Option.STORE_ACTIONS + ("list",)
+    TYPED_ACTIONS = Option.TYPED_ACTIONS + ("list",)
+    ALWAYS_TYPED_ACTIONS = Option.ALWAYS_TYPED_ACTIONS + ("list",)
+
+    def take_action(self, action, dest, opt, value, values, parser):
+        if action == "list":
+            lvalue = value.split(",")
+            values.ensure_value(dest, []).extend(lvalue)
+        else:
+            Option.take_action(
+                self, action, dest, opt, value, values, parser)
+
+
 # Class for a generic collection of stuff, or as a dummy for compatability
 class Bunch:
     __init__ = lambda self, **kw: setattr(self, '__dict__', kw)
+
+# Mimic an enumerated type
+def enum(*sequential, **named):
+    enums = dict(zip(sequential, range(len(sequential))), **named)
+    return type('Enum', (), enums)
 
 # Custom log levels that map to specific colorized output
 class MyLogLevels:
@@ -200,8 +283,43 @@ class MultiFormatter(logging.Formatter):
         self._fmt = self.std_format
         return result
 
+class LogListener(object):
+    def __init__(self):
+        self.listener = Listener(address=('127.0.0.1', 6000))
+        self.runListener = threading.Event()
+        self.thread = threading.Thread(target=self.ListenThread)
+        self.thread.run()
+
+    def ListenThread(self):
+        while self.runListener.is_set():
+            conn = self.listener.accept()
+            data = conn.recv()
+            getattr(mylog, data[0])(data[1])
+
+    def Stop(self):
+        self.runListener.clear()
+        self.thread.join()
+        self.listener.close()
+
+    def __del__(self):
+        self.Stop()
+
 # Cross platform log to syslog and console with colors
 class mylog:
+
+    # In a multiprocessing environment, attempt to determine if I am the main process or a child
+    # The main process will open a listener that logs all messages that come in from it
+    # The child processes will not log directly but will instead send messages to the listener
+    #pname = multiprocessing.current_process().name
+    #if pname == "MainProcess":
+    #    mainlogger = True
+    #    listener = LogListener()
+    #else:
+    #    mainlogger = False
+    #    if listener:
+    #        listener.Stop()
+    #    client = multiprocessing.connection.Client(('127.0.0.1', 6000))
+
     silence = False
 
     logging.raiseExceptions = False
@@ -212,7 +330,7 @@ class mylog:
     if "win" not in platform.system().lower():
         syslog_formatter = logging.Formatter("%(name)s: %(levelname)s %(message)s") # prepend with ident and our severities
         syslog_address = "/dev/log"
-        if platform.system().lower() == "darwin": syslog_address="/var/run/syslog"
+        if "darwin" in platform.system().lower(): syslog_address="/var/run/syslog"
         syslog = SysLogHandler(address=syslog_address, facility=SysLogHandler.LOG_USER)
         syslog.setLevel(logging.DEBUG)
         syslog.setFormatter(syslog_formatter)
@@ -244,30 +362,35 @@ class mylog:
         lines = mylog._split_message(message)
         for line in lines:
             mylog.sftestlog.debug(line)
+
     @staticmethod
     def info(message):
         if mylog.silence: return
         lines = mylog._split_message(message)
         for line in lines:
             mylog.sftestlog.info(line)
+
     @staticmethod
     def warning(message):
         if mylog.silence: return
         lines = mylog._split_message(message)
         for line in lines:
             mylog.sftestlog.warning(line)
+
     @staticmethod
     def error(message):
         if mylog.silence: return
         lines = mylog._split_message(message)
         for line in lines:
             mylog.sftestlog.error(line)
+
     @staticmethod
     def exception(message):
         if mylog.silence: return
         lines = mylog._split_message(message)
         for line in lines:
             mylog.sftestlog.exception(line)
+
     @staticmethod
     def passed(message):
         if mylog.silence: return
@@ -398,6 +521,26 @@ class ScriptTimer:
         endTime = time.time()
         mylog.time(self.name + " total run time " + SecondsToElapsedStr(endTime - self.startTime))
 
+class SyncCounter(object):
+    """
+    Thread safe counter
+    """
+    def __init__(self, initialValue=0):
+        self.count = multiprocessing.RawValue("i", initialValue)
+        self.lock = multiprocessing.Lock()
+
+    def Increment(self):
+        with self.lock:
+            self.count.value += 1
+
+    def Decrement(self):
+        with self.lock:
+            self.count.value += 1
+
+    def Value(self):
+        with self.lock:
+            return self.count.value
+
 def ParseDateTime(pTimeString):
     known_formats = [
         "%Y-%m-%d %H:%M:%S.%f",     # old sf format
@@ -432,10 +575,14 @@ def TimestampToStr(pTimestamp, pFormatString = "%Y-%m-%d %H:%M:%S", pTimeZone = 
     display_time = datetime.datetime.fromtimestamp(pTimestamp, pTimeZone)
     return display_time.strftime(pFormatString)
 
-def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, ExitOnError=True, ApiVersion=5.0):
+def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, ExitOnError=False, ApiVersion=5.0):
     rpc_url = 'https://' + NodeIp + ':442/json-rpc/' + ("%1.1f" % ApiVersion)
+    return __CallApiMethodCommon(NodeIp, rpc_url, Username, Password, MethodName, MethodParams, ExitOnError, ApiVersion)
+
+def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams, ExitOnError=False, ApiVersion=5.0):
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
-    password_mgr.add_password(None, rpc_url, Username, Password)
+    if Username:
+        password_mgr.add_password(None, Url, Username, Password)
     handler = urllib2.HTTPBasicAuthHandler(password_mgr)
     opener = urllib2.build_opener(handler)
     urllib2.install_opener(opener)
@@ -457,9 +604,9 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
         http_retry = 5
         while True:
             api_resp = None
-            mylog.debug("Calling API on " + rpc_url + ": " + api_call)
+            mylog.debug("Calling API on " + Url + ": " + api_call)
             try:
-                api_resp = urllib2.urlopen(rpc_url, api_call)
+                api_resp = urllib2.urlopen(Url, api_call)
                 break
             except urllib2.HTTPError as e:
                 if (e.code == 401):
@@ -476,7 +623,13 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
                     else:
                         mylog.warning("HTTPError: " + str(e.code))
             except urllib2.URLError as e:
-                mylog.warning("URLError on " + rpc_url + " : " + str(e.reason))
+                # Immediately fail for "network unreachable" or "operation timed out"
+                if e.args and (e.args[0].errno == 51 or e.args[0].errno == 60):
+                    if ExitOnError:
+                        mylog.error("Could not call API method " + MethodName + ": " + e.args[0].strerror)
+                    else:
+                        raise SfApiError("URLError", e.args[0].strerror)
+                mylog.warning("URLError on " + Url + " : " + str(e.reason))
                 last_error_code = "URLError"
                 last_error_mess = str(e.reason)
             except httplib.BadStatusLine as e:
@@ -491,14 +644,14 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
             http_retry -= 1
             if http_retry <= 0:
                 if ExitOnError:
-                    mylog.error("Could not call API method " + pMethodName)
+                    mylog.error("Could not call API method " + MethodName)
                     exit(1)
                 raise SfApiError(last_error_code, last_error_mess)
 
             mylog.info("Waiting 60 seconds before trying API again...")
             time.sleep(60)
 
-        # At this point we got a good HTTP response code from the MVIP
+        # At this point we got a good HTTP response code from the URL
 
         # Read the raw text content of the response
         response_str = api_resp.read().decode('ascii')
@@ -516,7 +669,7 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
         try:
             response_obj = json.loads(response_str)
         except ValueError:
-            mylog.warning("Invalid JSON received from " + pMvip)
+            mylog.warning("Invalid JSON received from " + Ip)
             last_error_code = "Unknown"
             last_error_mess = "Invalid JSON"
             if (not response_str.endswith("}")):
@@ -532,12 +685,12 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
             return response_obj["result"]
 
         # Record the error
-        mylog.debug("Error response from " + str(NodeIp) + ": " + str(response_str))
+        mylog.debug("Error response from " + str(Ip) + ": " + str(response_str))
         last_error_code = response_obj["error"]["name"]
         last_error_mess = response_obj["error"]["message"]
 
         # See if it is an error we should retry
-        if response_obj["error"]["name"] == "xDBConnectionLoss" and (pMethodName.startswith("List") or pMethodName.startswith("Get")):
+        if response_obj["error"]["name"] == "xDBConnectionLoss" and (MethodName.startswith("List") or MethodName.startswith("Get")):
             mylog.warning("Retrying because of xDBConnectionLoss")
             retry -= 1
             continue # go back to the beginning and try to get a better response from the cluster
@@ -550,123 +703,9 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
             raise SfApiError(response_obj["error"]["name"], response_obj['error']['message'])
 
 # Function for calling solidfire API methods
-def CallApiMethod(pMvip, pUsername, pPassword, pMethodName, pMethodParams, ExitOnError=True, ApiVersion=1.0):
-    rpc_url = 'https://' + pMvip + '/json-rpc/' + ("%1.1f" % ApiVersion)
-
-    password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
-    password_mgr.add_password(None, rpc_url, pUsername, pPassword)
-    handler = urllib2.HTTPBasicAuthHandler(password_mgr)
-    opener = urllib2.build_opener(handler)
-    urllib2.install_opener(opener)
-
-    api_call = json.dumps( { 'method': pMethodName, 'params': pMethodParams, 'id': random.randint(100, 1000) } )
-    retry = 5
-    last_error_code = ""
-    last_error_mess = ""
-    while(True):
-
-        if retry <= 0:
-            mylog.error("Could not call API method " + pMethodName)
-            if ExitOnError:
-                sys.exit(1)
-            else:
-                raise SfApiError(last_error_code, last_error_message)
-
-        # First try to get a valid HTTP reply to the web service call
-        http_retry = 5
-        while True:
-            api_resp = None
-            mylog.debug("Calling API on " + rpc_url + ": " + api_call)
-            try:
-                api_resp = urllib2.urlopen(rpc_url, api_call)
-                break
-            except urllib2.HTTPError as e:
-                if (e.code == 401):
-                    if ExitOnError:
-                        mylog.error("Invalid username/password")
-                        exit(1)
-                    else:
-                        raise SfApiError("HTTP error 404", "Invalid username/password")
-                else:
-                    last_error_code = str(e.code)
-                    if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
-                        mylog.warning("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
-                        last_error_message = str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code])
-                    else:
-                        mylog.warning("HTTPError: " + str(e.code))
-            except urllib2.URLError as e:
-                mylog.warning("URLError on " + rpc_url + " : " + str(e.reason))
-                last_error_code = "URLError"
-                last_error_mess = str(e.reason)
-            except httplib.BadStatusLine as e:
-                mylog.warning("httplib.BadStatusLine: " + str(e))
-                last_error_code = "httplib.BadStatusLine"
-                last_error_mess = str(e)
-            except httplib.HTTPException as e:
-                mylog.warning("HTTPException: " + str(e))
-                last_error_code = "HTTPException"
-                last_error_mess = str(e)
-
-            http_retry -= 1
-            if http_retry <= 0:
-                if ExitOnError:
-                    mylog.error("Could not call API method " + pMethodName)
-                    exit(1)
-                raise SfApiError(last_error_code, last_error_mess)
-
-            mylog.info("Waiting 60 seconds before trying API again...")
-            time.sleep(60)
-
-        # At this point we got a good HTTP response code from the MVIP
-
-        # Read the raw text content of the response
-        response_str = api_resp.read().decode('ascii')
-        #print "Raw response = ------------------------------------------------------"
-        #print response_str
-        #print "---------------------------------------------------------------------"
-
-        # Make sure the response is the expected length
-        expected_len = int(api_resp.headers['content-length'])
-        actual_len = len(response_str)
-        if (expected_len != actual_len):
-            mylog.warning("API response: expected " + str(expected_len) + " bytes (content-length) but received " + str(actual_len) + " bytes")
-
-        # Try to parse the response into JSON
-        try:
-            response_obj = json.loads(response_str)
-        except ValueError:
-            mylog.warning("Invalid JSON received from " + pMvip)
-            last_error_code = "Unknown"
-            last_error_mess = "Invalid JSON"
-            if (not response_str.endswith("}")):
-                mylog.warning("JSON appears truncated")
-                last_error_mess = "Truncated JSON"
-                retry -= 1
-                continue # go back to the beginning and try to get a better response from the cluster
-
-        # At this point we have a valid JSON object back from the cluster
-
-        # If there was no error on the cluster side, return the response back to the caller
-        if "error" not in response_obj:
-            return response_obj["result"]
-
-        # Record the error
-        mylog.debug("Error response from " + str(pMvip) + ": " + str(response_str))
-        last_error_code = response_obj["error"]["name"]
-        last_error_mess = response_obj["error"]["message"]
-
-        # See if it is an error we should retry
-        if response_obj["error"]["name"] == "xDBConnectionLoss" and (pMethodName.startswith("List") or pMethodName.startswith("Get")):
-            mylog.warning("Retrying because of xDBConnectionLoss")
-            retry -= 1
-            continue # go back to the beginning and try to get a better response from the cluster
-
-        # Any other errors, fail
-        if ExitOnError:
-            mylog.error("Error " + response_obj['error']['name'] + " - " + response_obj['error']['message'])
-            sys.exit(1)
-        else:
-            raise SfApiError(response_obj["error"]["name"], response_obj['error']['message'])
+def CallApiMethod(Mvip, Username, Password, MethodName, MethodParams, ExitOnError=False, ApiVersion=1.0):
+    rpc_url = 'https://' + Mvip + '/json-rpc/' + ("%1.1f" % ApiVersion)
+    return __CallApiMethodCommon(Mvip, rpc_url, Username, Password, MethodName, MethodParams, ExitOnError, ApiVersion)
 
 def ConnectSsh(pClientIp, pUsername, pPassword):
     client = ssh.SSHClient()
@@ -689,15 +728,12 @@ def ConnectSsh(pClientIp, pUsername, pPassword):
                 client.connect(pClientIp, username=pUsername, password=pPassword)
                 return client
             except ssh.AuthenticationException: pass
-        mylog.debug(str(e))
-        mylog.error("Invalid username/password or key for " + pClientIp)
-        exit(1)
+
+        raise SfError("Invalid username/password or key for " + pClientIp)
     except ssh.SSHException as e:
-        mylog.error("SSH error connecting to " + pClientIp + ": " + str(e))
-        exit(1)
+        raise SfError("SSH error connecting to " + pClientIp + ": " + str(e))
     except socket.error as e:
-        mylog.error("Could not connect to " + pClientIp + ": " + str(e))
-        exit(1)
+        raise SfError("Could not connect to " + pClientIp + ": " + str(e))
 
     return client
 
@@ -736,9 +772,9 @@ class Command(object):
             # The PID of the subprocess is actually the PID of the shell (/bin/sh or cmd.exe), since we launch with shell=True above.
             # This means that killing this PID leaves the actual process we are interested in running as an orphaned subprocess
             # So we need to kill all the children of that parent process
-            if "win" in platform.system().lower():
+            if "windows" in platform.system().lower():
                 # This will kill everything in this shell as well as the shell itself
-                os.system("wmic Process WHERE ParentProcessID=" + str(ppid) + " delete  2>&1 > NUL")
+                os.system("wmic Process WHERE ParentProcessID=" + str(ppid) + " delete 2>&1 > NUL")
             else:
                 # Under Linux you can simply do this, but MacOS does not have the --ppid flag:
                 #os.system("for pid in $(ps --ppid " + str(ppid) + " -o pid --no-header); do kill -9 $pid; done")
@@ -759,6 +795,8 @@ def RunCommand(pCommandline, pTimeout=3600):
 def Ping(pIpAddress):
     if (platform.system().lower() == 'windows'):
         command = "ping -n 2 %s"
+    elif "darwin" in platform.system().lower():
+        command = "ping -n -i 1 -c 3 -W 2 %s"
     else:
         command = "ping -n -i 0.2 -c 5 -W 2 %s"
     ret = subprocess.call(command % pIpAddress, shell=True, stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
@@ -766,46 +804,6 @@ def Ping(pIpAddress):
         return True
     else:
         return False
-
-def GetInterfaceList(pIpAddress, pUsername, pPassword):
-    ssh = ConnectSsh(pIpAddress, pUsername, pPassword)
-    stdin, stdout, stderr = ExecSshCommand(ssh, "ifconfig -a | grep eth")
-    data = stdout.readlines()
-    all_ifaces = []
-    for line in data:
-        m = re.search("^(eth\d+)\s+", line)
-        if (m):
-            iface = m.group(1)
-            #mylog.info("  Found " + iface)
-            all_ifaces.append(iface)
-    ssh.close()
-    return all_ifaces
-
-def GetUpInterfaceList(pIpAddress, pUsername, pPassword):
-    ssh = ConnectSsh(pIpAddress, pUsername, pPassword)
-    stdin, stdout, stderr = ExecSshCommand(ssh, "ifconfig | grep eth")
-    data = stdout.readlines()
-    up_ifaces = []
-    for line in data:
-        m = re.search("^(eth\d+)\s+", line)
-        if (m):
-            iface = m.group(1)
-            #mylog.info("  Found " + iface)
-            up_ifaces.append(iface)
-    ssh.close()
-    return up_ifaces
-
-def EnableInterfaces(pIpAddress, pUsername, pPassword):
-    ssh = ConnectSsh(pIpAddress, pUsername, pPassword)
-    all_ifaces = GetInterfaceList(pIpAddress, pUsername, pPassword)
-    up_ifaces = GetUpInterfaceList(pIpAddress, pUsername, pPassword)
-    down_ifaces = []
-    for iface in all_ifaces:
-        if iface not in up_ifaces:
-            down_ifaces.append(iface)
-            ExecSshCommand(ssh, "ifup " + iface)
-    ssh.close()
-    return down_ifaces
 
 def ParseIpsFromList(pIpListString):
     if not pIpListString: return []
@@ -845,6 +843,54 @@ def IsValidIpv4Address(pAddressString):
 
     return True
 
+def IsValidIpv4AddressList(addressList):
+    if not addressList:
+        return False
+    for ip in addressList:
+        if not IsValidIpv4Address(ip):
+            return False
+    return True
+
+def ParseIntsFromList(integerListString):
+    if not integerListString: return []
+    int_list = []
+    pieces = integerListString.split(",")
+    for i in pieces:
+        i = i.strip()
+        try:
+            i = int(i)
+        except ValueError:
+            raise TypeError("'" + str(i) + "' is not a valid integer")
+        int_list.append(i)
+    return int_list
+
+def IsInteger(valueToTest):
+    try:
+        int(valueToTest)
+    except ValueError:
+        return False
+    return True
+
+def IsPositiveInteger(valueToTest):
+    return IsInteger(valueToTest) and valueToTest >= 0
+
+def IsIntegerList(valueToTest):
+    for i in valueToTest:
+        if not IsInteger(i):
+            return False
+    return True
+
+def GetFirstLine(stringValue):
+    if not stringValue:
+        return stringValue
+
+    lines = str(stringValue).split("\n")
+    for line in lines:
+        if not line:
+            continue
+        return line
+    return stringValue
+
 def GetSfVersion(pNodeIp):
     ssh = ConnectSsh(pNodeIp, "root", "password")
     command = "/sf/bin/sfapp --Version"
@@ -880,7 +926,7 @@ def SendEmail(pEmailTo, pEmailSubject, pEmailBody, pAttachments = None, pEmailFr
     if (pEmailServer == "" or pEmailServer == None):
         pEmailServer = 'aspmx.l.google.com'
     if (pEmailFrom == "" or pEmailFrom == None):
-        pEmailFrom = "testscript@nothing"
+        pEmailFrom = "testscript@solidfire.com"
 
     if (type(pEmailTo) is list):
         send_to = pEmailTo
@@ -920,69 +966,6 @@ def SendEmail(pEmailTo, pEmailSubject, pEmailBody, pAttachments = None, pEmailFr
         smtp.login(pServerUsername,pServerPassword)
     smtp.sendmail(pEmailFrom, send_to, msg.as_string())
     smtp.close()
-
-def IsSliceSyncing(pMvip, pUsername, pPassword):
-    sync_html = HttpRequest("https://" + pMvip + "/reports/slicesyncing", pUsername, pPassword)
-    if (sync_html != None and "table" in sync_html):
-        return True
-    else:
-        return False
-
-def IsBinSyncing(pMvip, pUsername, pPassword):
-    sync_html = HttpRequest("https://" + pMvip + "/reports/binsyncing", pUsername, pPassword)
-    if (sync_html != None and "table" in sync_html):
-        return True
-    else:
-        return False
-
-def GetLastGcInfo(pMvip, pUsername, pPassword):
-    result = CallApiMethod(pMvip, pUsername, pPassword, 'ListServices', {})
-    bs_count = 0
-    if result is None: return None
-    for service in result["services"]:
-        service_info = service["service"]
-        service_type = service_info["serviceType"]
-        if (service_type == "block"): bs_count += 1
-
-    event_list = CallApiMethod(pMvip, pUsername, pPassword, 'ListEvents', {})
-    blocks_discarded = 0
-    gc_generation = 0
-    gc_complete_count = 0
-    gc_start_time = 0
-    gc_end_time = 0
-    for i in range(len(event_list['events'])):
-        event = event_list['events'][i]
-        if ("GCStarted" in event["message"]):
-            details = event["details"]
-            m = re.search("GC generation:(\d+)", details)
-            if (m):
-                if (int(m.group(1)) == gc_generation):
-                    gc_start_time = ParseTimestamp(event['timeOfReport'])
-                    break
-        if ("GCCompleted" in event["message"]):
-            details = event["details"]
-            pieces = details.split()
-            if (gc_generation <= 0): gc_generation = int(pieces[0])
-            if (int(pieces[0]) == gc_generation):
-                gc_complete_count += 1
-                blocks_discarded += int(pieces[1])
-                end_time = ParseTimestamp(event['timeOfReport'])
-                if (end_time > gc_end_time):
-                    gc_end_time = end_time
-    if (gc_complete_count >= bs_count):
-        return (gc_start_time, gc_end_time, blocks_discarded * 4096)
-    else:
-        return (gc_start_time, 0, 0)
-
-def CheckCoreFiles(pNodeIp, pUsername, pPassword, pSinceTime = 0):
-    timestamp = TimestampToStr(pSinceTime, "%Y%m%d%H%M.%S")
-    command = "touch -t " + timestamp + " /tmp/timestamp;find /sf -maxdepth 1 \\( -name \"core*\" ! -name \"core.zktreeutil*\" \\) -newer /tmp/timestamp| wc -l"
-    #print command
-    ssh = ConnectSsh(pNodeIp, pUsername, pPassword)
-    stdin, stdout, stderr = ExecSshCommand(ssh, command)
-    result = stdout.readlines()
-    result = int(result[0].strip('\n'))
-    return result
 
 def CheckForEvent(pEventString, pMvip, pUsername, pPassword, pSinceTime = 0):
     event_list = CallApiMethod(pMvip, pUsername, pPassword, 'ListEvents', {})
@@ -1113,7 +1096,7 @@ def WaitForGC(pMvip, pUsername, pPassword, pSince, pWaitThreshold = 30, pNotifyE
         service_type = service_info["serviceType"]
         if (service_type == "block"): bs_count += 1
 
-    mylog.info("Waiting for GC after " + TimestampToStr(pSince))
+    mylog.info("Waiting for a GC after " + TimestampToStr(pSince) + " to complete on " + str(bs_count) + " BServices")
 
     blocks_discarded = 0
     gc_generation = 0
@@ -1126,11 +1109,11 @@ def WaitForGC(pMvip, pUsername, pPassword, pSince, pWaitThreshold = 30, pNotifyE
         event_list = CallApiMethod(pMvip, pUsername, pPassword, 'ListEvents', {})
         for i in range(len(event_list['events'])-1, -1, -1):
             event = event_list['events'][i]
-            if ("GCRescheduled" in event["message"]):
-                event_time = ParseTimestamp(event['timeOfReport'])
-                if event_time < pSince: continue
-                mylog.warning("GCRescheduled - GC was not run")
-                return (ParseTimestamp(event['timeOfReport']), 0, 0)
+            #if ("GCRescheduled" in event["message"]):
+            #    event_time = ParseTimestamp(event['timeOfReport'])
+            #    if event_time < pSince: continue
+            #    mylog.warning("GCRescheduled - GC was not run")
+            #    return (ParseTimestamp(event['timeOfReport']), 0, 0)
 
             if ("GCStarted" in event["message"]):
                 gc_start_time = ParseTimestamp(event['timeOfReport'])
@@ -1143,8 +1126,6 @@ def WaitForGC(pMvip, pUsername, pPassword, pSince, pWaitThreshold = 30, pNotifyE
         if (gc_start_time <= 0): time.sleep(30)
     mylog.info("GC started at " + TimestampToStr(gc_start_time))
     mylog.info("Waiting for all BS to finish GC")
-
-    # Need to modify this to catch GCRescheduled and consider that GC completion
 
     already_warned = False
     # Find GCCompleted event for each BS after the GCStarted time
@@ -1447,14 +1428,14 @@ def ClusterIsSliceSyncing(Mvip, Username, Password):
         # Get the slice assignments report
         result = HttpRequest("https://" + Mvip + "/reports/slices.json", Username, Password)
         slice_report = json.loads(result)
-    
+
         # Make sure there are no unhealthy services
         if "service" in slice_report:
             for ss in slice_report["services"]:
                 if ss["health"] != "good":
                     mylog.debug("Slice sync - one or more SS are unhealthy")
                     return True
-    
+
         # Make sure there are no volumes with multiple live secondaries or dead secondaries
         if "slice" in slice_report:
             for vol in slice_report["slices"]:
@@ -1526,7 +1507,83 @@ def FindVolumeAccessGroup(Mvip, Username, Password, VagName=None, VagId=None):
                 return vag
         raise SfError("Couldnot find group with ID " + str(VagId))
 
+def ValidateArgs(argsToValidate, argsPassed):
+    """Validate arguments
 
+    Args:
+        args_to_validate: a dictionary of argument names to validator functions.  If the validator function is None, just validate the argument is present and has a value
+        args_passed: a dictionary of argument names to argument values
 
+    Raises:
+        SfArgumentError: if there is a missing/invalid argument
+    """
 
+    errors = []
+    for arg_name in argsToValidate.keys():
+        if arg_name not in argsPassed:
+            errors.append("Missing argument '" + arg_name + "'")
+        else:
+            arg_value = argsPassed[arg_name]
+            if arg_value == None or len(str(arg_value)) < 1:
+                errors.append("Missing value for '" + arg_name + "'")
+            elif argsToValidate[arg_name] and not argsToValidate[arg_name](arg_value):
+                errors.append("Invalid value for '" + arg_name + "'")
+    if errors:
+        raise SfArgumentError("\n".join(errors))
 
+def ThreadRunner(threadList, resultList, concurrentThreadCount):
+    """Run a list of threads at a specified concurrency level
+
+    Args:
+        threadList: the list of thread or process objects to be run
+        resultList: the dictionary results are stored in, with key string threadname => value boolean result
+        concurrentThreadCount: max number of threads to execute in parallel
+
+    Returns:
+        True if all results evaluated true, False if any thread result failed
+    """
+    running_threads = []
+    for th in threadList:
+        # If we are above the thread count, wait for at least one thread to finish
+        while len(running_threads) >= concurrentThreadCount:
+            for i in range(len(running_threads)):
+                if not running_threads[i].is_alive():
+                    del running_threads[i]
+                    break
+        th.start()
+        running_threads.append(th)
+
+    # Wait for all threads to be done
+    for th in running_threads:
+        th.join()
+
+    # Check the results
+    for res in resultList.values():
+        if not res:
+            return False
+    return True
+
+def CallbackWrapper(callback):
+    """Create a safe callback that does not throw exceptions
+
+    KeyboardInterrupt and SystemExit are raised but all other exceptions are suppressed
+    Suppressed exceptions will print a warning and then return
+
+    Args:
+        callback: the function to call
+
+    Returns:
+        The wrapped callback function
+    """
+
+    def wrapped(*args, **kwargs):
+        try:
+            callback(*args, **kwargs)
+        except KeyboardInterrupt:
+            raise
+        except SystemExit:
+            raise
+        except Exception as e:
+            mylog.warning("Exception in callback: " + str(e))
+
+    return wrapped

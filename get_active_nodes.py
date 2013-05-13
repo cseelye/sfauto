@@ -1,102 +1,117 @@
 #!/usr/bin/python
 
-# This script will display the list of active nodes in the cluster
+"""
+This action will display a list of the active volumes in the cluster
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --csv               Display minimal output that is suitable for piping into other programs
 
-csv = False                     # Display minimal output that is suitable for piping into other programs
-                                # --csv
+    --bash              Display minimal output that is formatted for a bash array/for loop
+"""
 
-bash = False                    # Display minimal output that is formatted for a bash array/for  loop
-                                # --bash
-
-# ----------------------------------------------------------------------------
-
-import sys, os
-import os
+import sys
 from optparse import OptionParser
-import time
-from random import randint
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class GetActiveNodesAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, csv, bash
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--csv", action="store_true", dest="csv", help="display a minimal output that is suitable for piping into other programs")
-    parser.add_option("--bash", action="store_true", dest="bash", help="display a minimal output that is formatted for a bash array/for loop")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    if options.csv:
-        csv = True
-        mylog.silence = True
-    if options.bash:
-        bash = True
-        mylog.silence = True
-    if options.debug:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Get a list of active nodes in the cluster
+        """
 
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+        if bash or csv:
+            mylog.silence = True
 
-    # Find the MIP of the cluster master
-    result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
+        mylog.warning("get_active_nodes is deprecated; please use list_active_nodes instead")
 
-    if csv or bash:
-        separator = ","
-        if bash: separator = " "
-        nodes = []
-        for node in result["nodes"]:
-            nodes.append(node["mip"])
-        sys.stdout.write(separator.join(nodes) + "\n")
-        sys.stdout.flush()
-    else:
-        mylog.info(str(len(result["nodes"])) + " active nodes in cluster " + mvip)
-        for node in result["nodes"]:
-            mylog.info("  " + node["mip"] + " (node ID " + str(node["nodeID"]) + ")")
+        # Get a list of nodes in the cluster
+        try:
+            result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get node list: " + e.message)
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
+        # Display the nodes in the requested format
+        if csv or bash:
+            separator = ","
+            if bash:
+                separator = " "
+            nodes = []
+            for node in result["nodes"]:
+                nodes.append(node["mip"])
+            sys.stdout.write(separator.join(nodes) + "\n")
+            sys.stdout.flush()
+        else:
+            mylog.info(str(len(result["nodes"])) + " active nodes in cluster " + mvip)
+            for node in result["nodes"]:
+                mylog.info("  " + node["mip"] + " (node ID " + str(node["nodeID"]) + ")")
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
+    parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.csv, options.bash, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

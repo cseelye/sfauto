@@ -1,81 +1,126 @@
 #!/usr/bin/python
 
-# This script will get the capacity stats for a cluster.  The default behavior
-# is to print all stats to the screen.  When used with the "stat" parameter, the
-# behavior is to echo only that stat to the screen, such as for use in a bash
-# script to be saved into a variable
+"""
+This action will display the cluster capacity stats
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --stat              Which capacity stat to get (default is all)
 
-stat = ""                           # Which capacity stat to get.  Default is all
-                                    # --stat
+    --csv               Display minimal output that is suitable for piping into other programs
 
-# ----------------------------------------------------------------------------
+    --bash              Display minimal output that is formatted for a bash array/for loop
+"""
 
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class GetClusterCapacityAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, stat
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--stat", type="string", dest="stat", default=stat, help="the capacity stat to get")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    stat = options.stat
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip, stat=None, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Get cluster capacity stats
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+        if bash or csv:
+            mylog.silence = True
 
-    result = libsf.CallApiMethod(mvip, username, password, "GetClusterCapacity", {})
-    if stat != None and len(stat) > 0:
-        sys.stdout.write(str(result["clusterCapacity"][stat]) + "\n")
-    else:
-        for key, value in result["clusterCapacity"].iteritems():
-            mylog.info(str(key) + " = " + str(value))
-    exit(0)
+        try:
+            result = libsf.CallApiMethod(mvip, username, password, "GetClusterCapacity", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get capacity stats: " + e.message)
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
+        if stat:
+            if stat not in result["clusterCapacity"]:
+                mylog.error(stat + " is not in clusterCapacity")
+                return False
+
+            if csv or bash:
+                sys.stdout.write(str(result["clusterCapacity"][stat]) + "\n")
+                sys.stdout.flush()
+            else:
+                mylog.info(stat + " = " + str(result["clusterCapacity"][stat]))
+        else:
+            if csv or bash:
+                separator = ","
+                if bash:
+                    separator = " "
+                stats = []
+                for key, value in result["clusterCapacity"].iteritems():
+                    stats.append(str(key) + "=" + str(value))
+                sys.stdout.write(separator.join(stats))
+                sys.stdout.flush()
+            else:
+                for key, value in result["clusterCapacity"].iteritems():
+                    mylog.info(str(key) + " = " + str(value))
+
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--stat", type="string", dest="stat", default=None, help="the capacity stat to get")
+    parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
+    parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.stat, options.csv, options.bash, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

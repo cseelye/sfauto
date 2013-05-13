@@ -1,127 +1,127 @@
 #!/usr/bin/python
 
-# This script will check that a cluster is healthy
+"""
+This action will check the health of the cluster
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+Healthy is currently defined as no faults, no cores, no xUnknownBlockID
 
-ssh_user = "root"                   # The SSH username for the nodes
-                                    # --ssh_user
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-ssh_pass = "password"              # The SSH password for the nodes
-                                    # --ssh_pass
+    --user              The cluster admin username
+    SFUSER env var
 
-mvip = "192.168.0.0"                # The management VIP for the cluster
-                                    # --mvip
+    --pass              The cluster admin password
+    SFPASS env var
 
-username = "admin"                  # The username for the nodes
-                                    # --user
+    --ssh_user          The nodes SSH username
+    SFSSH_USER env var
 
-password = "password"              # The password for the nodes
-                                    # --pass
+    --ssh_pass          The nodes SSH password
+    SFSSH_PASS
 
-since = 0                           # Timestamp of when to check health from.  events, cores, etc from before this will be ignored
-                                    # --since
+    --since             When to check health from (unix timestamp). Any problems from before this will be ignored
 
-fault_whitelist = [                 # Ignore these faults if they are present
-    "clusterFull",                  # --whitelist
-    "clusterIOPSAreOverProvisioned",
-    "nodeHardwareFault"
-]
+    --fault_whitelist   Ignore these faults if they are present
+    SFFAULT_WHITELIST env var
 
-ignore_faults = False               # Do not check for cluster faults
-                                    # --ignore_faults
+    --ignore_faults     Do ot check for cluster faults
 
-ignore_cores = False                # Do not check for core files
-                                    # --ignore_coress
+    --ignore_cores      Do not check for core files
+"""
 
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+import lib.libsfnode as libsfnode
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
-def main():
-    global mvip, ssh_user, ssh_pass, username, password, since, fault_whitelist, ignore_cores, ignore_faults
+class CheckClusterHealthAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management VIP for the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the username for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the password for the cluster")
-    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=ssh_user, help="the SSH username for the nodes")
-    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes")
-    parser.add_option("--since", type="int", dest="since", default=since, help="timestamp of when to check health from")
-    parser.add_option("--fault_whitelist", type="string", dest="fault_whitelist", default=",".join(fault_whitelist), help="ignore these faults and do not wait for them to clear")
-    parser.add_option("--ignore_cores", action="store_true", dest="ignore_cores", help="ignore core files on nodes")
-    parser.add_option("--ignore_faults", action="store_true", dest="ignore_faults", help="ignore cluster faults")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    ssh_user = options.ssh_user
-    ssh_pass = options.ssh_pass
-    username = options.username
-    password = options.password
-    mvip = options.mvip
-    since = options.since
-    if options.ignore_cores: ignore_cores = True
-    if options.ignore_faults: ignore_faults = True
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
-    fault_whitelist = set()
-    whitelist_str = options.fault_whitelist
-    pieces = whitelist_str.split(',')
-    for fault in pieces:
-        fault = fault.strip()
-        if fault:
-            fault_whitelist.add(fault)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            },
+            args)
 
+    def Execute(self, mvip=sfdefaults.mvip, checkForCores=True, checkForFaults=True, fault_whitelist=None, since=0, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+        """
+        Check the health of the cluster
+        """
+        if fault_whitelist == None:
+            fault_whitelist = sfdefaults.fault_whitelist
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    # get the list of nodes in the cluster
-    node_ips = []
-    obj = libsf.CallApiMethod(mvip, username, password, "ListActiveNodes", {})
-    for node in obj["nodes"]:
-        node_ips.append(node["mip"])
-    node_ips.sort()
+        cluster = libsfcluster.SFCluster(mvip, username, password)
 
-    healthy = True
+        # Get the list of nodes in the cluster
+        try:
+            node_ips = cluster.ListActiveNodeIPs()
+        except libsf.SfError as e:
+            mylog.error("Failed to get list of nodes: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-    # Check for core files
-    if not ignore_cores:
+        healthy = True
+
+        # Check for core files
         for node_ip in node_ips:
             mylog.info("Checking for core files on " + node_ip)
-            core_count = libsf.CheckCoreFiles(node_ip, ssh_user, ssh_pass, since)
-            if (core_count > 0):
+            node = libsfnode.SFNode(node_ip, ssh_user, ssh_pass)
+            try:
+                core_list = node.GetCoreFileList(since)
+            except libsf.SfError as e:
+                mylog.error("Failed to check for core files: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+            if (len(core_list) > 0):
+                if checkForCores:
+                    healthy = False
+                    mylog.error("Found " + str(len(core_list)) + " core files on " + node_ip + ": " + ",".join(core_list))
+                else:
+                    mylog.warning("Found " + str(len(core_list)) + " core files on " + node_ip + ": " + ",".join(core_list))
+
+        # Check for xUnknownBlockID
+        mylog.info("Checking for errors in cluster event log")
+        try:
+            if cluster.CheckForEvent("xUnknownBlockID", since):
                 healthy = False
-                mylog.error("Found " + str(core_count) + " core files on " + node_ip)
+                mylog.error("Found xUnknownBlockId in the event log")
+        except libsf.SfError as e:
+            mylog.error("Failed to check events: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-    # Check for xUnknownBlockID
-    mylog.info("Checking for errors in cluster event log")
-    if libsf.CheckForEvent("xUnknownBlockID", mvip, username, password, since):
-        healthy = False
-        mylog.error("Found xUnknownBlockId in the event log")
+        # Check current cluster faults
+        if checkForFaults:
+            mylog.info("Checking for unresolved cluster faults")
 
-    # Check current cluster faults
-    if not ignore_faults:
-        mylog.info("Checking for unresolved cluster faults")
-        if len(fault_whitelist) > 0: mylog.info("  If these faults are present, they will be ignored: " + ", ".join(fault_whitelist))
-        obj = libsf.CallApiMethod(mvip, username, password, "ListClusterFaults", {"exceptions": 1, "faultTypes": "current"})
-        if (len(obj["faults"]) > 0):
-            current_faults = set()
-            for fault in obj["faults"]:
-                if fault["code"] not in current_faults:
-                    current_faults.add(fault["code"])
+            fault_whitelist = set(fault_whitelist)
+            if len(fault_whitelist) > 0:
+                mylog.info("  If these faults are present, they will be ignored: " + ", ".join(fault_whitelist))
+
+            try:
+                current_faults = cluster.GetCurrentFaultSet()
+            except libsf.SfError as e:
+                mylog.error("Failed to get list of faults: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
 
             if current_faults & fault_whitelist == current_faults:
                 mylog.info("Current cluster faults found: " + ", ".join(current_faults))
@@ -129,26 +129,49 @@ def main():
                 healthy = False
                 mylog.error("Current cluster faults found: " + ", ".join(current_faults))
 
+        if healthy:
+            mylog.passed("Cluster is healthy")
+            return True
+        else:
+            mylog.error("Cluster is not healthy")
+            return False
 
-    if not healthy:
-        mylog.error("Cluster is not healthy")
-        exit(1)
-    else:
-        mylog.passed("Cluster is healthy")
-        exit(0)
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
+    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes")
+    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes")
+    parser.add_option("--since", type="int", dest="since", default=0, help="timestamp of when to check health from")
+    parser.add_option("--fault_whitelist", action="list", dest="fault_whitelist", default=None, help="ignore these faults and do not wait for them to clear")
+    parser.add_option("--ignore_cores", action="store_false", dest="checkForCores", default=True, help="ignore core files on nodes")
+    parser.add_option("--ignore_faults", action="store_false", dest="checkForFaults", default=True, help="ignore cluster faults")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.checkForCores, options.checkForFaults, options.fault_whitelist, options.since, options.username, options.password, options.ssh_user, options.ssh_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+    sys.exit(0)

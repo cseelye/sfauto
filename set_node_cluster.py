@@ -1,80 +1,111 @@
 #!/usr/bin/python
 
-# This script will set the clustername of a pending node
+"""
+This action will set the cluster name of an available node
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --node_ip           The node management IP
 
-node_ip = "192.168.000.000"         # The management IP of the node
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --cluster_name      The name of the cluster
+"""
 
-cluster_name = ""                   # The new cluster for the node
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
+import lib.libsfnode as libsfnode
 
+class SetNodeClusterAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_SET_CLUSTER_NAME = "BEFORE_SET_CLUSTER_NAME"
+        AFTER_SET_CLUSTER_NAME = "AFTER_SET_CLUSTER_NAME"
+        FAILURE = "FAILURE"
 
-def main():
-    global node_ip, username, password, cluster_name
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"nodeIPs" : libsf.IsValidIpv4AddressList,
+                            "username" : None,
+                            "password" : None,
+                            "cluster_name": None},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--node_ip", type="string", dest="node_ip", default=node_ip, help="the management IP of the node")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--cluster_name", type="string", dest="cluster_name", default=cluster_name, help="the new cluster for the node")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    node_ip = options.node_ip
-    username = options.username
-    password = options.password
-    cluster_name = options.cluster_name
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(node_ip):
-        mylog.error("'" + node_ip + "' does not appear to be a valid node IP")
-        sys.exit(1)
+    def Execute(self, nodeIPs, clusterName, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Set the cluster name of an available node
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    mylog.info("Setting cluster to '" + cluster_name + "' on node " + str(node_ip))
-    params = {}
-    params["cluster"] = {}
-    params["cluster"]["cluster"] = cluster_name
-    result = libsf.CallNodeApiMethod(node_ip, username, password, "SetConfig", params)
+        allgood = True
+        for node_ip in nodeIPs:
+            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_CLUSTER_NAME, clusterName=clusterName, nodeIP=node_ip)
+            mylog.info("Setting cluster to '" + clusterName + "' on node " + str(node_ip))
 
-    mylog.passed("Successfully set cluster name")
+            node = libsfnode.SFNode(node_ip)
+            try:
+                node.SetClusterName(clusterName)
+            except libsf.SfError as e:
+                mylog.error(str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, clusterName=clusterName, exception=e)
+                allgood = False
+                continue
+
+            mylog.passed("Successfully set cluster name")
+            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_CLUSTER_NAME, nodeIP=node_ip, clusterName=clusterName)
+
+        if allgood:
+            mylog.passed("Successfully set cluster name on all nodes")
+            return True
+        else:
+            mylog.error("Failed to set cluster name on all nodes")
+            return False
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-n", "--node_ips", action="list", dest="node_ips", default=None, help="the management IPs of the nodes")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
+    parser.add_option("--cluster_name", type="string", dest="cluster_name", default=None, help="the new cluster for the node")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.node_ips, options.cluster_name, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

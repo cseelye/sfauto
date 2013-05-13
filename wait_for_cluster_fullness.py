@@ -1,81 +1,122 @@
 #!/usr/bin/python
 
-# This script will wait for the cluster be be at least as full as specified
+"""
+This action will wait for the cluster to be at least as full as specified
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --full              How full (GB) to wait for
+"""
 
-full = 0                            # How full to wait for the cluster to be (GB)
-                                    # --full
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
 import time
-import libsf
-from libsf import mylog
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
+class WaitForClusterFullnessAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_WAIT = "BEFORE_WAIT"
+        WAIT_TIMEOUT = "WAIT_TIMEOUT"
+        CLUSTER_FILLED = "CLUSTER_FILLED"
 
-def main():
-    global mvip, username, password, full
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "full" : libsf.IsInteger,
+                            "timeout" : libsf.IsPositiveInteger},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--full", type="int", dest="full", default=full, help="how full to wait for the cluster to be (GB)")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    full = options.full
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, full, timeout=sfdefaults.fill_timeout, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Wait for cluster to fill to specified level
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    mylog.info("Waiting for cluster at " + mvip + " to be " + str(full) + " GB used")
-    while True:
-        result = libsf.CallApiMethod(mvip, username, password, "GetClusterCapacity", {})
-        if result["clusterCapacity"]["usedSpace"] >= full * 1000 * 1000 * 1000:
-            mylog.passed("Cluster is " + libsf.HumanizeDecimal(result["clusterCapacity"]["usedSpace"], 1, "G") + "B full")
-            exit(0)
-        time.sleep(30)
+        mylog.info("Waiting for cluster at " + mvip + " to be at least " + str(full) + " GB used")
+        cluster = libsfcluster.SFCluster(mvip, username, password)
+        start_time = time.time()
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_WAIT)
+        previous_fullness = -1
+        while True:
+            current_fullness = cluster.GetClusterUsedSpace()
+
+            if previous_fullness < 0 or ( current_fullness != previous_fullness and current_fullness - previous_fullness > 10 * 1000 * 1000 * 1000):
+                mylog.info("  Cluster used space is " + libsf.HumanizeDecimal(current_fullness, 1, "G") + "B")
+
+            if current_fullness >= full * 1000 * 1000 * 1000:
+                break
+
+            time.sleep(30)
+            if time.time() - start_time > timeout:
+                mylog.error("Timeout waiting for bin syncing")
+                super(self.__class__, self)._RaiseEvent(self.Events.WAIT_TIMEOUT)
+                return False
+
+        end_time = time.time()
+        duration = end_time - start_time
+
+        mylog.info("Finished waiting")
+        mylog.info("Cluster used space is " + libsf.HumanizeDecimal(current_fullness, 1, "G") + "B")
+        mylog.info("Duration " + libsf.SecondsToElapsedStr(duration))
+        mylog.passed("Cluster is filled to specified level")
+        super(self.__class__, self)._RaiseEvent(self.Events.CLUSTER_FILLED)
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--full", type="int", dest="full", default=0, help="how full (GB) to wait for")
+    parser.add_option("--timeout", type="int", dest="timeout", default=sfdefaults.fill_timeout, help="how long to wait (sec) before giving up [%default]")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.full, options.timeout, options.mvip, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

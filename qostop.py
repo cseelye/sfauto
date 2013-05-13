@@ -1,33 +1,29 @@
 #!/usr/bin/python
 
-# This script will monitor QoS on active volumes
+"""
+This action will watch QoS on active volumes
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
+"""
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 import re
-import curses
-import traceback
-import math
 import subprocess
 import platform
 import time
 from optparse import OptionParser
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
 
 class VolumeDetails:
     def __init__(self):
@@ -48,33 +44,23 @@ class VolumeDetails:
 
 def clear():
     p = subprocess.Popen( "cls" if platform.system() == "Windows" else "clear", shell=True)
-    p.wait();
+    p.wait()
 
-def main():
-    global mvip, username, password
+def ValidateArgs(args):
+    libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                        "username" : None,
+                        "password" : None},
+        args)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
-
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+def Execute(mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    """
+    Watch QoS on active volumes
+    """
+    ValidateArgs(locals())
+    if debug:
+        mylog.console.setLevel(logging.DEBUG)
 
     # Get the version of the cluster
-    major_version = 0
     result = libsf.CallApiMethod(mvip, username, password, 'GetClusterVersionInfo', {})
     cluster_version = float(result["clusterVersion"])
 
@@ -107,7 +93,8 @@ def main():
             stats_obj = libsf.CallApiMethod(mvip, username, password, "ListVolumeStatsByVolume", {})
             for vol in stats_obj["volumeStats"]:
                 vol_id = int(vol["volumeID"])
-                if vol_id not in volume_list.keys(): continue # skip deleted volumes
+                if vol_id not in volume_list.keys():
+                    continue # skip deleted volumes
                 if "averageIOPSize" in vol:
                     volume_list[vol_id].AverageIOPSize = int(vol["averageIOPSize"])
                     volume_list[vol_id].ActualIOPS = int(vol["actualIOPS"])
@@ -115,13 +102,12 @@ def main():
         qos_report = libsf.HttpRequest("https://" + str(mvip) + "/reports/qos", username, password)
         #qos_report = qos_report.replace("<br />", "\n")
         for line in qos_report.split("\n"):
-            m = re.search("volumeID=(\d+).+ssLoad\.GetServiceLoad\(\)=(\d+).+iopserror=(-?\d+).+bwerror=(-?\d+).+latency=(\d+).+resultingAction=(\d+)", line)
+            m = re.search(r"volumeID=(\d+).+ssLoad\.GetServiceLoad\(\)=(\d+).+iopserror=(-?\d+).+bwerror=(-?\d+).+latency=(\d+).+resultingAction=(\d+)", line)
             if m:
                 vol_id = int(m.group(1))
                 volume_list[vol_id].ssLoad = int(m.group(2))
                 volume_list[vol_id].ResultingAction = int(m.group(6))
-                volume_list[vol_id].QosThrottle = float(m.group(6)) / 500.0
-
+                volume_list[vol_id].QosThrottle = float(m.group(6)) / volume_list[vol_id].maxIOPS
 
         # Display volumes that are being throttled
         throttled_volumes = []
@@ -147,16 +133,34 @@ def main():
         time.sleep(1)
 
 
+def Abort():
+    pass
+
 if __name__ == '__main__':
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
-        #timer = libsf.ScriptTimer()
-        main()
+        timer = libsf.ScriptTimer()
+        if Execute(options.mvip, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+

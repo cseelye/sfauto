@@ -1,4 +1,4 @@
-import libsf
+import libsf as libsf
 from libsf import mylog
 import socket
 import XenAPI

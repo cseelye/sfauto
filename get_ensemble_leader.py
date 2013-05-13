@@ -18,7 +18,7 @@ password = "solidfire"              # Admin password for the cluster
 ssh_user = "root"               # The username for the nodes
                                 # --ssh_user
 
-ssh_pass = "sf.9012182"          # The password for the nodes
+ssh_pass = "password"          # The password for the nodes
                                 # --ssh_pass
 
 csv = False                     # Display minimal output that is suitable for piping into other programs

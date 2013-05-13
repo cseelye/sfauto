@@ -1,139 +1,170 @@
 #!/usr/bin/python
 
-# This script will run vdbench
+"""
+This action will run vdbench
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --output_dir        The directory to put the vdbench out file into
 
-output_dir = '/var/log/testlogs/vdbench.tod'     # The folder to pass to vdbench to save the output files in
-                                            # --output_dir
+    --input_file        The vdbench input file
 
-input_file = 'vdbench_input'                # The input file to pass to vdbench
-                                            # --input_file
+    --additional_args   Any additional args to pass to vdbench on the command line
 
-additional_args = ''                        # Any other arguments to pass to vdbench
-                                            # --additional_args
+    --stdout_file       The name of the file to save vdbench stdout into
+"""
 
-output_file = 'bench.latest'                # File to save vdbench STDOUT to
-                                            # --output_file
-
-# ----------------------------------------------------------------------------
-
-
-import sys, os
+import sys
 from optparse import OptionParser
 import subprocess
 import os
 import signal
 import time
 import re
-import datetime
-import libsf
-from libsf import mylog
-from libsf import ColorTerm
+import platform
+import logging
+import inspect
+import lib.libsf as libsf
+from lib.libsf import mylog
+from lib.libsf import ColorTerm
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class RunVdbenchAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_START_VDBENCH = "BEFORE_START_VDBENCH"
+        AFTER_STOP_VDBENCH = "AFTER_STOP_VDBENCH"
+        STARTING_RD = "STARTING_RD"
+        VDBENCH_ERROR = "VDBENCH_ERROR"
 
-def main():
-    # Parse command line arguments
-    parser = OptionParser()
-    global output_dir, input_file, additional_args, output_file
-    parser.add_option("--output_dir", type="string", dest="output_dir", default=output_dir, help="the output folder to pass to vdbench")
-    parser.add_option("--input_file", type="string", dest="input_file", default=input_file, help="the input file to pass to vdbench")
-    parser.add_option("--additional_args", type="string", dest="additional_args", default=additional_args, help="any other arguments to pass to vdbench")
-    parser.add_option("--output_file", type="string", dest="output_file", default=output_file, help="file to save vdbench stdout to")
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
+        self._vdbench_process = None
+        self.ReturnCode = -1
 
-    (options, args) = parser.parse_args()
-    output_dir = options.output_dir
-    input_file = options.input_file
-    additional_args = options.additional_args.split()
-    output_file = options.output_file
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"ouputDir" : None,
+                            "inputFile" : None,
+                            "stdoutFile" : None},
+            args)
 
-    # Install signal handlers so we can run this script in the background
-    import signal
-    def shutdown_handler(signal, frame):
-        global vdbench
-        if vdbench:
-            os.kill(vdbench.pid, signal.SIGINT)
-        exit(1)
+    def Execute(self, outputDir=sfdefaults.vdbench_outputdir, inputFile=sfdefaults.vdbench_inputfile, stdoutFile="bench.latest", debug=False):
+        """
+        Run vdbench
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    signal.signal(signal.SIGINT, shutdown_handler)
-    signal.signal(signal.SIGTERM, shutdown_handler)
-    signal.signal(signal.SIGHUP, shutdown_handler)
+        try:
+            log = open(stdoutFile, "w")
+            arg_list = ["/opt/vdbench/vdbench", "-o", outputDir, "-f ", inputFile]
+            mylog.debug("Using command line " + " ".join(arg_list))
+            log.write("Using command line " + " ".join(arg_list))
+            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_START_VDBENCH)
 
-    returncode = -1
-    try:
-        log = open(output_file, "w")
-        arg_list = ["/opt/vdbench/vdbench", "-o", output_dir, "-f ", input_file] + additional_args
-        mylog.debug("Using command line " + " ".join(arg_list))
-        log.write("Using command line " + " ".join(arg_list))
+            self._vdbench_process = subprocess.Popen(arg_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            for line in iter(self._vdbench_process.stdout.readline, ""):
+                ColorTerm.screen.reset()
+                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.WhiteFore, ColorTerm.ConsoleColors.BlackBack)
 
-        global vdbench
-        vdbench = subprocess.Popen(arg_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        for line in iter(vdbench.stdout.readline, ""):
-            ColorTerm.screen.reset()
-            ColorTerm.screen.set_color(ColorTerm.ConsoleColors.WhiteFore, ColorTerm.ConsoleColors.BlackBack)
+                if (re.search("All slaves are now connected", line)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
+                elif (re.search("Starting RD", line)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
+                    super(self.__class__, self)._RaiseEvent(self.Events.STARTING_RD)
+                elif (re.search("Vdbench execution completed successfully", line)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
+                elif (re.search("No read validations done", line)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.YellowFore, ColorTerm.ConsoleColors.BlackBack)
+                    self.ReturnCode = 1
+                elif (re.search("/var/log/messages", line)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.YellowFore, ColorTerm.ConsoleColors.BlackBack)
+                    self.ReturnCode = 2
+                elif (re.search("conn error", line)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.YellowFore, ColorTerm.ConsoleColors.BlackBack)
+                    self.ReturnCode = 4
+                    super(self.__class__, self)._RaiseEvent(self.Events.VDBENCH_ERROR)
+                elif (re.search("error", line, re.IGNORECASE)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
+                    self.ReturnCode = 8
+                    super(self.__class__, self)._RaiseEvent(self.Events.VDBENCH_ERROR)
+                elif (re.search("invalid", line, re.IGNORECASE)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
+                    self.ReturnCode = 16
+                    super(self.__class__, self)._RaiseEvent(self.Events.VDBENCH_ERROR)
+                elif (re.search("exception", line, re.IGNORECASE)):
+                    ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
+                    self.ReturnCode = 32
+                    super(self.__class__, self)._RaiseEvent(self.Events.VDBENCH_ERROR)
 
-            if (re.search("All slaves are now connected", line)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
-            elif (re.search("Starting RD", line)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
-            elif (re.search("Vdbench execution completed successfully", line)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
-            elif (re.search("No read validations done", line)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.YellowFore, ColorTerm.ConsoleColors.BlackBack)
-                returncode = 1
-            elif (re.search("/var/log/messages", line)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.YellowFore, ColorTerm.ConsoleColors.BlackBack)
-                returncode = 2
-            elif (re.search("conn error", line)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.YellowFore, ColorTerm.ConsoleColors.BlackBack)
-                returnocde = 4
-            elif (re.search("error", line, re.IGNORECASE)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
-                returncode = 8
-            elif (re.search("invalid", line, re.IGNORECASE)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
-                returncode = 16
-            elif (re.search("exception", line, re.IGNORECASE)):
-                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
-                returncode = 32
+                line = time.strftime("%Y-%m-%d ", time.localtime()) + line.rstrip()
+                print line
+                log.write(line + "\n")
+                log.flush()
 
-    #        if not (re.search("^\d{2}:\d{2}:\d{2}\.\d{3}", line)):
-    #            line = time.strftime("%H:%M:%S    ", time.localtime()) + line
+        except KeyboardInterrupt:
+            self.Abort()
 
-            line = time.strftime("%Y-%m-%d ", time.localtime()) + line.rstrip()
-            print line
-            log.write(line + "\n")
-            log.flush()
+        log.close()
+        ColorTerm.screen.reset()
+        if (self.ReturnCode < 0):
+            self.ReturnCode = self._vdbench_process.returncode
 
-    except KeyboardInterrupt:
-        try: os.kill(vdbench.pid, signal.SIGINT)
-        except OSError: pass
+        if self.ReturnCode == 0:
+            return True
+        else:
+            return False
 
-    log.close()
-    ColorTerm.screen.reset()
-    if (returncode < 0):
-        returncode = vdbench.returncode
+    def Shutdown(self):
+        self.Abort()
+        sys.exit(0)
 
-    exit(returncode)
+    def Abort(self):
+        if self._vdbench_process:
+            os.kill(self._vdbench_process.pid, signal.SIGINT)
+        self.ReturnCode = 0
+        ColorTerm.screen.reset()
+        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_STOP_VDBENCH)
 
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("--output_dir", type="string", dest="output_dir", default=sfdefaults.vdbench_outputdir, help="the output folder to pass to vdbench")
+    parser.add_option("--input_file", type="string", dest="input_file", default=sfdefaults.vdbench_inputfile, help="the input file to pass to vdbench")
+    parser.add_option("--sdout_file", type="string", dest="stdout_file", default="bench.latest", help="file to save vdbench stdout to")
+    parser.add_option("--debug", action="store_true", default=False, dest="debug", help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
+    signal.signal(signal.SIGINT, Shutdown)
+    signal.signal(signal.SIGTERM, Shutdown)
+    if "windows" not in platform.system().lower():
+        signal.signal(signal.SIGHUP, Shutdown)
+
     try:
-        #timer = libsf.ScriptTimer()
-        main()
+        timer = libsf.ScriptTimer()
+        if Execute(options.output_dir, options.input_file, options.stdout_file, options.debug):
+            sys.exit(0)
+        else:
+            # Use the vdbench return code as our return code
+            sys.exit(action.ReturnCode)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
-
-
-
+        sys.exit(1)
 

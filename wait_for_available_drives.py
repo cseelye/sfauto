@@ -1,89 +1,105 @@
 #!/usr/bin/env python
 
-# This script waits for a given number of available drives to be in the cluster
+"""
+This action will wait for a given number of available drives to be in the cluster
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.0.0"        # The management VIP for the cluster
-                            # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"          # The cluster username
-                            # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"      # The cluster password
-                            # --pass
+    --drive_count       The number of available drives to wait for
+"""
 
-drive_count = 0             # The number of drives to wait for
-                            # --drive_count
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
 import time
-import libsf
-from libsf import mylog
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
-def main():
-    global mvip, username, password, drive_count
+class WaitForAvailableDrivesAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Parse command line options
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management VIP for the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the username for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the password for the cluster")
-    parser.add_option("--drive_count", type="int", dest="drive_count", default=drive_count, help="the number of drives to wait for")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    username = options.username
-    password = options.password
-    mvip = options.mvip
-    drive_count = options.drive_count
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "driveCount" : libsf.IsInteger},
+            args)
+        if args["driveCount"] < 0:
+            raise libsf.SfArgumentError("driveCount must be a positive integer")
 
-    mylog.info("Waiting for " + str(drive_count) + " available drives...")
-    while True:
-        avail_count = 0
-        params = dict()
-        params["drives"] = []
-        result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
-        for drive in result["drives"]:
-            if drive["status"] == "available":
-                avail_count += 1
-        if avail_count >= drive_count:
-            mylog.passed("Found " + str(avail_count) + " available drives")
-            sys.exit(0)
+    def Execute(self, driveCount, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Wait for the given number of available drives
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-        mylog.info("Found " + str(avail_count) + " available drives")
-        time.sleep(10)
+        mylog.info("Waiting for " + str(driveCount) + " available drives...")
+        cluster = libsfcluster.SFCluster(mvip, username, password)
+        previous_found = -1
+        while True:
+            available = cluster.ListAvailableDrives()
+            avail_count = len(available)
+            if avail_count >= driveCount:
+                mylog.passed("Found " + str(avail_count) + " available drives")
+                return True
 
+            if avail_count != previous_found:
+                mylog.info("Found " + str(avail_count) + " available drives")
+                previous_found = avail_count
+
+            time.sleep(10)
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--drive_count", type="string", dest="drive_count", default=0, help="the number of drives to wait for")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.drive_count, options.mvip, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

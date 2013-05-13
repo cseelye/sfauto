@@ -1,162 +1,194 @@
 #!/usr/bin/python
 
-# This script will create a cluster, wait for all of the drives to to available and then add them
+"""
+This action will create a cluster
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --node_ip           The IP address of the node to use to create the cluster
 
-mvip = "192.168.000.000"        # The management VIP of the cluster
-                                # --mvip
+    --mvip              The management VIP of the cluster
+    SFMVIP env var
 
-svip = "10.10.000.000"          # The storage VIP of the cluster
-                                # --svip
+    --svip              The storage VIP of the cluster
+    SFSVIP env var
 
-username = "admin"              # Admin account for the cluster
-                                # --user
+    --user              The cluster admin username
+    SFUSER env var
 
-password = "password"          # Admin password for the cluster
-                                # --pass
+    --pass              The cluster admin password
+    SFPASS env var
 
-node_ip = "192.168.133.000"     # The IP address of the storage node to use to create the cluster
-                                # --node_ip
+    --node_count        How many nodes to wait for before creating the cluster
 
-drive_count = 0                 # Override how many available drives to look for
-                                # --drive_count
+    --add_drives        Add available drives to the cluster after creation
 
-node_count = 0                  # The required number of nodes to create the cluster with.
-                                # if zero, use whatever comes back from the first call to GetBootstrapConfig
-                                # --node_count
+    --drive_count       How many available drives to wait for before adding
+"""
 
-# ----------------------------------------------------------------------------
-
-import sys, os
-import os
+import sys
 from optparse import OptionParser
-import json
-import urllib2
-import random
-import re
-import platform
 import time
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-def main():
-    global mvip, svip, username, password, node_ip, drive_count, node_count
+class CreateClusterAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "svip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management VIP of the cluster")
-    parser.add_option("--svip", type="string", dest="svip", default=svip, help="the storage VIP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--node_ip", type="string", dest="node_ip", default=node_ip, help="the IP address of the storage node to use to create the cluster")
-    parser.add_option("--drive_count", type="int", dest="drive_count", default=drive_count, help="total number of available drives to look for after the cluster is created (default is node count * 11)")
-    parser.add_option("--node_count", type="int", dest="node_count", default=node_count, help="total number of nodes to use to create the cluster from (default is whatever comes back from GetBootstrapConfig)")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    svip = options.svip
-    username = options.username
-    password = options.password
-    node_ip = options.node_ip
-    drive_count = options.drive_count
-    node_count = options.node_count
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
-    if not libsf.IsValidIpv4Address(svip):
-        mylog.error("'" + svip + "' does not appear to be a valid SVIP")
-        sys.exit(1)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"node_ip" : libsf.IsValidIpv4Address,
+                            "mvip" : libsf.IsValidIpv4Address,
+                            "svip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None},
+            args)
 
+    def Execute(self, node_ip, mvip=sfdefaults.mvip, svip=sfdefaults.svip, username=sfdefaults.username, password=sfdefaults.password, add_drives=True, drive_count=0, node_count=0, debug=False):
+        """
+        Create a cluster
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    mylog.info("Creating cluster with")
-    mylog.info("\tMVIP:       " + mvip)
-    mylog.info("\tSVIP:       " + svip)
-    mylog.info("\tAdmin User: " + username)
-    mylog.info("\tAdmin Pass: " + password)
+        mylog.info("Creating cluster with")
+        mylog.info("\tMVIP:       " + mvip)
+        mylog.info("\tSVIP:       " + svip)
+        mylog.info("\tAdmin User: " + username)
+        mylog.info("\tAdmin Pass: " + password)
 
-
-    params = {}
-    ntries = 0
-    mylog.info("Waiting for " + str(node_count) + " nodes ...")
-    while True:
-        response = libsf.CallApiMethod(node_ip, username, password, "GetBootstrapConfig", params)
-        nodelist = response["nodes"]
-        mylog.info("\tNodes:      " + str(nodelist))
-        if node_count == 0 or len(nodelist) >= node_count:
-            break
-        else:
-            time.sleep(5)
-        ntries += 1
-        if ntries > 10:
-            mylog.error("couldn't find " + str(node_count) + " nodes, only found " + str(len(nodelist)))
-            sys.exit(1)
-
-    mylog.info("Creating cluster ...")
-    params = {}
-    params["mvip"] = mvip
-    params["svip"] = svip
-    params["username"] = username
-    params["password"] = password
-    params["nodes"] = nodelist
-    response = libsf.CallApiMethod(node_ip, username, password, "CreateCluster", params)
-    mylog.passed("Cluster created successfully")
-
-    expected_drives = len(nodelist) * 11
-    if (drive_count > 0):
-        expected_drives = drive_count
-    mylog.info("Waiting for " + str(expected_drives) + " available drives...")
-    actual_drives = 0
-
-    # Starting with Be, the MVIP usually isn't ready right after the create call returns; need to wait a few seconds before trying any API calls
-    time.sleep(20)
-
-    while (actual_drives < expected_drives):
         params = {}
-        response = libsf.CallApiMethod(mvip, username, password, "ListDrives", params)
-        actual_drives = len(response["drives"])
+        ntries = 0
+        if node_count > 0:
+            mylog.info("Waiting for " + str(node_count) + " nodes ...")
+        while True:
+            try:
+                response = libsf.CallApiMethod(node_ip, username, password, "GetBootstrapConfig", params)
+            except libsf.SfError as e:
+                mylog.error("Failed to get bootstrap config: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
 
-    mylog.info("Adding all drives to cluster...")
-    drive_list = []
-    for i in range(len(response["drives"])):
-        drive = response["drives"][i]
-        if (drive["status"].lower() == "available"):
-            new_drive = dict()
-            new_drive["driveID"] = drive["driveID"]
-            new_drive["type"] = "automatic"
-            drive_list.append(new_drive)
-    params = {}
-    params["drives"] = drive_list
-    response = libsf.CallApiMethod(mvip, username, password, "AddDrives", params)
-    mylog.passed("All drives added")
+            nodelist = response["nodes"]
+            mylog.info("\tNodes:      " + ", ".join(nodelist))
+            if node_count == 0 or len(nodelist) >= node_count:
+                break
+            else:
+                time.sleep(10)
+            ntries += 1
+            if ntries > 10:
+                mylog.error("Couldn't find " + str(node_count) + " nodes, only found " + str(len(nodelist)))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                return False
 
+        mylog.info("Creating cluster ...")
+        params = {}
+        params["mvip"] = mvip
+        params["svip"] = svip
+        params["username"] = username
+        params["password"] = password
+        params["nodes"] = nodelist
+        try:
+            libsf.CallApiMethod(node_ip, username, password, "CreateCluster", params)
+        except libsf.SfError as e:
+            mylog.error("Failed to create cluster: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        mylog.passed("Cluster created successfully")
+
+        if not add_drives:
+            return True
+
+        expected_drives = len(nodelist) * 11
+        if (drive_count > 0):
+            expected_drives = drive_count
+        mylog.info("Waiting for " + str(expected_drives) + " available drives...")
+        actual_drives = 0
+
+        # Wait a little while to make sure the MVIP is up and ready and the drives have become available
+        time.sleep(30)
+
+        while (actual_drives < expected_drives):
+            params = {}
+            try:
+                response = libsf.CallApiMethod(mvip, username, password, "ListDrives", params)
+            except libsf.SfError as e:
+                mylog.error("Failed to list drives: " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                return False
+            actual_drives = len(response["drives"])
+
+        mylog.info("Adding all drives to cluster...")
+        try:
+            response = libsf.CallApiMethod(mvip, username, password, "ListDrives", params)
+        except libsf.SfError as e:
+            mylog.error("Failed to list drives: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        drive_list = []
+        for i in range(len(response["drives"])):
+            drive = response["drives"][i]
+            if (drive["status"].lower() == "available"):
+                new_drive = dict()
+                new_drive["driveID"] = drive["driveID"]
+                new_drive["type"] = "automatic"
+                drive_list.append(new_drive)
+        params = {}
+        params["drives"] = drive_list
+        try:
+            libsf.CallApiMethod(mvip, username, password, "AddDrives", params)
+        except libsf.SfError as e:
+            mylog.error("Failed to add drives: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        mylog.passed("All drives added")
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("--node_ip", type="string", dest="node_ip", default=None, help="the IP address of the storage node to use to create the cluster")
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP of the cluster")
+    parser.add_option("--svip", type="string", dest="svip", default=sfdefaults.svip, help="the storage VIP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--node_count", type="int", dest="node_count", default=0, help="total number of nodes to use to create the cluster from (default is whatever comes back from GetBootstrapConfig)")
+    parser.add_option("--noadd_drives", action="store_false", dest="add_drives", default=True, help="Do not add available drives to the cluster after creation")
+    parser.add_option("--drive_count", type="int", dest="drive_count", default=0, help="total number of available drives to look for after the cluster is created (default is node count * 11)")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.node_ip, options.mvip, options.svip, options.username, options.password, options.add_drives, options.drive_count, options.node_count, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
-
-
+        sys.exit(1)
 

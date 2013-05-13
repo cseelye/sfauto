@@ -1,162 +1,176 @@
 #!/usr/bin/env python
 
-# This script restart solidfire on multiple nodes simultaneously
+"""
+This action will restart solidfire on a list of nodes simultaneously
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --node_ips          List of node IP addresses
+    SFNODE_IPS
 
-node_ips = [                    # The IP addresses of the nodes
-    "192.168.133.0",            # --node_ips
-    "192.168.133.0",
-    "192.168.133.0",
-    "192.168.133.0",
-    "192.168.133.0",
-]
+    --ssh_user          The nodes SSH username
+    SFSSH_USER env var
 
-ssh_user = "root"               # The username for the nodes
-                                # --ssh_user
+    --ssh_pass          The nodes SSH password
+    SFSSH_PASS
+"""
 
-ssh_pass = "password"          # The password for the nodes
-                                # --ssh_pass
-
-# ----------------------------------------------------------------------------
-
-import sys, os
+import sys
 import multiprocessing
-import os
+import signal
 import time
-import re
+import inspect
 from optparse import OptionParser
-import libsf
-from libsf import mylog
+import logging
+import lib.libsf as libsf
+from lib.libsf import mylog
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
-try:
-    import ssh
-except ImportError:
-    mylog.warning("Using paramiko module instead of ssh module; this script may have issues with a large number of nodes")
+class RestartSolidfireAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        BEFORE_RESTART_SOLIDFIRE = "BEFORE_RESTART_SOLIDFIRE"
+        AFTER_RESTART_SOLIDFIRE = "AFTER_RESTART_SOLIDFIRE"
+        FAILURE = "FAILURE"
 
-def NodeThread(node_ip, node_user, node_pass, starter, shared_data, index):
-    try:
-        mylog.info(node_ip + ": Connecting")
-        ssh = libsf.ConnectSsh(node_ip, node_user, node_pass)
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-        mylog.debug(node_ip + ": Waiting")
-        shared_data["ready_count"] += 1
-        starter.wait()
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"nodeIPs" : libsf.IsValidIpv4AddressList},
+            args)
 
-        # Quit if all threads were not able to connect
-        if shared_data["abort"]: return
+    def Execute(self, nodeIPs=None, sshUser=sfdefaults.ssh_user, sshPass=sfdefaults.ssh_pass, debug=False):
+        """
+        Restart solidfire on the nodes
+        """
+        if not nodeIPs:
+            nodeIPs = sfdefaults.node_ips
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-        mylog.info(node_ip + ": Restarting solidfire")
-        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "stop solidfire;start solidfire;echo $?")
-        output = stdout.readlines()
-        error = stderr.readlines()
-        ssh.close();
-        retcode = int(output.pop())
-        if retcode != 0:
-            mylog.error(node_ip + ": Error restarting solidfire: " + "\n".join(error))
-            shared_data[index] = False
+        mylog.info("Restarting solidfire on " + ", ".join(nodeIPs))
+
+        # Start one thread per node
+        starter = multiprocessing.Event()
+        starter.clear()
+        manager = multiprocessing.Manager()
+        results = manager.dict()
+        self._threads = []
+        counter = libsf.SyncCounter()
+        for node_ip in nodeIPs:
+            thread_name = "node-" + node_ip
+            results[thread_name] = False
+            th = multiprocessing.Process(target=self._NodeThread, name=thread_name, args=(node_ip, sshUser, sshPass, counter, starter, results))
+            th.daemon = True
+            th.start()
+            self._threads.append(th)
+
+        # Wait for all threads to be connected
+        mylog.debug("Waiting for all nodes to be connected")
+        abort = False
+        while counter.Value() < len(self._threads):
+            for th in self._threads:
+                if not th.is_alive():
+                    mylog.debug("Thread failed; aborting")
+                    abort = True
+                    break
+            if abort:
+                break
+            time.sleep(0.2)
+
+        if abort:
+            for th in self._threads:
+                th.terminate()
+                th.join()
+            mylog.error("Failed to restart solidfire on all nodes")
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            return False
+
+        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_RESTART_SOLIDFIRE)
+
+        mylog.debug("Releasing threads")
+        starter.set()
+
+        # Wait for all threads to stop
+        for th in self._threads:
+            th.join()
+
+        # Look at the results
+        for thread_name in results.keys():
+            if not results[thread_name]:
+                mylog.error("Failed to restart solidfire on all nodes")
+                return False
+
+        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_RESTART_SOLIDFIRE)
+
+        mylog.passed("Successfully restarted solidfire on all nodes")
+        return True
+
+    def _NodeThread(self, node_ip, node_user, node_pass, ready_counter, starter, results):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        try:
+            myname = multiprocessing.current_process().name
+            results[myname] = False
+
+            mylog.info(node_ip + ": Connecting")
+            ssh = libsf.ConnectSsh(node_ip, node_user, node_pass)
+
+            mylog.debug(node_ip + ": Waiting")
+            ready_counter.Increment()
+            starter.wait()
+
+            mylog.info(node_ip + ": Restarting solidfire")
+            stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "stop solidfire;start solidfire;echo $?")
+            output = stdout.readlines()
+            error = stderr.readlines()
+            ssh.close()
+            retcode = int(output.pop())
+            if retcode != 0:
+                mylog.error(node_ip + ": Error restarting solidfire: " + "\n".join(error))
+                results[myname] = False
+                return
+
+            mylog.passed(node_ip + ": Successfully restarted solidfire")
+            results[myname] = True
+        except libsf.SfError as e:
+            mylog.error(node_ip + ": " + str(e))
             return
 
-        mylog.passed(node_ip + ": Successfully restarted solidfire")
-        shared_data[index] = True
-    except Exception as e:
-        mylog.error(str(e))
-
-def main():
-    global node_ips, ssh_user, ssh_pass
-
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "node_ips" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
-    if isinstance(node_ips, basestring):
-        node_ips = node_ips.split(",")
-
-
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--node_ips", type="string", dest="node_ips", default=",".join(node_ips), help="the IP addresses of the nodes")
-    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=ssh_user, help="the SSH username for the nodes.  Only used if you do not have SSH keys set up")
-    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes.  Only used if you do not have SSH keys set up")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    ssh_user = options.ssh_user
-    ssh_pass = options.ssh_pass
-    try:
-        node_ips = libsf.ParseIpsFromList(options.node_ips)
-    except TypeError as e:
-        mylog.error(e)
-        sys.exit(1)
-    if not node_ips:
-        mylog.error("Please supply at least one node IP address")
-        sys.exit(1)
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-
-
-    # Start one thread per node
-    starter = multiprocessing.Event()
-    starter.clear()
-    manager = multiprocessing.Manager()
-    shared_data = manager.dict() # One big shared area for data - lazy I know
-    shared_data["ready_count"] = 0
-    shared_data["abort"] = False
-    threads = []
-    thread_index = 0
-    for node_ip in node_ips:
-        shared_data[thread_index] = False
-        th = multiprocessing.Process(target=NodeThread, args=(node_ip, ssh_user, ssh_pass, starter, shared_data, thread_index))
-        th.start()
-        threads.append(th)
-        thread_index += 1
-
-    # Wait for all threads to be connected
-    mylog.debug("Waiting for all nodes to be connected")
-    while shared_data["ready_count"] < len(threads):
-        for th in threads:
-            if not th.is_alive():
-                mylog.debug("Thread failed; aborting")
-                shared_data["abort"] = True
-                starter.set()
-                time.sleep(1)
-                mylog.error("Failed to restart solidfire")
-                sys.exit(1)
-        time.sleep(0.2)
-
-    mylog.debug("Releasing threads")
-    starter.set()
-
-    # Wait for all threads to stop
-    for th in threads:
-        th.join()
-
-    for i in range(0, len(threads)):
-        if not shared_data[i]:
-            mylog.error("Failed to restart all nodes")
-            sys.exit(1)
-
-    mylog.passed("All nodes restarted")
-    sys.exit(0)
-
-
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-n", "--node_ips", action="list", dest="node_ips", default=None, help="the IP addresses of the nodes")
+    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes.  Only used if you do not have SSH keys set up")
+    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes.  Only used if you do not have SSH keys set up")
+    parser.add_option("--debug", action="store_true", default=False, dest="debug", help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if action.Execute(options.node_ips, options.ssh_user, options.ssh_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        action.Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+

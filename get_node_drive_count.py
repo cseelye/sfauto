@@ -1,118 +1,126 @@
 #!/usr/bin/python
 
-# This script will count the number of drives in a node
+"""
+This action will count the number of drives in a node
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "password"              # Admin password for the cluster
-                                    # --pass
+    --node_ips          IP address of the node
 
-node_ip = "192.168.000.000"         # The management IP of the node to with the drives to count
-                                    # --node_ip
+    --csv               Display minimal output that is suitable for piping into other programs
 
-csv = False                     # Display minimal output that is suitable for piping into other programs
-                                # --csv
+    --bash              Display minimal output that is formatted for a bash array/for loop
+"""
 
-bash = False                    # Display minimal output that is formatted for a bash array/for  loop
-                                # --bash
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class GetNodeDriveCountAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, node_ip, csv, bash
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None,
+                            "node_ip" : libsf.IsValidIpv4Address},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--node_ip", type="string", dest="node_ip", default=node_ip, help="the mIP of the node to remove")
-    parser.add_option("--csv", action="store_true", dest="csv", help="display a minimal output that is suitable for piping into other programs")
-    parser.add_option("--bash", action="store_true", dest="bash", help="display a minimal output that is formatted for a bash array/for loop")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    node_ip = options.node_ip
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
-    if not libsf.IsValidIpv4Address(node_ip):
-        mylog.error("'" + node_ip + "' does not appear to be a node IP")
-        sys.exit(1)
-    if options.csv:
-        csv = True
-        mylog.silence = True
-    if options.bash:
-        bash = True
-        mylog.silence = True
-    if options.debug:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
+    def Execute(self, node_ip, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Count the number of drives in a node
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+        if bash or csv:
+            mylog.silence = True
 
+        # Find the nodeID of the requested node
+        mylog.info("Searching for node")
+        node_id = 0
+        try:
+            result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get node list: " + e.message)
+            return False
+        for node in result["nodes"]:
+            if node["mip"] == node_ip:
+                node_id = node["nodeID"]
+                break
+        if node_id <= 0:
+            mylog.error("Could not find node " + node_ip)
+            return False
 
-    # Find the nodeID of the requested node
-    mylog.info("Searching for node")
-    node_id = 0
-    result = libsf.CallApiMethod(mvip, username, password, "ListActiveNodes", {})
-    for node in result["nodes"]:
-        if node["mip"] == node_ip:
-            node_id = node["nodeID"]
-            break
-    if node_id <= 0:
-        mylog.error("Could not find node " + node_ip)
-        sys.exit(1)
-    mylog.info("Found node " + node_ip + " is nodeID " + str(node_id))
+        # Count all of the drives (active, failed, vailable) in the node
+        mylog.info("Searching for drives")
+        drive_count = 0
+        try:
+            result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get node list: " + e.message)
+            return False
+        for drive in result["drives"]:
+            if drive["nodeID"] == node_id:
+                drive_count += 1
 
-    # Count all of the drives (active, failed, vailable) in the node
-    mylog.info("Searching for drives")
-    drive_count = 0
-    result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
-    for drive in result["drives"]:
-        if drive["nodeID"] == node_id:
-            drive_count += 1
+        if csv or bash:
+            sys.stdout.write(str(drive_count) + "\n")
+            sys.stdout.flush()
+        else:
+            mylog.info("There are " + str(drive_count) + " drives in node " + node_ip)
+        return True
 
-    if csv or bash:
-        sys.stdout.write(str(drive_count) + "\n")
-        sys.stdout.flush()
-    else:
-        mylog.info("There are " + str(drive_count) + " drives in node " + node_ip)
-
-
-
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--node_ip", type="string", dest="node_ip", default=None, help="the IP address of the node")
+    parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
+    parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.node_ip, options.mvip, options.csv, options.bash, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
+        Abort()
         exit(1)
     except:
         mylog.exception("Unhandled exception")

@@ -1,101 +1,129 @@
 #!/usr/bin/python
 
-# This script will delete a volume access group on the cluster
+"""
+This action will delete a volume access group
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "solidfire"              # Admin password for the cluster
-                                    # --pass
+    --volgroup_name     The name of the group to create
 
-vag_name = ""                       # The name of the group to delete
-                                    # --vag_name
+    --volgroup_id       The ID of the group to delete
 
-vag_id = 0                          # The ID of the group to delete
-                                    # --vag_id
+    --strict            Fail if the group has already been deleted
+"""
 
-strict = False                      # Fail if the group has already been deleted
-                                    # --strict
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-import libsf
-from libsf import mylog, SfError
+import lib.libsf as libsf
+from lib.libsf import mylog, SfError
+import lib.sfdefaults as sfdefaults
+import logging
+import lib.libsfcluster as libsfcluster
+from lib.action_base import ActionBase
 
-def main():
-    global mvip, username, password, vag_name, vag_id, strict
+class DeleteVolgroupAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--vag_name", type="string", dest="vag_name", default=vag_name, help="the name of the VAG to delete")
-    parser.add_option("--vag_id", type="int", dest="vag_id", default=vag_id, help="the ID of the VAG to delete")
-    parser.add_option("--strict", action="store_true", dest="strict", help="fail if the account has already been deleted")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    vag_name = options.vag_name
-    vag_id = options.vag_id
-    if options.strict: strict = True
-    if options.debug != None:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None},
+            args)
+        if not args["volgroup_name"] and args["volgroup_id"] <= 0:
+            raise libsf.SfArgumentError("Please specify a volgroup name or ID")
 
-    mylog.info("Deleting VAG '" + str(vag_name) + "'")
+    def Execute(self, mvip=sfdefaults.mvip, volgroup_name=None, volgroup_id=0, strict=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Delete a volume access group
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
 
-    try:
-        vag = libsf.FindVolumeAccessGroup(mvip, username, password, VagName=vag_name, VagId=vag_id)
-    except SfError:
-        if strict:
-            mylog.error("Group does not exist")
-            sys.exit(1)
+        if volgroup_name:
+            mylog.info("Deleting volume access group '" + str(volgroup_name) + "'")
         else:
-            mylog.passed("Group does not exist")
-            sys.exit(0)
+            mylog.info("Deleting volume access group " + str(volgroup_id))
 
-    # Delete the group
-    params = {}
-    params["volumeAccessGroupID"] = vag["volumeAccessGroupID"]
-    result = libsf.CallApiMethod(mvip, username, password, "DeleteVolumeAccessGroup", params, ApiVersion=5.0)
+        cluster = libsfcluster.SFCluster(mvip, username, password)
 
-    mylog.passed("Group deleted successfully")
+        # Find the group on the cluster
+        try:
+            volgroup = cluster.FindVolumeAccessGroup(volgroupName=volgroup_name, volgroupID=volgroup_id)
+        except libsf.SfApiError as e:
+            mylog.error("Could not find volume group: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+        except SfError:
+            if strict:
+                mylog.error("Group does not exist")
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                return False
+            else:
+                mylog.passed("Group does not exist")
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                return True
 
+        # Delete the group
+        try:
+            volgroup.Delete()
+        except libsf.SfError as e:
+            mylog.error("Failed to delete group: " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+
+        mylog.passed("Group deleted successfully")
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--volgroup_name", type="string", dest="volgroup_name", default=None, help="the name of the VAG to delete")
+    parser.add_option("--volgroup_id", type="int", dest="volgroup_id", default=0, help="the ID of the VAG to delete")
+    parser.add_option("--strict", action="store_true", dest="strict", default=False, help="fail if the account has already been deleted")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.volgroup_name, options.volgroup_id, options.strict, options.username, options.password, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+
