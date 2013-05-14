@@ -432,7 +432,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
             usage.NodeId = int(m.group(1))
             continue
 
-    if "nvdisk" in volumes["/mnt/pendingDirtyBlocks"]:
+    if "/mnt/pendingDirtyBlocks" in volumes:
         usage.NvramMounted = True
     else:
         usage.NvramMounted = False
@@ -1851,7 +1851,7 @@ class DebugLog():
         if not self.Enable: return
         caller = inspect.stack()[1][3]
         with open("sf-top-debug.txt", 'a') as debug_out:
-            message = TimestampToStr(time.time(), "%Y-%m-%d-%H-%M-%S", LOCAL_TZ) + "  " + caller + ": " + message
+            message = TimestampToStr(time.time(), "%Y-%m-%d-%H-%M-%S", LOCAL_TZ) + "  " + caller + ": " + str(message)
             if not message.endswith("\n"): message += "\n"
             debug_out.write(message)
             debug_out.flush()
@@ -1865,6 +1865,9 @@ class FallbackTerminal:
 
 START_TIME = time.time()
 LOCAL_TZ = LocalTimezone()
+
+def Abort():
+    pass
 
 if __name__ == '__main__':
 
@@ -1880,8 +1883,8 @@ if __name__ == '__main__':
     # Parse command line arguments
     parser = OptionParser(version="%prog Version " + __version__)
 
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the MVIP of the cluster")
-    parser.add_option("--node_ips", type="string", dest="node_ips", default=node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=mvip, help="the MVIP of the cluster")
+    parser.add_option("-n", "--node_ips", type="string", dest="node_ips", default=node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
     parser.add_option("--ssh_user", type="string", dest="ssh_user", default=ssh_user, help="the SSH username for the nodes [%default]")
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes [%default]")
     parser.add_option("--api_user", type="string", dest="api_user", default=api_user, help="the API username for the cluster [%default]")
@@ -2050,7 +2053,7 @@ if __name__ == '__main__':
 
             if not compact and mvip and cluster_results[mvip]:
                 cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices)/2
-                if cluster_cell_height > cell_height:
+                if cluster_cell_height > cell_height or len(cluster_results[mvip].SliceServices) > 20:
                     cluster_cell_width = cell_width * 2 - 1
 
             # Determine table height, based on cell height, columns, number of nodes + cell for cluster info
