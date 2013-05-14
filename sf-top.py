@@ -135,6 +135,7 @@ class NodeInfo:
         self.CoresTotal = 0
         self.NodeId = -1
         self.NvramMounted = False
+        self.NvramDevice = ""
         self.EnsembleNode = False
         self.ClusterMaster = False
         self.Processes = dict()
@@ -206,6 +207,7 @@ class ClusterInfo:
         self.SameSoftwareVersions = True
         self.DebugSoftware = False
         self.NvramNotMounted = []
+        self.NvramRamdrive = []
         self.OldCores = []
         self.NewCores = []
         self.SliceSyncing = "No"
@@ -392,12 +394,13 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     command += ";\\free -o"
     command += ";touch -t " + timestamp + " /tmp/timestamp;echo newcores=`find /sf -maxdepth 1 -name \"core*\" -newer /tmp/timestamp | wc -l`"
     command += ";echo allcores=`ls -1 /sf/core* | wc -l`"
-    command += ";\\cat /proc/mounts | \\grep dev"
+    command += ";\\cat /proc/mounts | \\egrep '^/dev|pendingDirtyBlocks'"
     command += ";grep nodeID /etc/solidfire.json"
     ver_string = ""
     volumes = dict()
     stdin, stdout, stderr = ssh.exec_command(command)
     data = stdout.readlines()
+    #log.debug("\n".join(data))
     for line in data:
         m = re.search(r'^hostname=(.+)', line)
         if (m):
@@ -423,9 +426,12 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         if (m):
             usage.CoresTotal = int(m.group(1))
             continue
-        if line.startswith("/dev"):
+        if line.startswith("/dev") or "pendingDirtyBlocks" in line:
             pieces = line.split()
-            volumes[pieces[1]] = pieces[0].split("/")[-1]
+            if pieces[0].startswith("/dev"):
+                volumes[pieces[1]] = pieces[0].split("/")[-1]
+            else:
+                volumes[pieces[1]] = pieces[0]
             continue
         m = re.search(r'nodeID" : (\d+)', line)
         if (m):
@@ -434,6 +440,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
 
     if "/mnt/pendingDirtyBlocks" in volumes:
         usage.NvramMounted = True
+        usage.NvramDevice = volumes["/mnt/pendingDirtyBlocks"]
     else:
         usage.NvramMounted = False
 
@@ -861,6 +868,8 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
         if pNodesInfo[node_ip] == None: continue
         if not pNodesInfo[node_ip].NvramMounted:
             info.NvramNotMounted.append(pNodesInfo[node_ip].Hostname)
+        if "ram" in pNodesInfo[node_ip].NvramDevice:
+            info.NvramRamdrive.append(pNodesInfo[node_ip].Hostname)
 
     log.debug("gathering cluster info")
 
@@ -1604,6 +1613,15 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         screen.set_color(ConsoleColors.RedFore)
         sys.stdout.write(" NVRAM not mounted on")
         for node in pClusterInfo.NvramNotMounted:
+            sys.stdout.write(" " + node)
+        print " "
+        screen.reset()
+    if (len(pClusterInfo.NvramRamdrive) > 0):
+        current_line += 1
+        screen.gotoXY(pStartX + 1, pStartY + current_line)
+        screen.set_color(ConsoleColors.YellowFore)
+        sys.stdout.write(" NVRAM is a RAMdrive on")
+        for node in pClusterInfo.NvramRamdrive:
             sys.stdout.write(" " + node)
         print " "
         screen.reset()
