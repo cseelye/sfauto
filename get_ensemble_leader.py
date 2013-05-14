@@ -1,119 +1,150 @@
 #!/usr/bin/python
 
-# This script will print the ensemble leader node mIP
+"""
+This action will display the ensemble leader
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
 
-mvip = "192.168.000.000"            # The management VIP of the cluster
-                                    # --mvip
+    --user              The cluster admin username
+    SFUSER env var
 
-username = "admin"                  # Admin account for the cluster
-                                    # --user
+    --pass              The cluster admin password
+    SFPASS env var
 
-password = "solidfire"              # Admin password for the cluster
-                                    # --pass
+    --ssh_user          The nodes SSH username
+    SFSSH_USER env var
 
-ssh_user = "root"               # The username for the nodes
-                                # --ssh_user
+    --ssh_pass          The nodes SSH password
+    SFSSH_PASS
 
-ssh_pass = "password"          # The password for the nodes
-                                # --ssh_pass
+    --csv               Display minimal output that is suitable for piping into other programs
 
-csv = False                     # Display minimal output that is suitable for piping into other programs
-                                # --csv
+    --bash              Display minimal output that is formatted for a bash array/for loop
+"""
 
-bash = False                    # Display minimal output that is formatted for a bash array/for  loop
-                                # --bash
-
-# ----------------------------------------------------------------------------
-
-import sys,os
+import sys
 from optparse import OptionParser
-import time
-from random import randint
-import libsf
-from libsf import mylog
+import lib.libsf as libsf
+from lib.libsf import mylog
+import logging
+import lib.sfdefaults as sfdefaults
+from lib.action_base import ActionBase
 
+class GetEnsembleLeaderAction(ActionBase):
+    class Events:
+        """
+        Events that this action defines
+        """
+        FAILURE = "FAILURE"
 
-def main():
-    global mvip, username, password, csv, bash
+    def __init__(self):
+        super(self.__class__, self).__init__(self.__class__.Events)
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "mvip", "username", "password" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            globals()[vname] = os.environ[env_name]
+    def ValidateArgs(self, args):
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            "username" : None,
+                            "password" : None},
+            args)
 
-    # Parse command line arguments
-    parser = OptionParser()
-    parser.add_option("--mvip", type="string", dest="mvip", default=mvip, help="the management IP of the cluster")
-    parser.add_option("--user", type="string", dest="username", default=username, help="the admin account for the cluster")
-    parser.add_option("--pass", type="string", dest="password", default=password, help="the admin password for the cluster")
-    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=ssh_user, help="the SSH username for the nodes.  Only used if you do not have SSH keys set up")
-    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes.  Only used if you do not have SSH keys set up")
-    parser.add_option("--csv", action="store_true", dest="csv", help="display a minimal output that is suitable for piping into other programs")
-    parser.add_option("--bash", action="store_true", dest="bash", help="display a minimal output that is formatted for a bash array/for loop")
-    parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
-    (options, args) = parser.parse_args()
-    mvip = options.mvip
-    username = options.username
-    password = options.password
-    if options.csv:
-        csv = True
-        mylog.silence = True
-    if options.bash:
-        bash = True
-        mylog.silence = True
-    if options.debug:
-        import logging
-        mylog.console.setLevel(logging.DEBUG)
-    if not libsf.IsValidIpv4Address(mvip):
-        mylog.error("'" + mvip + "' does not appear to be a valid MVIP")
-        sys.exit(1)
+    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+        """
+        Get the cluster master
+        """
 
-    mylog.info("Looking for ensemble lader on cluster " + mvip)
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+        if bash or csv:
+            mylog.silence = True
 
-    # Use the first node in the cluster to connect and query each ensemble node until we find the leader
-    result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
-    ssh = libsf.ConnectSsh(result["nodes"][0]["mip"], ssh_user, ssh_pass)
+        mylog.info("Looking for ensemble leader on cluster " + mvip)
 
-    # For each ensemble node, query if it is the leader
-    leader = None
-    cluster_info = libsf.CallApiMethod(mvip, username, password, 'GetClusterInfo', {})
-    mylog.info("Ensemble is [" + ", ".join(cluster_info["clusterInfo"]["ensemble"]) + "]")
-    for teng_ip in cluster_info["clusterInfo"]["ensemble"]:
-        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "echo 'mntr' | nc " + teng_ip + " 2181 | grep zk_server_state | cut -f2")
-        data = stdout.readlines()[0].strip()
-        if data == "leader":
-            leader = teng_ip
-            break
+        # Use the first node in the cluster to connect and query each ensemble node until we find the leader
+        try:
+            result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get node list - " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-    if not leader:
-        mylog.error("Could not find ensemble leader")
-        sys.exit(1)
+        try:
+            ssh = libsf.ConnectSsh(result["nodes"][0]["mip"], ssh_user, ssh_pass)
+        except libsf.SfError as e:
+            mylog.error("Failed to connect to node - " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
 
-    if csv or bash:
-        mylog.debug("Ensemble leader node is " + leader)
-        sys.stdout.write(leader + "\n")
-        sys.stdout.flush()
-    else:
-        mylog.info("Ensemble leader node is " + leader)
+        # For each ensemble node, query if it is the leader
+        leader = None
+        try:
+            cluster_info = libsf.CallApiMethod(mvip, username, password, 'GetClusterInfo', {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get cluster info - " + str(e))
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            return False
+
+        mylog.info("Ensemble is [" + ", ".join(cluster_info["clusterInfo"]["ensemble"]) + "]")
+        for teng_ip in cluster_info["clusterInfo"]["ensemble"]:
+            try:
+                stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "echo 'mntr' | nc " + teng_ip + " 2181 | grep zk_server_state | cut -f2")
+                data = stdout.readlines()[0].strip()
+                if data == "leader":
+                    leader = teng_ip
+                    break
+            except libsf.SfError as e:
+                mylog.error("Failed nc command on node - " + str(e))
+                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+
+        if not leader:
+            mylog.error("Could not find ensemble leader")
+            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            return False
+
+        if csv or bash:
+            mylog.debug("Ensemble leader node is " + leader)
+            sys.stdout.write(leader + "\n")
+            sys.stdout.flush()
+        else:
+            mylog.info("Ensemble leader node is " + leader)
+        return True
+
+# Instantate the class and add its attributes to the module
+# This allows it to be executed simply as module_name.Execute
+libsf.PopulateActionModule(sys.modules[__name__])
 
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
+
+    # Parse command line arguments
+    parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes.  Only used if you do not have SSH keys set up")
+    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes.  Only used if you do not have SSH keys set up")
+    parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
+    parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    (options, extra_args) = parser.parse_args()
+
     try:
         timer = libsf.ScriptTimer()
-        main()
+        if Execute(options.mvip, options.csv, options.bash, options.username, options.password, options.ssh_user, options.ssh_pass, options.debug):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except libsf.SfArgumentError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except SystemExit:
         raise
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
-        exit(1)
+        Abort()
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
 

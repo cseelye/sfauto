@@ -57,7 +57,7 @@ class GetClusterMasterAction(ActionBase):
         try:
             result = libsf.CallApiMethod(mvip, username, password, 'GetClusterMasterNodeID', {})
         except libsf.SfError as e:
-            mylog.error("Failed to get clususter master ID - " + str(e))
+            mylog.error("Failed to get cluster master ID - " + str(e))
             super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
             return False
 
