@@ -29,6 +29,9 @@ keyfile = ""                        # Keyfile where your RSA key is stored. Most
 interval = 1                        # The number of seconds between each refresh
                                     # --interval
 
+cluster_interval = 0                # Refresh interval for cluster info - zero means use the same interval
+                                    # --cluster_interval
+
 columns = 3                         # The number of columns to use for display
                                     # --columns
 
@@ -1899,7 +1902,7 @@ if __name__ == '__main__':
         node_ips = node_ips.split(",")
 
     # Parse command line arguments
-    parser = OptionParser(version="%prog Version " + __version__)
+    parser = OptionParser(version="%prog Version " + __version__, description="Monitor a SolidFire cluster, including cluster stats, process resource utlization, etc.")
 
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=mvip, help="the MVIP of the cluster")
     parser.add_option("-n", "--node_ips", type="string", dest="node_ips", default=node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
@@ -1907,10 +1910,12 @@ if __name__ == '__main__':
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes [%default]")
     parser.add_option("--api_user", type="string", dest="api_user", default=api_user, help="the API username for the cluster [%default]")
     parser.add_option("--api_pass", type="string", dest="api_pass", default=api_pass, help="the API password for the cluster [%default]")
-    parser.add_option("--keyfile", type="string", dest="keyfile", default=keyfile, help="the full path to your RSA key")
+    parser.add_option("--keyfile", type="string", dest="keyfile", default=keyfile, help="the full path to your RSA key (Windows only)")
     parser.add_option("--interval", type="int", dest="interval", default=interval, help="the number of seconds between each refresh [%default]")
+    parser.add_option("--cluster_interval", type="int", dest="cluster_interval", default=cluster_interval, help="the number of seconds between each cluster refresh (leave at zero to use the same interval) [%default]")
     parser.add_option("--columns", type="int", dest="columns", default=columns, help="the number of columns to use for display [%default]")
     parser.add_option("--compact", action="store_true", dest="compact", help="show a compact view (useful for large clusters)")
+    parser.add_option("--noclusterinfo", action="store_false", dest="clusterinfo", default=True, help="do not gather/show cluster information (node info only)")
     parser.add_option("--export", action="store_true", dest="export", help="save the results in a file as well as print to the screen")
     parser.add_option("--output_dir", type="string", dest="output_dir", default=output_dir, help="the directory to save exported data")
     parser.add_option("--debug", action="store_true", dest="debug", help="write detailed debug info to a log file")
@@ -1923,10 +1928,16 @@ if __name__ == '__main__':
     api_pass = options.api_pass
     keyfile = options.keyfile
     compact = options.compact
+    showclusterinfo = options.clusterinfo
     export = options.export
     columns = options.columns
     output_dir = options.output_dir
     interval = float(options.interval)
+    cluster_interval = float(options.cluster_interval)
+    if cluster_interval <= 0:
+        cluster_interval = interval
+    if compact:
+        showclusterinfo = False
 
     log = DebugLog()
     log.Enable = options.debug
@@ -2051,9 +2062,9 @@ if __name__ == '__main__':
                         break
 
             # Start the cluster info thread if we haven't already
-            if not compact and mvip and "ClusterInfoThread" not in all_threads:
+            if showclusterinfo and mvip and "ClusterInfoThread" not in all_threads:
                 cluster_results[mvip] = None
-                cluster_info_thread = multiprocessing.Process(target=ClusterInfoThread, name="ClusterInfoThread", args=(log, cluster_results, node_results, interval, mvip, api_user, api_pass))
+                cluster_info_thread = multiprocessing.Process(target=ClusterInfoThread, name="ClusterInfoThread", args=(log, cluster_results, node_results, cluster_interval, mvip, api_user, api_pass))
                 cluster_info_thread.start()
                 log.debug("started ClusterInfoThread process " + str(cluster_info_thread.pid))
                 all_threads["ClusterInfoThread"] = cluster_info_thread
@@ -2069,7 +2080,7 @@ if __name__ == '__main__':
                 if (node_cell_height > cell_height):
                     cell_height = node_cell_height
 
-            if not compact and mvip and cluster_results[mvip]:
+            if showclusterinfo and cluster_results.get(mvip):
                 cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices)/2
                 if cluster_cell_height > cell_height or len(cluster_results[mvip].SliceServices) > 20:
                     cluster_cell_width = cell_width * 2 - 1
@@ -2115,7 +2126,7 @@ if __name__ == '__main__':
                     log.debug("exception in DrawNodeInfoCell: " + str(e) + " - " + traceback.format_exc())
 
             # Display/log cluster info
-            if not compact and mvip and cluster_results[mvip]:
+            if not compact and cluster_results.get(mvip):
                 cell_row = len(node_ips) / columns
                 cell_col = len(node_ips) % columns
                 if cluster_cell_width > cell_width and cell_col == columns - 1:
