@@ -41,7 +41,7 @@ output_dir = "sf-top-out"           # The directory to save exported data/report
 # ----------------------------------------------------------------------------
 
 # cover a couple different ways of doing this
-__version__ = '2.1'
+__version__ = '2.2'
 VERSION = __version__
 version = __version__
 
@@ -1902,7 +1902,7 @@ if __name__ == '__main__':
         node_ips = node_ips.split(",")
 
     # Parse command line arguments
-    parser = OptionParser(version="%prog Version " + __version__, description="Monitor a SolidFire cluster, including cluster stats, process resource utlization, etc.")
+    parser = OptionParser(version="%prog Version " + __version__, description="Monitor a SolidFire cluster, including cluster stats, process resource utilization, etc.")
 
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=mvip, help="the MVIP of the cluster")
     parser.add_option("-n", "--node_ips", type="string", dest="node_ips", default=node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
