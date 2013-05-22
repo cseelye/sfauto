@@ -20,6 +20,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetClusterInfoAction(ActionBase):
     class Events:
@@ -51,7 +52,7 @@ class GetClusterInfoAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, "GetClusterVersionInfo", {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster version: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         mylog.info( "ClusterVersion: " + str(result["clusterVersion"]))
         mylog.info("ClusterSize: " + str(len(result["clusterVersionInfo"])))
@@ -62,7 +63,7 @@ class GetClusterInfoAction(ActionBase):
             volResult = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
         except libsf.SfError as e:
             mylog.error("Failed to get volume list: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         mylog.info( "NumVolumes: " + str(len(volResult["volumes"])))
 
@@ -72,7 +73,7 @@ class GetClusterInfoAction(ActionBase):
             clusterResult =  libsf.CallApiMethod(mvip, username, password, "GetClusterInfo", {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster info: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for key, value in clusterResult["clusterInfo"].iteritems():
             mylog.info( str(key) + " = " + str(value))
@@ -83,7 +84,7 @@ class GetClusterInfoAction(ActionBase):
             capacityResult = libsf.CallApiMethod(mvip, username, password, "GetClusterCapacity", {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster capacity: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for key, value in capacityResult["clusterCapacity"].iteritems():
             mylog.info( str(key) + " = " + str(value))
@@ -94,7 +95,7 @@ class GetClusterInfoAction(ActionBase):
             nodeResult = libsf.CallApiMethod(mvip, username, password, "ListAllNodes", {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         nodeObj = nodeResult["nodes"]
         for node in nodeObj:
@@ -106,7 +107,7 @@ class GetClusterInfoAction(ActionBase):
             scResults =  libsf.CallApiMethod(mvip, username, password, "SetConstants", {})
         except libsf.SfError as e:
             mylog.error("Failed to get constsnts: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for key, value in scResults.iteritems():
             mylog.info( str(key) + " = " + str(value))

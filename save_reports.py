@@ -39,6 +39,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class SaveReportsAction(ActionBase):
     class Events:
@@ -95,7 +96,7 @@ class SaveReportsAction(ActionBase):
                 return
             except Exception:
                 mylog.error("Failed to get report from " + url)
-                super(self.__class__, self)._RaiseEvent(self.Events.REPORT_FAILED)
+                self._RaiseEvent(self.Events.REPORT_FAILED)
                 return
 
         def ApiThread(file_name, mvip, username, password, method):
@@ -111,12 +112,12 @@ class SaveReportsAction(ActionBase):
                 return
             except Exception:
                 mylog.error("Failed to get API call " + method)
-                super(self.__class__, self)._RaiseEvent(self.Events.REPORT_FAILED)
+                self._RaiseEvent(self.Events.REPORT_FAILED)
                 return
 
         while True:
 
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_GATHER_REPORTS)
+            self._RaiseEvent(self.Events.BEFORE_GATHER_REPORTS)
 
             # Make a list of reports to gather
             reports_to_get = []
@@ -191,7 +192,7 @@ class SaveReportsAction(ActionBase):
                     if os.path.exists(file_name):
                         os.unlink(file_name)
 
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_GATHER_REPORTS)
+            self._RaiseEvent(self.Events.AFTER_GATHER_REPORTS)
             if interval < 0:
                 break
             if interval > 0:

@@ -30,6 +30,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class KvmShutdownVmsAction(ActionBase):
     class Events:
@@ -60,11 +61,11 @@ class KvmShutdownVmsAction(ActionBase):
             conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         if conn == None:
             mylog.error("Failed to connect")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Failed to connect")
             return False
 
         # Shortcut when only a single VM is specified
@@ -73,7 +74,7 @@ class KvmShutdownVmsAction(ActionBase):
                 vm = conn.lookupByName(vm_name)
             except libvirt.libvirtError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             [state, maxmem, mem, ncpu, cputime] = vm.info()
             if state == libvirt.VIR_DOMAIN_SHUTOFF:
@@ -87,7 +88,7 @@ class KvmShutdownVmsAction(ActionBase):
                     return True
                 except libvirt.libvirtError as e:
                     mylog.error("Failed to shutdown " + vm.name() + ": " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
 
         mylog.info("Searching for matching VMs")
@@ -100,7 +101,7 @@ class KvmShutdownVmsAction(ActionBase):
             running_vm_list = sorted(running_vm_list, key=lambda vm: vm.name())
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for vm in running_vm_list:
             if vm_count > 0 and len(matched_vms) >= vm_count:
@@ -119,7 +120,7 @@ class KvmShutdownVmsAction(ActionBase):
             stopped_vm_list = sorted(stopped_vm_list, key=lambda vm: vm.name())
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for vm in stopped_vm_list:
             if vm_count > 0 and len(matched_vms) >= vm_count:

@@ -23,6 +23,7 @@ import lib.XenAPI as XenAPI
 import lib.libxen as libxen
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class XenRenameVdiAction(ActionBase):
     class Events:
@@ -55,7 +56,7 @@ class XenRenameVdiAction(ActionBase):
             session = libxen.Connect(vmhost, host_user, host_pass)
         except libxen.XenError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.info("Searching for matching VMs")
@@ -64,7 +65,7 @@ class XenRenameVdiAction(ActionBase):
             vm_ref_list = session.xenapi.VM.get_all()
         except XenAPI.Failure as e:
             mylog.error("Could not get VM list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for vm_ref in vm_ref_list:
             vm = session.xenapi.VM.get_record(vm_ref)
@@ -106,7 +107,7 @@ class XenRenameVdiAction(ActionBase):
                     session.xenapi.VDI.set_name_description(vdi_ref, "Boot disk for " + vname)
                 except XenAPI.Failure as e:
                     mylog.error(str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     allgood = False
 
         if allgood:

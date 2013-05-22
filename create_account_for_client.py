@@ -39,6 +39,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CreateAccountForClientAction(ActionBase):
     class Events:
@@ -57,7 +58,7 @@ class CreateAccountForClientAction(ActionBase):
             client.Connect(client_ip, client_user, client_pass)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         if not account_name:
@@ -90,7 +91,7 @@ class CreateAccountForClientAction(ActionBase):
                 # Ignore duplicate error, fail on all others
                 if e.name != "xDuplicateUsername":
                     mylog.error(client_ip + ": Error " + e.name + ": " + e.message)
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                    self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                     return
 
         # set the CHAP credentials on the client
@@ -99,7 +100,7 @@ class CreateAccountForClientAction(ActionBase):
             client.SetupChap(svip, account_name.lower(), init_secret)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         results[index] = True
@@ -129,7 +130,7 @@ class CreateAccountForClientAction(ActionBase):
             cluster_info = libsf.CallApiMethod(mvip, username, password, "GetClusterInfo", {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster info: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         svip = cluster_info["clusterInfo"]["svip"]
 
@@ -138,7 +139,7 @@ class CreateAccountForClientAction(ActionBase):
             accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
         except libsf.SfError as e:
             mylog.error("Failed to get account list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Run the client operations in parallel if there are enough clients

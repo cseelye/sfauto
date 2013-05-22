@@ -23,6 +23,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CleanLogsAction(ActionBase):
     class Events:
@@ -69,7 +70,7 @@ class CleanLogsAction(ActionBase):
                 ssh.close()
             except libsf.SfError as e:
                 mylog.error("Failed to clear logs on " + node_ip + ": " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
                 allgood = False
                 continue
 

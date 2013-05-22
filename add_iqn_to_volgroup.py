@@ -28,6 +28,7 @@ import lib.sfdefaults as sfdefaults
 import logging
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class AddIqnToVolgroupAction(ActionBase):
     class Events:
@@ -50,10 +51,13 @@ class AddIqnToVolgroupAction(ActionBase):
         if not args["volgroup_name"] and args["volgroup_id"] <= 0:
             raise libsf.SfArgumentError("Please specify a volgroup name or ID")
 
-    def Execute(self, iqn, mvip=sfdefaults.mvip, volgroup_name=None, volgroup_id=0, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, iqn=None, mvip=sfdefaults.mvip, volgroup_name=None, volgroup_id=0, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Add list of IQNs to volume access group
         """
+        if iqn == None:
+            iqn = self.GetSharedValue(SharedValues.clientIQN)
+
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -68,20 +72,20 @@ class AddIqnToVolgroupAction(ActionBase):
             volgroup = libsfcluster.SFCluster(mvip, username, password).FindVolumeAccessGroup(volgroupName=volgroup_name, volgroupID=volgroup_id)
         except SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Add the IQN
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+        self._RaiseEvent(self.Events.BEFORE_ADD)
         try:
             volgroup.AddInitiators([iqn])
         except SfError as e:
             mylog.error("Failed to modify group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Added IQN to group")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ADD)
+        self._RaiseEvent(self.Events.AFTER_ADD)
         return True
 
 

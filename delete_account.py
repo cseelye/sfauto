@@ -23,6 +23,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class DeleteAccountAction(ActionBase):
     class Events:
@@ -56,7 +57,7 @@ class DeleteAccountAction(ActionBase):
             accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
         except libsf.SfApiError as e:
             mylog.error("Failed to get account list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         account_id = 0
         for account in accounts_list["accounts"]:
@@ -65,7 +66,7 @@ class DeleteAccountAction(ActionBase):
                 break
         if account_id == 0:
             mylog.error("Could not find account " + account_name + " on cluster " + mvip)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.info("Deleting account ID " + str(account_id))
@@ -73,7 +74,7 @@ class DeleteAccountAction(ActionBase):
             libsf.CallApiMethod(mvip, username, password, "RemoveAccount", {"accountID" : account_id})
         except libsf.SfApiError as e:
             mylog.error("Failed to delete account: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Successfully deleted account " + account_name)

@@ -29,6 +29,7 @@ import logging
 import inspect
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class SendEmailAction(ActionBase):
     class Events:
@@ -56,17 +57,17 @@ class SendEmailAction(ActionBase):
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_EMAIL)
+        self._RaiseEvent(self.Events.BEFORE_EMAIL)
         try:
             libsf.SendEmail(emailTo, emailSubject, emailBody, attachments, emailFrom, SMTPServer, SMTPUser, SMTPPass)
         except KeyboardInterrupt:
             raise
         except Exception as e:
             mylog.error("Error sending email: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.EMAIL_ERROR)
+            self._RaiseEvent(self.Events.EMAIL_ERROR)
             return False
 
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_EMAIL)
+        self._RaiseEvent(self.Events.AFTER_EMAIL)
         return True
 
 # Instantate the class and add its attributes to the module

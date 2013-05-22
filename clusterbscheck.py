@@ -35,6 +35,7 @@ import calendar
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ClusterbscheckAction(ActionBase):
     class Events:
@@ -85,7 +86,7 @@ class ClusterbscheckAction(ActionBase):
             return
         except Exception:
             mylog.error(traceback.format_exc())
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
             results[index] = False
 
     def _WaitForBsCheckThread(self, node_ip, node_user, node_pass, ss_count, start_time, timeout, results, index):
@@ -130,7 +131,7 @@ class ClusterbscheckAction(ActionBase):
             results[index] = False
         except Exception as e:
             mylog.error(node_ip + ": " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
             results[index] = False
 
     def ValidateArgs(self, args):

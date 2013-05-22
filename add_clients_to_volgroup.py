@@ -38,6 +38,7 @@ from lib.libclient import ClientError, SfClient
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class AddClientsToVolgroupAction(ActionBase):
     class Events:
@@ -75,7 +76,7 @@ class AddClientsToVolgroupAction(ActionBase):
             volgroup = libsfcluster.SFCluster(mvip, username, password).FindVolumeAccessGroup(volgroupName=volgroup_name, volgroupID=volgroup_id)
         except SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Get a list of initiator IQNs from the clients
@@ -92,21 +93,21 @@ class AddClientsToVolgroupAction(ActionBase):
             mylog.info("  " + client.Hostname + " has IQN " + iqn)
             if iqn in new_iqn_list:
                 mylog.error("Duplicate IQN")
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Duplicate IQN")
                 return False
             new_iqn_list.append(iqn)
 
         mylog.info("Adding clients to group")
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+        self._RaiseEvent(self.Events.BEFORE_ADD)
         try:
             volgroup.AddInitiators(new_iqn_list)
         except SfError as e:
             mylog.error("Failed to modify group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Successfully added clients to group")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ADD)
+        self._RaiseEvent(self.Events.AFTER_ADD)
         return True
 
 # Instantate the class and add its attributes to the module

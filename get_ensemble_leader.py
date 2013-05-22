@@ -31,6 +31,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetEnsembleLeaderAction(ActionBase):
     class Events:
@@ -48,11 +49,10 @@ class GetEnsembleLeaderAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+    def Get(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
         """
         Get the cluster master
         """
-
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -66,23 +66,23 @@ class GetEnsembleLeaderAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         try:
             ssh = libsf.ConnectSsh(result["nodes"][0]["mip"], ssh_user, ssh_pass)
         except libsf.SfError as e:
             mylog.error("Failed to connect to node - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # For each ensemble node, query if it is the leader
-        leader = None
+        leader_10g = None
         try:
             cluster_info = libsf.CallApiMethod(mvip, username, password, 'GetClusterInfo', {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster info - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.info("Ensemble is [" + ", ".join(cluster_info["clusterInfo"]["ensemble"]) + "]")
@@ -91,15 +91,32 @@ class GetEnsembleLeaderAction(ActionBase):
                 stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "echo 'mntr' | nc " + teng_ip + " 2181 | grep zk_server_state | cut -f2")
                 data = stdout.readlines()[0].strip()
                 if data == "leader":
-                    leader = teng_ip
+                    leader_10g = teng_ip
                     break
             except libsf.SfError as e:
                 mylog.error("Failed nc command on node - " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
 
-        if not leader:
+        if not leader_10g:
             mylog.error("Could not find ensemble leader")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not find ensemble leader")
+            return False
+
+        for node in result["nodes"]:
+            if node["cip"] == leader_10g or node["sip"] == leader_10g:
+                leader_1g = node["mip"]
+
+        self.SetSharedValue(SharedValues.nodeIP, leader_1g)
+        self.SetSharedValue(SharedValues.ensembleLeaderIP, leader_1g)
+        return leader_1g
+
+    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+        """
+        Get the cluster master
+        """
+        del self
+        leader = Get(**locals())
+        if leader is False:
             return False
 
         if csv or bash:

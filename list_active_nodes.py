@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 """
-This action will display a list of the active volumes in the cluster
+This action will display a list of the active nodes in the cluster
 
 When run as a script, the following options/env variables apply:
     --mvip              The managementVIP of the cluster
@@ -25,8 +25,9 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
-class GetActiveNodesAction(ActionBase):
+class ListActiveNodesAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -42,11 +43,10 @@ class GetActiveNodesAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Get a list of active nodes in the cluster
         """
-
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -54,11 +54,28 @@ class GetActiveNodesAction(ActionBase):
             mylog.silence = True
 
         # Get a list of nodes in the cluster
+        mylog.info("Getting a list of active nodes in cluster " + mvip)
         try:
             result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+
+        node_list = []
+        for node in result["nodes"]:
+            node_list.append(node["mip"])
+
+        self.SetSharedValue(SharedValues.activeNodeList, node_list)
+        return node_list
+
+    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show the list of active nodes in the cluster
+        """
+        del self
+        node_list = Get(**args)
+        if node_list is False:
             return False
 
         # Display the nodes in the requested format
@@ -66,15 +83,12 @@ class GetActiveNodesAction(ActionBase):
             separator = ","
             if bash:
                 separator = " "
-            nodes = []
-            for node in result["nodes"]:
-                nodes.append(node["mip"])
-            sys.stdout.write(separator.join(nodes) + "\n")
+            sys.stdout.write(separator.join(node_list) + "\n")
             sys.stdout.flush()
         else:
-            mylog.info(str(len(result["nodes"])) + " active nodes in cluster " + mvip)
-            for node in result["nodes"]:
-                mylog.info("  " + node["mip"] + " (node ID " + str(node["nodeID"]) + ")")
+            mylog.info(str(len(node_list)) + " active nodes in cluster " + mvip)
+            for mip in node_list:
+                mylog.info("  " + mip)
         return True
 
 # Instantate the class and add its attributes to the module

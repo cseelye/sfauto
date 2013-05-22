@@ -34,6 +34,7 @@ import lib.XenAPI as XenAPI
 import lib.libxen as libxen
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class XenCreateSrsAction(ActionBase):
     class Events:
@@ -78,7 +79,7 @@ class XenCreateSrsAction(ActionBase):
                     break
             if not sfaccount:
                 mylog.error("Could not find CHAP account " + account_name)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Could not find CHAP account " + account_name)
                 return False
             chap_user = account_name
             chap_pass = sfaccount["initiatorSecret"]
@@ -98,7 +99,7 @@ class XenCreateSrsAction(ActionBase):
             session = libxen.Connect(vmhost, host_user, host_pass)
         except libxen.XenError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Get a list of already existing SRs
@@ -133,7 +134,7 @@ class XenCreateSrsAction(ActionBase):
         mylog.debug("Found " + str(len(target_iqns)) + " iSCSI targets")
         if len(target_iqns) != expected_volumes:
             mylog.debug("Discovered " + str(len(target_iqns)) + " targets but expected " + str(expected_volumes) + " targets")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Discovered " + str(len(target_iqns)) + " targets but expected " + str(expected_volumes) + " targets")
             return False
 
         # Create an SR on each target
@@ -187,7 +188,7 @@ class XenCreateSrsAction(ActionBase):
                     retry -= 1
                     if retry <= 0:
                         mylog.error("Could not create SR for target " + iqn + " - " + str(e))
-                        super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                        self.RaiseFailureEvent(message=str(e), exception=e)
                         return False
                     else:
                         mylog.warning("Could not create SR for target " + iqn + " - " + str(e))

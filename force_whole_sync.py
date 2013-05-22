@@ -26,6 +26,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ForceWholeSyncAction(ActionBase):
     class Events:
@@ -59,7 +60,7 @@ class ForceWholeSyncAction(ActionBase):
             found_volumes = libsf.SearchForVolumes(mvip, username, password, VolumeName=volume_names, VolumeId=volume_ids)
         except libsf.SfError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         volume_ids = found_volumes.values()
 
@@ -73,7 +74,7 @@ class ForceWholeSyncAction(ActionBase):
             slice_report = libsf.HttpRequest("https://" + str(mvip) + "/reports/slices.json", username, password)
         except libsf.SfError as e:
             mylog.error("Failed to get slice assignments: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         slice_json = json.loads(slice_report)

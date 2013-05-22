@@ -40,6 +40,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class AddVolumesToVolgroupAction(ActionBase):
     class Events:
@@ -65,6 +66,9 @@ class AddVolumesToVolgroupAction(ActionBase):
         """
         Add volumes to a volume access group
         """
+        if volume_name == None and volume_id == None or volgroup_id <= 0:
+            volume_name = self.GetSharedValue(SharedValues.volumeList)
+            volgroup_id = self.GetSharedValue(SharedValues.volumeIDList)
         ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -76,7 +80,7 @@ class AddVolumesToVolgroupAction(ActionBase):
             volgroup = cluster.FindVolumeAccessGroup(volgroupName=volgroup_name, volgroupID=volgroup_id)
         except SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Get a list of volumes to add
@@ -85,7 +89,7 @@ class AddVolumesToVolgroupAction(ActionBase):
             volumes_to_add = cluster.SearchForVolumes(volumeID=volume_id, volumeName=volume_name, volumeRegex=volume_regex, volumePrefix=volume_prefix, accountName=source_account, accountID=source_account_id, volumeCount=volume_count)
         except SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         names = []
@@ -98,16 +102,16 @@ class AddVolumesToVolgroupAction(ActionBase):
             return True
 
         mylog.info("Adding volumes to group")
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+        self._RaiseEvent(self.Events.BEFORE_ADD)
         try:
             volgroup.AddVolumes(volumes_to_add.keys())
         except SfError as e:
             mylog.error("Failed to add volumes to group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Successfully added volumes to group")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ADD)
+        self._RaiseEvent(self.Events.AFTER_ADD)
         return True
 
 # Instantate the class and add its attributes to the module

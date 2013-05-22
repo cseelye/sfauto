@@ -21,6 +21,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CheckEnsembleSizeAction(ActionBase):
     class Events:
@@ -59,7 +60,7 @@ class CheckEnsembleSizeAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for node in result["nodes"]:
             node_list[node["nodeID"]] = node["cip"]
@@ -71,7 +72,7 @@ class CheckEnsembleSizeAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'GetClusterInfo', {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster info: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         mylog.info("Ensemble list: " + str(result["clusterInfo"]["ensemble"]))
         ensemble_count = len(result["clusterInfo"]["ensemble"])

@@ -22,6 +22,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 import lib.libsfnode as libsfnode
 
 class SetNodeClusterAction(ActionBase):
@@ -53,7 +54,7 @@ class SetNodeClusterAction(ActionBase):
 
         allgood = True
         for node_ip in nodeIPs:
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_CLUSTER_NAME, clusterName=clusterName, nodeIP=node_ip)
+            self._RaiseEvent(self.Events.BEFORE_SET_CLUSTER_NAME, clusterName=clusterName, nodeIP=node_ip)
             mylog.info("Setting cluster to '" + clusterName + "' on node " + str(node_ip))
 
             node = libsfnode.SFNode(node_ip)
@@ -61,12 +62,12 @@ class SetNodeClusterAction(ActionBase):
                 node.SetClusterName(clusterName)
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, clusterName=clusterName, exception=e)
+                self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, clusterName=clusterName, exception=e)
                 allgood = False
                 continue
 
             mylog.passed("Successfully set cluster name")
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_CLUSTER_NAME, nodeIP=node_ip, clusterName=clusterName)
+            self._RaiseEvent(self.Events.AFTER_SET_CLUSTER_NAME, nodeIP=node_ip, clusterName=clusterName)
 
         if allgood:
             mylog.passed("Successfully set cluster name on all nodes")

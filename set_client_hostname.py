@@ -5,10 +5,10 @@ This action will set the hostname of a client
 
 When run as a script, the following options/env variables apply:
     --client_ip        The IP address of the client
-    
+
     --client_user       The username for the client
     SFCLIENT_USER env var
-    
+
     --client_pass       The password for the client
     SFCLIENT_PASS env var
 
@@ -23,6 +23,7 @@ from lib.libsf import mylog
 from lib.libclient import ClientError, SfClient
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class SetClientHostnameAction(ActionBase):
     class Events:
@@ -58,16 +59,16 @@ class SetClientHostnameAction(ActionBase):
             return False
 
         mylog.info("Setting hostname from " + client.Hostname + " to " + hostname)
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_CLIENT_HOSTNAME, clientIP=clientIP)
+        self._RaiseEvent(self.Events.BEFORE_SET_CLIENT_HOSTNAME, clientIP=clientIP)
         try:
             client.UpdateHostname(hostname)
         except ClientError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.SET_CLIENT_HOSTNAME_FAILED, clientIP=clientIP, exception=e)
+            self._RaiseEvent(self.Events.SET_CLIENT_HOSTNAME_FAILED, clientIP=clientIP, exception=e)
             return False
 
         mylog.passed("Successfully set hostname")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_CLIENT_HOSTNAME, clientIP=clientIP)
+        self._RaiseEvent(self.Events.AFTER_SET_CLIENT_HOSTNAME, clientIP=clientIP)
         return True
 
 # Instantate the class and add its attributes to the module

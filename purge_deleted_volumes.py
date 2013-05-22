@@ -21,6 +21,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class PurgeDeletedVolumesAction(ActionBase):
     class Events:
@@ -57,22 +58,22 @@ class PurgeDeletedVolumesAction(ActionBase):
             return False
 
         mylog.info("Purging " + str(len(deleted_volumes["volumes"])) + " volumes")
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_PURGE)
+        self._RaiseEvent(self.Events.BEFORE_PURGE)
 
         # Purge the volumes
         allgood = True
         for vol in deleted_volumes["volumes"]:
             params = {}
             params["volumeID"] = vol["volumeID"]
-            super(self.__class__, self)._RaiseEvent(self.Events.PURGE_VOLUME, volumeID=vol["volumeID"])
+            self._RaiseEvent(self.Events.PURGE_VOLUME, volumeID=vol["volumeID"])
             try:
                 libsf.CallApiMethod(mvip, username, password, "PurgeDeletedVolume", params, ExitOnError=False)
             except libsf.SfError as e:
                 mylog.error("Could not purge volume " + str(vol["volumeID"]) + ": " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, volumeID=vol["volumeID"], exception=e)
+                self.RaiseFailureEvent(message="Could not purge volume " + str(vol["volumeID"]) + ": " + str(e), volumeID=vol["volumeID"], exception=e)
                 allgood = False
 
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_PURGE)
+        self._RaiseEvent(self.Events.AFTER_PURGE)
         if allgood:
             return True
         else:

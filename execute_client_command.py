@@ -27,6 +27,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ExecuteClientCommandAction(ActionBase):
     class Events:
@@ -63,7 +64,7 @@ class ExecuteClientCommandAction(ActionBase):
             return_code, stdout, stderr = client.ExecuteCommand(command)
         except ClientError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return -1
         stdout = stdout.rstrip("\n")
         stderr = stderr.rstrip("\n")

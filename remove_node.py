@@ -26,6 +26,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RemoveNodeAction(ActionBase):
     class Events:
@@ -63,7 +64,7 @@ class RemoveNodeAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, "ListActiveNodes", {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for node in result["nodes"]:
             if node["mip"] == node_ip:
@@ -71,20 +72,20 @@ class RemoveNodeAction(ActionBase):
                 break
         if node_id <= 0:
             mylog.error("Could not find node " + node_ip)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not find node " + node_ip)
             return False
         mylog.info("Found node " + node_ip + " is nodeID " + str(node_id))
 
         # Remove all active and failed drives from the node
         if remove_drives:
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE_DRIVES)
+            self._RaiseEvent(self.Events.BEFORE_REMOVE_DRIVES)
             mylog.info("Searching for drives in node " + node_ip)
             drives_to_remove = []
             try:
                 result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
             except libsf.SfError as e:
                 mylog.error("Failed to get drive list: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             for drive in result["drives"]:
                 if (drive["status"].lower() == "active" or drive["status"].lower() == "active") and node_id == drive["nodeID"]:
@@ -96,7 +97,7 @@ class RemoveNodeAction(ActionBase):
                     libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': drives_to_remove})
                 except libsf.SfError as e:
                     mylog.error("Failed to remove drives: " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
 
                 mylog.info("Waiting for syncing")
@@ -110,12 +111,12 @@ class RemoveNodeAction(ActionBase):
                         time.sleep(30)
                 except libsf.SfError as e:
                     mylog.error("Failed to wait for syncing: " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REMOVE_DRIVES)
+            self._RaiseEvent(self.Events.AFTER_REMOVE_DRIVES)
 
         # Remove the node
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE_NODE)
+        self._RaiseEvent(self.Events.BEFORE_REMOVE_NODE)
         while True:
             mylog.info("Removing " + node_ip + " from cluster")
             try:
@@ -133,11 +134,11 @@ class RemoveNodeAction(ActionBase):
                     break
                 else:
                     mylog.error("Error " + e.name + " - " + e.message)
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
 
         mylog.passed("Successfully removed " + node_ip + " from cluster")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REMOVE_NODE)
+        self._RaiseEvent(self.Events.AFTER_REMOVE_NODE)
         return True
 
 # Instantate the class and add its attributes to the module

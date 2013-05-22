@@ -30,6 +30,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetRandomNodeAction(ActionBase):
     class Events:
@@ -47,7 +48,7 @@ class GetRandomNodeAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip, ensemble=False, nomaster=False, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip, ensemble=False, nomaster=False, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Select a random node
         """
@@ -62,7 +63,7 @@ class GetRandomNodeAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'GetClusterMasterNodeID', {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster master: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         master_id = result["nodeID"]
         #mylog.debug("Cluster master is nodeID " + str(master_id))
@@ -75,7 +76,7 @@ class GetRandomNodeAction(ActionBase):
                 result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
             except libsf.SfError as e:
                 mylog.error("Failed to get node list: " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             for node in result["nodes"]:
                 if node["nodeID"] == master_id:
@@ -89,7 +90,7 @@ class GetRandomNodeAction(ActionBase):
                 result = libsf.CallApiMethod(mvip, username, password, 'GetClusterInfo', {})
             except libsf.SfError as e:
                 mylog.error("Failed to get cluster info: " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             for node_cip in result["clusterInfo"]["ensemble"]:
                 if node_cip in node_ref:
@@ -103,7 +104,7 @@ class GetRandomNodeAction(ActionBase):
                 result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
             except libsf.SfError as e:
                 mylog.error("Failed to get node list: " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             for node in result["nodes"]:
                 if node["nodeID"] == master_id:
@@ -116,11 +117,25 @@ class GetRandomNodeAction(ActionBase):
             mylog.debug("Found " + str(node_count) + " eligible nodes in cluster " + mvip + ": " + ",".join(node_list))
 
         index = randint(0, len(node_list)-1)
+        node_ip = node_list[index]
+
+        self.SetSharedValue(SharedValues.nodeIP, node_ip)
+        return node_ip
+
+    def Execute(self, mvip, ensemble=False, nomaster=False, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show a random node
+        """
+        del self
+        node_ip = Get(**locals())
+        if node_ip is False:
+            return False
+
         if bash or csv:
-            sys.stdout.write(node_list[index] + "\n")
+            sys.stdout.write(str(node_ip) + "\n")
             sys.stdout.flush()
         else:
-            mylog.info("Selected " + str(node_list[index]))
+            mylog.info("Selected " + str(node_ip))
         return True
 
 # Instantate the class and add its attributes to the module

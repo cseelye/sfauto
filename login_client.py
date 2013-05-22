@@ -45,6 +45,7 @@ from lib.libclient import ClientError, SfClient, OsType
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class LoginClientAction(ActionBase):
     class Events:
@@ -72,7 +73,7 @@ class LoginClientAction(ActionBase):
             client.Connect(client_ip, client_user, client_pass)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         # Clean iSCSI if there aren't already volumes logged in
@@ -81,18 +82,18 @@ class LoginClientAction(ActionBase):
             targets = client.GetLoggedInTargets()
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         if not targets or len(targets) <= 0:
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_CLIENT_CLEAN, clientIP=client_ip)
+            self._RaiseEvent(self.Events.BEFORE_CLIENT_CLEAN, clientIP=client_ip)
             try:
                 mylog.info(client_ip + ": Cleaning iSCSI on client '" + client.Hostname + "'")
                 client.CleanIscsi()
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
                 return
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_CLIENT_CLEAN, clientIP=client_ip)
+            self._RaiseEvent(self.Events.AFTER_CLIENT_CLEAN, clientIP=client_ip)
 
         expected = 0
         if auth_type.lower() == "chap":
@@ -125,7 +126,7 @@ class LoginClientAction(ActionBase):
                         result = libsf.CallApiMethod(mvip, username, password, "ModifyAccount", params)
                     except libsf.SfError as e:
                         mylog.error(client_ip + ": Failed to modify account for client - " + str(e))
-                        super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                        self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                         return
 
             # Create an account if we couldn't find one
@@ -139,7 +140,7 @@ class LoginClientAction(ActionBase):
                     result = libsf.CallApiMethod(mvip, username, password, "AddAccount", params)
                 except libsf.SfError as e:
                     mylog.error(client_ip + ": Failed to create account for client - " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                    self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                     return
                 account_id = result["accountID"]
                 params = {}
@@ -148,7 +149,7 @@ class LoginClientAction(ActionBase):
                     result = libsf.CallApiMethod(mvip, username, password, "GetAccountByID", params)
                 except libsf.SfError as e:
                     mylog.error(client_ip + ": Failed to find account for client - " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                    self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                     return
                 init_password = result["account"]["initiatorSecret"]
 
@@ -160,7 +161,7 @@ class LoginClientAction(ActionBase):
                 client.SetupChap(svip, account_name.lower(), init_password)
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 return
         else:
             iqn = client.GetInitiatorName()
@@ -174,7 +175,7 @@ class LoginClientAction(ActionBase):
             client.RefreshTargets(svip, expected)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         # Log in to all volumes
@@ -183,7 +184,7 @@ class LoginClientAction(ActionBase):
             client.LoginTargets(svip, login_order, target_list)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         # List out the volumes and their info
@@ -226,7 +227,7 @@ class LoginClientAction(ActionBase):
             cluster_info = libsf.CallApiMethod(mvip, username, password, "GetClusterInfo", {})
         except libsf.SfApiError as e:
             mylog.error("Failed to get cluster info: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         svip = cluster_info["clusterInfo"]["svip"]
 
@@ -238,7 +239,7 @@ class LoginClientAction(ActionBase):
                 accounts_list = libsf.CallApiMethod(mvip, username, password, "ListVolumeAccessGroups", {}, ApiVersion=5.0)
         except libsf.SfApiError as e:
             mylog.error("Failed to get account list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Run the client operations in parallel if there are enough clients
@@ -258,9 +259,9 @@ class LoginClientAction(ActionBase):
             th.daemon = True
             all_threads.append(th)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ALL)
+        self._RaiseEvent(self.Events.BEFORE_ALL)
         allgood = libsf.ThreadRunner(all_threads, results, parallel_clients)
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ALL)
+        self._RaiseEvent(self.Events.AFTER_ALL)
 
         if allgood:
             mylog.passed("Successfully logged in to volumes on all clients")

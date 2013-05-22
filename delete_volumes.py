@@ -37,6 +37,7 @@ from lib.libsf import mylog, SfError
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class DeleteVolumesAction(ActionBase):
     class Events:
@@ -70,7 +71,7 @@ class DeleteVolumesAction(ActionBase):
             volumes_to_delete = libsf.SearchForVolumes(mvip, username, password, VolumeId=volume_id, VolumeName=volume_name, VolumeRegex=volume_regex, VolumePrefix=volume_prefix, AccountName=source_account, VolumeCount=volume_count)
         except SfError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         count = len(volumes_to_delete.keys())
@@ -91,7 +92,7 @@ class DeleteVolumesAction(ActionBase):
                 libsf.CallApiMethod(mvip, username, password, "DeleteVolume", params)
             except SfError as e:
                 mylog.error(e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
             if purge:
@@ -100,7 +101,7 @@ class DeleteVolumesAction(ActionBase):
                     libsf.CallApiMethod(mvip, username, password, "PurgeDeletedVolume", params)
                 except SfError as e:
                     mylog.error(e.message)
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
         return True
 

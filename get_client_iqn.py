@@ -25,6 +25,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetClientIqnAction(ActionBase):
     class Events:
@@ -40,11 +41,10 @@ class GetClientIqnAction(ActionBase):
         libsf.ValidateArgs({"client_ip" : libsf.IsValidIpv4Address},
             args)
 
-    def Execute(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+    def Get(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
         """
         Get the IQN of a client
         """
-
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -58,19 +58,32 @@ class GetClientIqnAction(ActionBase):
             iqn = client.GetInitiatorName()
         except ClientError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return False
 
         if not iqn:
             mylog.error(client.Hostname + " does not have a defined IQN")
             return False
 
+        self.SetSharedValue(SharedValues.clientIQN, iqn)
+        self.SetSharedValue(client_ip + "-clientIQN", iqn)
+        return iqn
+
+    def Execute(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Get the IQN of a client
+        """
+        del self
+        iqn = Get(**locals())
+        if iqn is False:
+            return False
+
         if csv or bash:
-            sys.stdout.write(iqn)
+            sys.stdout.write(str(iqn))
             sys.stdout.write("\n")
             sys.stdout.flush()
         else:
-            mylog.info(client.Hostname + " has IQN " + client.GetInitiatorName())
+            mylog.info(client_ip + " has IQN " + str(iqn))
         return True
 
 # Instantate the class and add its attributes to the module

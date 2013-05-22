@@ -27,6 +27,7 @@ import lib.XenAPI as XenAPI
 import lib.libxen as libxen
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class XenCloneVmAction(ActionBase):
     class Events:
@@ -62,7 +63,7 @@ class XenCloneVmAction(ActionBase):
             session = libxen.Connect(vmhost, host_user, host_pass)
         except libxen.XenError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Find the source VM
@@ -72,11 +73,11 @@ class XenCloneVmAction(ActionBase):
             vm_ref = session.xenapi.VM.get_by_name_label(vm_name)
         except XenAPI.Failure as e:
             mylog.error("Could not find source VM '" + vm_name + "' - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         if not vm_ref or len(vm_ref) <= 0:
             mylog.error("Could not find source VM '" + vm_name + "'")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not find source VM '" + vm_name + "'")
             return False
         vm_ref = vm_ref[0]
 
@@ -89,7 +90,7 @@ class XenCloneVmAction(ActionBase):
             dest_sr_ref = session.xenapi.SR.get_by_name_label(dest_sr)
         except XenAPI.Failure as e:
             mylog.error("Could not find destination SR '" + dest_sr + "' - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         if dest_sr_ref and len(dest_sr_ref) > 0:
             dest_sr_ref = dest_sr_ref[0]
@@ -107,7 +108,7 @@ class XenCloneVmAction(ActionBase):
                     break
             if not dest_sr_ref:
                 mylog.error("Could not find destination SR '" + dest_sr + "'")
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Could not find destination SR '" + dest_sr + "'")
                 return False
 
         # Start the clone
@@ -117,7 +118,7 @@ class XenCloneVmAction(ActionBase):
             clone_task = session.xenapi.Async.VM.copy(vm_ref, clone_name, dest_sr_ref)
         except XenAPI.Failure as e:
             mylog.error("Could not start clone " + clone_name + ": " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Wait for clone to finish
@@ -135,14 +136,14 @@ class XenCloneVmAction(ActionBase):
                 break
         if task_record["status"] != "success":
             mylog.error("Error cloning " + vm_name + " to " + clone_name + " - " + str(task_record["error_info"]))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Error cloning " + vm_name + " to " + clone_name + " - " + str(task_record["error_info"]))
             return False
 
         # Get the new clone
         clone_ref = session.xenapi.VM.get_by_name_label(clone_name)
         if not clone_ref or len(clone_ref) <= 0:
             mylog.error("Could not find clone " + clone_name + " after creation")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         clone_ref = clone_ref[0]
 
@@ -174,7 +175,7 @@ class XenCloneVmAction(ActionBase):
             session.xenapi.VM.start_on(clone_ref, dest_host_ref, False, False)
         except XenAPI.Failure as e:
             mylog.error("Could not start " + clone_name + " : " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Successfully cloned " + vm_name + " to " + clone_name)

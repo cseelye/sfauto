@@ -36,6 +36,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import logging
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class AddDrivesAction(ActionBase):
     class Events:
@@ -79,7 +80,7 @@ class AddDrivesAction(ActionBase):
             nodes_obj = libsf.CallApiMethod(mvip, username, password, "ListActiveNodes", {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         for no in nodes_obj["nodes"]:
@@ -131,15 +132,15 @@ class AddDrivesAction(ActionBase):
                     return True
 
                 # Add the drives
-                super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+                self._RaiseEvent(self.Events.BEFORE_ADD)
                 try:
                     libsf.CallApiMethod(mvip, username, password, "AddDrives", {'drives': drives2add})
                 except libsf.SfError as e:
                     mylog.error("Failed to add drives: " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
 
-                super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SYNC)
+                self._RaiseEvent(self.Events.BEFORE_SYNC)
                 mylog.info("Waiting for syncing...")
                 time.sleep(60)
                 try:
@@ -151,9 +152,9 @@ class AddDrivesAction(ActionBase):
                         time.sleep(30)
                 except libsf.SfError as e:
                     mylog.error("Failed to wait for syncing: " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
-                super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SYNC)
+                self._RaiseEvent(self.Events.AFTER_SYNC)
 
         else:
             # make a list of drives to add
@@ -163,7 +164,7 @@ class AddDrivesAction(ActionBase):
                 drives_obj = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
             except libsf.SfError as e:
                 mylog.error("Failed to get drive list: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             for do in drives_obj["drives"]:
                 if do["status"].lower() != "available": continue
@@ -201,15 +202,15 @@ class AddDrivesAction(ActionBase):
                 return True
 
             # Add the drives
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+            self._RaiseEvent(self.Events.BEFORE_ADD)
             try:
                 libsf.CallApiMethod(mvip, username, password, "AddDrives", {'drives': drives2add})
             except libsf.SfError as e:
                 mylog.error("Failed to add drives: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SYNC)
+            self._RaiseEvent(self.Events.BEFORE_SYNC)
             mylog.info("Waiting for syncing...")
             time.sleep(120)
             try:
@@ -221,12 +222,12 @@ class AddDrivesAction(ActionBase):
                     time.sleep(30)
             except libsf.SfError as e:
                 mylog.error("Failed to wait for syncing: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SYNC)
+            self._RaiseEvent(self.Events.AFTER_SYNC)
 
         mylog.passed("Finished adding drives")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ADD)
+        self._RaiseEvent(self.Events.AFTER_ADD)
         return True
 
 # Instantate the class and add its attributes to the module

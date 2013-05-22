@@ -22,6 +22,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ShowLastGcAction(ActionBase):
     class Events:
@@ -59,12 +60,12 @@ class ShowLastGcAction(ActionBase):
 
             if len(incomplete) > 0:
                 mylog.warning("Services " + ", ".join(map(str, incomplete)) + " did not complete GC")
-                super(self.__class__, self)._RaiseEvent(self.Events.GC_INCOMPLETE, GCInfo=gc_info)
+                self._RaiseEvent(self.Events.GC_INCOMPLETE, GCInfo=gc_info)
             else:
-                super(self.__class__, self)._RaiseEvent(self.Events.GC_FINISHED, GCInfo=gc_info)
+                self._RaiseEvent(self.Events.GC_FINISHED, GCInfo=gc_info)
         else:
             mylog.error("Last GC started at " + libsf.TimestampToStr(gc_info.StartTime) + " but did not complete")
-            super(self.__class__, self)._RaiseEvent(self.Events.GC_INCOMPLETE, GCInfo=gc_info)
+            self._RaiseEvent(self.Events.GC_INCOMPLETE, GCInfo=gc_info)
         return True
 
 # Instantate the class and add its attributes to the module

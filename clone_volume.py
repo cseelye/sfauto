@@ -57,6 +57,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CloneVolumeAction(ActionBase):
     class Events:
@@ -90,7 +91,7 @@ class CloneVolumeAction(ActionBase):
             volumes_to_clone = libsf.SearchForVolumes(mvip, username, password, VolumeId=volume_id, VolumeName=volume_name, VolumeRegex=volume_regex, VolumePrefix=volume_prefix, AccountName=source_account, AccountId=source_account_id, VolumeCount=volume_count)
         except libsf.SfError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Find the destination account
@@ -102,7 +103,7 @@ class CloneVolumeAction(ActionBase):
                 libsf.FindAccount(mvip, username, password, AccountName=account_name, AccountId=account_id)
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
         class CloneJob:
@@ -150,7 +151,7 @@ class CloneVolumeAction(ActionBase):
                 result = libsf.CallApiMethod(mvip, username, password, "CloneVolume", params)
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             job.CloneJobHandle = result["asyncHandle"]
             clones_in_progress[job.CloneName] = job
@@ -169,7 +170,7 @@ class CloneVolumeAction(ActionBase):
                         result = libsf.CallApiMethod(mvip, username, password, "GetAsyncResult", params)
                     except libsf.SfError as e:
                         mylog.error(str(e))
-                        super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                        self.RaiseFailureEvent(message=str(e), exception=e)
                         return False
                     if result["status"].lower() == "complete":
                         if "result" in result:
@@ -198,7 +199,7 @@ class CloneVolumeAction(ActionBase):
                     else:
                         mylog.error("  Clone " + dest_clone_name + " failed -- " + result["error"]["name"] + ": " + result["error"]["message"])
                         failure = True
-                        super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                        self.RaiseFailureEvent(message="Clone " + dest_clone_name + " failed -- " + result["error"]["name"] + ": " + result["error"]["message"])
                     del clones_in_progress[dest_clone_name]
                     break
             time.sleep(2)

@@ -26,6 +26,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CreateVolgroupAction(ActionBase):
     class Events:
@@ -63,15 +64,14 @@ class CreateVolgroupAction(ActionBase):
             cluster.FindVolumeAccessGroup(volgroupName=volgroup_name)
             if strict:
                 mylog.error("Group already exists")
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Group already exists")
                 return False
             else:
                 mylog.passed("Group already exists")
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
                 return True
         except libsf.SfApiError as e:
             mylog.error("Could not find volume group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         except SfError:
             # Group does not exist
@@ -82,7 +82,7 @@ class CreateVolgroupAction(ActionBase):
             cluster.CreateVolumeGroup(volgroup_name)
         except libsf.SfError as e:
             mylog.error("Failed to create group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Group created successfully")

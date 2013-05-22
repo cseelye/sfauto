@@ -23,6 +23,7 @@ from lib.libsf import mylog
 from lib.libclient import ClientError, SfClient
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class SetClientInitiatorNameAction(ActionBase):
     class Events:
@@ -60,17 +61,17 @@ class SetClientInitiatorNameAction(ActionBase):
                 continue
 
             mylog.info("Setting initiator name on " + client.Hostname)
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_CLIENT_INITIATOR_NAME, clientIP=client_ip)
+            self._RaiseEvent(self.Events.BEFORE_SET_CLIENT_INITIATOR_NAME, clientIP=client_ip)
             try:
                 client.UpdateInitiatorName()
             except ClientError as e:
                 mylog.error(str(e))
                 error = True
-                super(self.__class__, self)._RaiseEvent(self.Events.SET_CLIENT_INITIATOR_NAME_FAILED, clientIP=client_ip, exception=e)
+                self._RaiseEvent(self.Events.SET_CLIENT_INITIATOR_NAME_FAILED, clientIP=client_ip, exception=e)
                 continue
 
             mylog.passed("  Successfully set initiator name on " + client.Hostname)
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_CLIENT_INITIATOR_NAME, clientIP=client_ip)
+            self._RaiseEvent(self.Events.AFTER_SET_CLIENT_INITIATOR_NAME, clientIP=client_ip)
 
         if error:
             mylog.error("Failed to set initiator name on all clients")

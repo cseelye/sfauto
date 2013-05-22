@@ -33,6 +33,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CreateClusterAction(ActionBase):
     class Events:
@@ -75,7 +76,7 @@ class CreateClusterAction(ActionBase):
                 response = libsf.CallApiMethod(node_ip, username, password, "GetBootstrapConfig", params)
             except libsf.SfError as e:
                 mylog.error("Failed to get bootstrap config: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
             nodelist = response["nodes"]
@@ -87,7 +88,7 @@ class CreateClusterAction(ActionBase):
             ntries += 1
             if ntries > 10:
                 mylog.error("Couldn't find " + str(node_count) + " nodes, only found " + str(len(nodelist)))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Couldn't find " + str(node_count) + " nodes, only found " + str(len(nodelist)))
                 return False
 
         mylog.info("Creating cluster ...")
@@ -101,7 +102,7 @@ class CreateClusterAction(ActionBase):
             libsf.CallApiMethod(node_ip, username, password, "CreateCluster", params)
         except libsf.SfError as e:
             mylog.error("Failed to create cluster: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         mylog.passed("Cluster created successfully")
 
@@ -123,7 +124,7 @@ class CreateClusterAction(ActionBase):
                 response = libsf.CallApiMethod(mvip, username, password, "ListDrives", params)
             except libsf.SfError as e:
                 mylog.error("Failed to list drives: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             actual_drives = len(response["drives"])
 
@@ -132,7 +133,7 @@ class CreateClusterAction(ActionBase):
             response = libsf.CallApiMethod(mvip, username, password, "ListDrives", params)
         except libsf.SfError as e:
             mylog.error("Failed to list drives: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         drive_list = []
         for i in range(len(response["drives"])):
@@ -148,7 +149,7 @@ class CreateClusterAction(ActionBase):
             libsf.CallApiMethod(mvip, username, password, "AddDrives", params)
         except libsf.SfError as e:
             mylog.error("Failed to add drives: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         mylog.passed("All drives added")
         return True

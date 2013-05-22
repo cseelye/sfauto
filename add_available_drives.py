@@ -25,6 +25,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class AddAvailableDrivesAction(ActionBase):
     class Events:
@@ -56,18 +57,18 @@ class AddAvailableDrivesAction(ActionBase):
 
         cluster = libsfcluster.SFCluster(mvip, username, password)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+        self._RaiseEvent(self.Events.BEFORE_ADD)
         try:
             added = cluster.AddAvailableDrives()
         except libsf.SfError as e:
             mylog.error("Failed to get drive list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(exception=e)
             return False
         if added <= 0:
             return True
 
         if waitForSync:
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SYNC)
+            self._RaiseEvent(self.Events.BEFORE_SYNC)
             mylog.info("Waiting a minute to make sure syncing has started")
             time.sleep(60)
 
@@ -81,12 +82,12 @@ class AddAvailableDrivesAction(ActionBase):
                     time.sleep(20)
             except libsf.SfError as e:
                 mylog.error("Failed wait for syncing: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SYNC)
+            self._RaiseEvent(self.Events.AFTER_SYNC)
 
         mylog.passed("Successfully added drives to the cluster")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ADD)
+        self._RaiseEvent(self.Events.AFTER_ADD)
         return True
 
 # Instantate the class and add its attributes to the module

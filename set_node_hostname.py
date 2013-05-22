@@ -22,6 +22,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 import lib.libsfnode as libsfnode
 
 class SetNodeHostnameAction(ActionBase):
@@ -49,19 +50,19 @@ class SetNodeHostnameAction(ActionBase):
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_HOSTNAME, hostname=hostname, nodeIP=nodeIP)
+        self._RaiseEvent(self.Events.BEFORE_SET_HOSTNAME, hostname=hostname, nodeIP=nodeIP)
         mylog.info("Setting hostname to '" + hostname + "' on node " + str(nodeIP))
 
         node = libsfnode.SFNode(nodeIP, clusterUsername=username, clusterPassword=password)
         try:
             node.SetHostname(hostname)
         except libsf.SfError as e:
-            mylog.error("" + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=nodeIP, hostname=hostname, exception=e)
+            mylog.error(str(e))
+            self.RaiseFailureEvent(message=str(e), nodeIP=nodeIP, hostname=hostname, exception=e)
             return False
 
         mylog.passed("Successfully set hostname on " + nodeIP)
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_HOSTNAME, nodeIP=nodeIP, hostname=hostname)
+        self._RaiseEvent(self.Events.AFTER_SET_HOSTNAME, nodeIP=nodeIP, hostname=hostname)
         return True
 
 # Instantate the class and add its attributes to the module

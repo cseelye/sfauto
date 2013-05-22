@@ -31,6 +31,7 @@ import lib.XenAPI as XenAPI
 import lib.libxen as libxen
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class XenPoweronVmsAction(ActionBase):
     class Events:
@@ -56,7 +57,7 @@ class XenPoweronVmsAction(ActionBase):
             session = libxen.Connect(VmHost, HostUser, HostPass)
         except libxen.XenError as e:
             mylog.error("  " + VmName + ": " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, vmName=VmName, exception=e)
+            self.RaiseFailureEvent(message=str(e), vmName=VmName, exception=e)
             return
 
         mylog.debug("  " + VmName + ": powering on")
@@ -76,11 +77,11 @@ class XenPoweronVmsAction(ActionBase):
                     results[VmName] = True
                     break
                 else:
-                    mylog.error("  " + VmName + ": Failed to power off - " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, vmName=VmName, exception=e)
+                    mylog.error("  " + VmName + ": Failed to power on - " + str(e))
+                    self.RaiseFailureEvent(message=str(e), vmName=VmName, exception=e)
                     return
         if not results[VmName]:
-            mylog.error("  " + VmName + ": Failed to power off")
+            mylog.error("  " + VmName + ": Failed to power on")
 
     def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_xen,  host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, parallel_thresh=sfdefaults.xenapi_parallel_calls_thresh, parallel_max=sfdefaults.xenapi_parallel_calls_max, debug=False):
         """
@@ -97,7 +98,7 @@ class XenPoweronVmsAction(ActionBase):
             session = libxen.Connect(vmhost, host_user, host_pass)
         except libxen.XenError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         if vm_name:
@@ -105,7 +106,7 @@ class XenPoweronVmsAction(ActionBase):
                 vm_ref = session.xenapi.VM.get_by_name_label(vm_name)
             except XenAPI.Failure as e:
                 mylog.error("Could not find VM " + vm_name + " - " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             vm = session.xenapi.VM.get_record(vm_ref)
             if vm["power_state"] == "Running":
@@ -126,7 +127,7 @@ class XenPoweronVmsAction(ActionBase):
             vm_ref_list = session.xenapi.VM.get_all()
         except XenAPI.Failure as e:
             mylog.error("Could not get VM list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for vm_ref in vm_ref_list:
             vm = session.xenapi.VM.get_record(vm_ref)

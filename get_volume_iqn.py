@@ -27,6 +27,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetVolumeIqnAction(ActionBase):
     class Events:
@@ -45,7 +46,7 @@ class GetVolumeIqnAction(ActionBase):
                             "volume_name" : None},
             args)
 
-    def Execute(self, mvip, volume_name=None, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip=sfdefaults.mvip, volume_name=None, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Get the IQN of a volume
         """
@@ -59,7 +60,7 @@ class GetVolumeIqnAction(ActionBase):
             all_volumes = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
         except libsf.SfError as e:
             mylog.error("Failed to get volume list: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         volume_iqn = None
@@ -69,7 +70,20 @@ class GetVolumeIqnAction(ActionBase):
                 break
         if volume_iqn == None:
             mylog.error("Could not find volume '" + volume_name + "'")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not find volume '" + volume_name + "'")
+            return False
+
+        self.SetSharedValue(SharedValues.volumeIQN, volume_iqn)
+        self.SetSharedValue(volume_name + "-IQN", volume_iqn)
+        return volume_iqn
+
+    def Execute(self, mvip=sfdefaults.mvip, volume_name=None, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show the IQN of a volume
+        """
+        del self
+        volume_iqn = Get(**locals())
+        if volume_iqn is False:
             return False
 
         if csv or bash:

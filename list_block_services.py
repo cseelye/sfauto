@@ -25,6 +25,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ListBlockServicesAction(ActionBase):
     class Events:
@@ -42,9 +43,9 @@ class ListBlockServicesAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
-        Get a list of active nodes in the cluster
+        Get the list of block services in the cluster
         """
         self.ValidateArgs(locals())
         if debug:
@@ -57,24 +58,36 @@ class ListBlockServicesAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'ListServices', {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
-        slices = []
+        block_list = []
         for item in result["services"]:
             if 'service' in item and item['service']['serviceType'] == "block":
-                slices.append(item['service']['serviceID'])
-        slices = map(str, sorted(slices))
+                block_list.append(item['service']['serviceID'])
 
+        self.SetSharedValue(SharedValues.blockServiceIDList, block_list)
+        return block_list
+
+    def Execute(self, mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show the list of block services in the cluster
+        """
+        del self
+        block_list = Get(**locals())
+        if block_list is False:
+            return False
+
+        block_list = map(str, sorted(block_list))
         if csv or bash:
             separator = ","
             if bash:
                 separator = " "
-            sys.stdout.write(separator.join(slices) + "\n")
+            sys.stdout.write(separator.join(block_list) + "\n")
             sys.stdout.flush()
         else:
-            for ss_id in slices:
-                mylog.info("block" + ss_id)
+            for ss_id in block_list:
+                mylog.info("  block" + ss_id)
 
         return True
 

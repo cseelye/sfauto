@@ -44,6 +44,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CreateVolumesAction(ActionBase):
     class Events:
@@ -96,7 +97,7 @@ class CreateVolumesAction(ActionBase):
             account = libsf.FindAccount(mvip, username, password, AccountName=account_name, AccountId=account_id)
         except libsf.SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         account_name = account["username"]
         account_id = account["accountID"]
@@ -122,7 +123,7 @@ class CreateVolumesAction(ActionBase):
                 libsf.CallApiMethod(mvip, username, password, "CreateVolume", params)
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             mylog.info("Created volume " + volume_name)
             created += 1

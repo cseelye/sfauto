@@ -22,6 +22,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ShowGcInfoAction(ActionBase):
     class Events:
@@ -59,16 +60,16 @@ class ShowGcInfoAction(ActionBase):
         for gc_info in gc_list:
             if gc_info.Rescheduled:
                 mylog.warning("GC generation " + str(gc_info.Generation) + " started " + libsf.TimestampToStr(gc_info.StartTime) + " was rescheduled")
-                super(self.__class__, self)._RaiseEvent(self.Events.GC_RESCHEDULED, GCInfo=gc_info)
+                self._RaiseEvent(self.Events.GC_RESCHEDULED, GCInfo=gc_info)
             elif gc_info.EndTime <= 0:
                 mylog.warning("GC generation " + str(gc_info.Generation) + " started " + libsf.TimestampToStr(gc_info.StartTime) + " did not complete ")
                 mylog.warning("    " + str(len(gc_info.ParticipatingSSSet)) + " participating SS: [" + ",".join(map(str, gc_info.ParticipatingSSSet)) + "]  " + str(len(gc_info.EligibleBSSet)) + " eligible BS: [" + ",".join(map(str, gc_info.EligibleBSSet)) + "]")
                 mylog.warning("    " + str(len(gc_info.EligibleBSSet - gc_info.CompletedBSSet)) + " BS did not complete GC: [" + ", ".join(map(str, gc_info.EligibleBSSet - gc_info.CompletedBSSet)) + "]")
-                super(self.__class__, self)._RaiseEvent(self.Events.GC_INCOMPLETE, GCInfo=gc_info)
+                self._RaiseEvent(self.Events.GC_INCOMPLETE, GCInfo=gc_info)
             else:
                 mylog.info("GC generation " + str(gc_info.Generation) + " started " + libsf.TimestampToStr(gc_info.StartTime) + ", duration " + libsf.SecondsToElapsedStr(gc_info.EndTime - gc_info.StartTime) + ", " + libsf.HumanizeBytes(gc_info.DiscardedBytes) + " discarded")
                 mylog.info("    " + str(len(gc_info.ParticipatingSSSet)) + " participating SS: " + ",".join(map(str, gc_info.ParticipatingSSSet)) + "  " + str(len(gc_info.EligibleBSSet)) + " eligible BS: " + ",".join(map(str, gc_info.EligibleBSSet)) + "")
-                super(self.__class__, self)._RaiseEvent(self.Events.GC_FINISHED, GCInfo=gc_info)
+                self._RaiseEvent(self.Events.GC_FINISHED, GCInfo=gc_info)
             mylog.info("")
         return True
 

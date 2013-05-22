@@ -25,6 +25,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetClusterMasterAction(ActionBase):
     class Events:
@@ -42,11 +43,10 @@ class GetClusterMasterAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Get the cluster master
         """
-
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -58,7 +58,7 @@ class GetClusterMasterAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'GetClusterMasterNodeID', {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster master ID - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         node_id = result["nodeID"]
@@ -68,7 +68,7 @@ class GetClusterMasterAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         node_ip = None
         for node in result["nodes"]:
@@ -77,7 +77,21 @@ class GetClusterMasterAction(ActionBase):
 
         if not node_ip:
             mylog.error("Could not find cluster master IP")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not find cluster master IP")
+            return False
+
+        self.SetSharedValue(SharedValues.nodeIP, node_ip)
+        self.SetSharedValue(SharedValues.clusterMasterIP, node_ip)
+        self.SetSharedValue(SharedValues.clusterMasterID, node_id)
+        return (node_ip, node_id)
+
+    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show the cluster master
+        """
+        del self
+        node_ip, node_id = Get(**locals())
+        if node_ip is False or node_id is False:
             return False
 
         if csv or bash:

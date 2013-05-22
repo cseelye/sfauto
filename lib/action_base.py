@@ -1,5 +1,8 @@
+import sys
 import libsf
 from libsf import mylog
+import datastore
+import sfdefaults
 
 class ActionBase(object):
     """
@@ -38,6 +41,14 @@ class ActionBase(object):
             mylog.debug("Executing event handler for " + str(event))
             self._events[event](*args, **kwargs)
 
+    def RaiseFailureEvent(self, *args, **kwargs):
+        if not getattr(self.Events, "FAILURE"):
+            return
+        self._RaiseEvent(self.Events.FAILURE, *args, **kwargs)
+        if sfdefaults.stop_on_error:
+            self.Abort()
+            sys.exit(1)
+
     def Abort(self):
         """
         Abort the execution of this action
@@ -47,4 +58,42 @@ class ActionBase(object):
             for th in self._threads:
                 th.terminate()
                 th.join()
+
+    def SetSharedValue(self, keyName, value):
+        """
+        Set a value in the shared datastore
+        """
+        datastore.Set(keyName, value)
+
+    def GetSharedValue(self, keyName):
+        """
+        Get a value from the shared datastore
+        """
+        return datastore.Get(keyName)
+
+    def GetNextSharedValue(self, keyName):
+        """
+        Get the next item from a shared list value
+        """
+        try:
+            datastore.Lock()
+            items = datastore.Get(keyName)
+            if not items:
+                return None
+            indexName = keyName + "Name"
+            indexValue = datastore.Get(indexName)
+            if indexValue is None:
+                indexValue = 0
+            else:
+                indexValue += 1
+            datastore.Set(indexName, indexValue)
+            return items[indexValue % len(items)]
+        finally:
+            datastore.Unlock()
+
+    def DelSharedValue(self, keyName):
+        """
+        Delete a value from the shared datastore
+        """
+        datastore.Del(keyName)
 

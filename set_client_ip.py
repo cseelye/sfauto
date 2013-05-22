@@ -5,10 +5,10 @@ This action will set the IP address of a client
 
 When run as a script, the following options/env variables apply:
     --client_ip        The IP address of the client
-    
+
     --client_user       The username for the client
     SFCLIENT_USER env var
-    
+
     --client_pass       The password for the client
     SFCLIENT_PASS env var
 
@@ -33,6 +33,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class SetClientIpAction(ActionBase):
     class Events:
@@ -62,7 +63,7 @@ class SetClientIpAction(ActionBase):
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
-    
+
         client = SfClient()
         mylog.info("Connecting to client '" + clientIP + "'")
         try:
@@ -71,14 +72,14 @@ class SetClientIpAction(ActionBase):
             mylog.error(e.message)
             return False
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_CLIENT_IP, clientIP=clientIP)
+        self._RaiseEvent(self.Events.BEFORE_SET_CLIENT_IP, clientIP=clientIP)
         if interfaceName:
             mylog.info("Setting IP to " + newIP + " on interface " + interfaceName)
             try:
                 client.ChangeIpAddress(NewIp=newIP, NewMask=newNetmask, NewGateway=newGateway, InterfaceName=interfaceName, UpdateHosts=updateHosts)
             except ClientError as e:
                 mylog.error(e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.SET_CLIENT_IP_FAILED)
+                self._RaiseEvent(self.Events.SET_CLIENT_IP_FAILED)
                 return False
         elif interfaceMac:
             mylog.info("Setting IP to " + newIP + " on interaface with MAC " + interfaceMac)
@@ -86,11 +87,11 @@ class SetClientIpAction(ActionBase):
                 client.ChangeIpAddress(NewIp=newIP, NewMask=newNetmask, NewGateway=newGateway, InterfaceMac=interfaceMac, UpdateHosts=updateHosts)
             except ClientError as e:
                 mylog.error(e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.SET_CLIENT_IP_FAILED, clientIP=clientIP, exception=e)
+                self._RaiseEvent(self.Events.SET_CLIENT_IP_FAILED, clientIP=clientIP, exception=e)
                 return False
-    
+
         mylog.passed("Successfully set IP address")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_CLIENT_IP, clientIP=clientIP)
+        self._RaiseEvent(self.Events.AFTER_SET_CLIENT_IP, clientIP=clientIP)
         return True
 
 # Instantate the class and add its attributes to the module

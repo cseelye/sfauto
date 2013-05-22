@@ -26,6 +26,7 @@ from lib.libsf import mylog
 from lib.libclient import ClientError, SfClient
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CleanIscsiAction(ActionBase):
     class Events:
@@ -44,7 +45,7 @@ class CleanIscsiAction(ActionBase):
             client.Connect(client_ip, client_user, client_pass)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             results[index] = False
             return
 
@@ -54,7 +55,7 @@ class CleanIscsiAction(ActionBase):
             client.CleanIscsi(default_iscsid)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             results[index] = False
             return
 

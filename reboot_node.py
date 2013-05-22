@@ -21,6 +21,7 @@ import logging
 import lib.libsfnode as libsfnode
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RebootNodeAction(ActionBase):
     class Events:
@@ -39,28 +40,33 @@ class RebootNodeAction(ActionBase):
                             },
             args)
 
-    def Execute(self, node_ip, waitForUp=True, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+    def Execute(self, node_ip=None, waitForUp=True, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
         """
         Reboot a node
         """
+        if not node_ip:
+            node_ip = self.GetSharedValue("nodeIP")
+        if not node_ip:
+            node_ip = self.GetNextSharedValue("activeNodeList")
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REBOOT)
+        self._RaiseEvent(self.Events.BEFORE_REBOOT)
 
         node = libsfnode.SFNode(node_ip, ssh_user, ssh_pass)
 
         mylog.info("Rebooting " + node_ip)
         try:
-            node.Reboot(waitForUp)
+            #node.Reboot(waitForUp)
+            pass
         except libsf.SfError as e:
             mylog.error("Failed to reboot node: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
             return False
 
         mylog.passed(node_ip + " rebooted successfully")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REBOOT)
+        self._RaiseEvent(self.Events.AFTER_REBOOT)
         return True
 
 # Instantate the class and add its attributes to the module

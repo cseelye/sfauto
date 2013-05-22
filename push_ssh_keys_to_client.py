@@ -26,6 +26,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class PushSshKeysToClientAction(ActionBase):
     class Events:
@@ -82,14 +83,14 @@ class PushSshKeysToClientAction(ActionBase):
         # Send the key over to each client
         allgood = True
         for client_ip in client_ips:
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_PUSH, clientIP=client_ip)
+            self._RaiseEvent(self.Events.BEFORE_PUSH, clientIP=client_ip)
             client = SfClient()
             mylog.info("Connecting to client '" + client_ip + "'")
             try:
                 client.Connect(client_ip, client_user, client_pass)
             except ClientError as e:
                 mylog.error("Failed to connect to " + client_ip + ": " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 allgood = False
                 continue
 
@@ -121,12 +122,12 @@ class PushSshKeysToClientAction(ActionBase):
                 mylog.passed("Pushed key to " + client.Hostname)
             except ClientError as e:
                 mylog.error("Failed to push key to client " + client_ip)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 allgood = False
                 continue
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_PUSH, clientIP=client_ip)
+            self._RaiseEvent(self.Events.AFTER_PUSH, clientIP=client_ip)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.ALL_PUSHED)
+        self._RaiseEvent(self.Events.ALL_PUSHED)
         if allgood:
             mylog.passed("Successfully pushed SSH keys to all clients")
             return True

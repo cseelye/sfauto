@@ -33,6 +33,7 @@ import logging
 import lib.libsf as libsf
 from lib.libsf import mylog
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 import lib.libsfnode as libsfnode
 
 
@@ -72,18 +73,18 @@ class SetNodeIpAction(ActionBase):
         mylog.info("  DNS server: " + dnsIP)
         mylog.info("  DNS search: " + dnsSearch)
         mylog.info("This may take up to 90 seconds")
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_NETINFO, nodeIP=nodeIP)
+        self._RaiseEvent(self.Events.BEFORE_SET_NETINFO, nodeIP=nodeIP)
 
         node = libsfnode.SFNode(nodeIP)
         try:
             node.SetNetworkInfo(onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch)
         except libsf.SfApiError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.SET_NETINFO_FAILED, nodeIP=nodeIP)
+            self._RaiseEvent(self.Events.SET_NETINFO_FAILED, nodeIP=nodeIP)
             return False
 
         mylog.passed("Successfully set network info")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_NETINFO, nodeIP=nodeIP)
+        self._RaiseEvent(self.Events.AFTER_SET_NETINFO, nodeIP=nodeIP)
         return True
 
 # Instantate the class and add its attributes to the module

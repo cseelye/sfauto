@@ -28,6 +28,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetSupportBundleAction(ActionBase):
     class Events:
@@ -51,9 +52,9 @@ class GetSupportBundleAction(ActionBase):
             data = stdout.readlines()
             retcode = int(data.pop())
             if retcode != 0:
-                mylog.error(str(data))
+                mylog.error("\n".join(data))
                 ssh.close()
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip)
+                self.RaiseFailureEvent(message="\n".join(data), nodeIP=node_ip)
                 return False
             full_bundle_name = ""
             for line in reversed(data):
@@ -68,9 +69,11 @@ class GetSupportBundleAction(ActionBase):
             data = stdout.readlines()
             retcode = int(data.pop())
             if retcode != 0:
-                mylog.error(str(stderr.readlines()))
+                err = stdout.readlines()
+                err = "\n".join(err)
+                mylog.error(err)
                 ssh.close()
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip)
+                self.RaiseFailureEvent(message=err, nodeIP=node_ip)
                 return False
             full_bundle_name = full_bundle_name + ".gz"
 
@@ -87,7 +90,7 @@ class GetSupportBundleAction(ActionBase):
             results[index] = True
         except libsf.SfError as e:
             mylog.error(node_ip + ": " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
             return False
 
     def ValidateArgs(self, args):

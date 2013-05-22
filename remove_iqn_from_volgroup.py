@@ -26,6 +26,7 @@ import lib.sfdefaults as sfdefaults
 import logging
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RemoveIqnFromVolgroupAction(ActionBase):
     class Events:
@@ -66,20 +67,20 @@ class RemoveIqnFromVolgroupAction(ActionBase):
             volgroup = libsfcluster.SFCluster(mvip, username, password).FindVolumeAccessGroup(volgroupName=volgroup_name, volgroupID=volgroup_id)
         except SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Remove the IQN
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE)
+        self._RaiseEvent(self.Events.BEFORE_REMOVE)
         try:
             volgroup.RemoveInitiators([iqn])
         except SfError as e:
             mylog.error("Failed to modify group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Removed IQN from group")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REMOVE)
+        self._RaiseEvent(self.Events.AFTER_REMOVE)
         return True
 
 # Instantate the class and add its attributes to the module

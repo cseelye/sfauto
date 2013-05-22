@@ -28,6 +28,7 @@ from lib.libsf import mylog
 from clientmon.libclientmon import ClientMon
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class KvmListVmInfoAction(ActionBase):
     class Events:
@@ -68,11 +69,11 @@ class KvmListVmInfoAction(ActionBase):
             conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         if conn == None:
             mylog.error("Failed to connect")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Failed to connect")
             return False
 
         # Get a list of VMs
@@ -83,7 +84,7 @@ class KvmListVmInfoAction(ActionBase):
             vm_list += running_vm_list
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         try:
             vm_ids = conn.listDefinedDomains()
@@ -91,7 +92,7 @@ class KvmListVmInfoAction(ActionBase):
             vm_list += stopped_vm_list
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         vm_list = sorted(vm_list, key=lambda vm: vm.name())
 

@@ -26,6 +26,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetLastGcDurationAction(ActionBase):
     class Events:
@@ -45,11 +46,10 @@ class GetLastGcDurationAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Get the last GC info
         """
-
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -61,7 +61,28 @@ class GetLastGcDurationAction(ActionBase):
             gc_info = cluster.GetLastGCInfo()
         except libsf.SfError as e:
             mylog.error("Failed to get GC info - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+
+        incomplete = gc_info.EligibleBSSet - gc_info.CompletedBSSet
+        if gc_info.EndTime > 0:
+            if len(incomplete) > 0:
+                self._RaiseEvent(self.Events.GC_INCOMPLETE)
+            else:
+                self._RaiseEvent(self.Events.GC_FINISHED)
+        else:
+            self._RaiseEvent(self.Events.GC_INCOMPLETE)
+
+        self.SetSharedValue(SharedValues.lastGCInfo, gc_info)
+        return gc_info
+
+    def Execute(self, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show the last GC info
+        """
+        del self
+        gc_info = Get(**locals())
+        if gc_info is False:
             return False
 
         incomplete = gc_info.EligibleBSSet - gc_info.CompletedBSSet
@@ -75,11 +96,9 @@ class GetLastGcDurationAction(ActionBase):
                 mylog.info(str(len(gc_info.ParticipatingSSSet)) + " participating SS: " + ",".join(map(str, gc_info.ParticipatingSSSet)) + "  " + str(len(gc_info.EligibleBSSet)) + " eligible BS: " + ",".join(map(str, gc_info.EligibleBSSet)) + "")
 
             if len(incomplete) > 0:
-                mylog.warning("Services " + ", ".join(map(str, incomplete)) + " did not complete GC")
-                super(self.__class__, self)._RaiseEvent(self.Events.GC_INCOMPLETE)
+                mylog.warning("ServiceIDs " + ", ".join(map(str, incomplete)) + " did not complete GC")
                 return False
             else:
-                super(self.__class__, self)._RaiseEvent(self.Events.GC_FINISHED)
                 return True
         else:
             if csv or bash:
@@ -88,7 +107,7 @@ class GetLastGcDurationAction(ActionBase):
             else:
                 mylog.error("Last GC started at " + libsf.TimestampToStr(gc_info.StartTime) + " but did not complete")
 
-            super(self.__class__, self)._RaiseEvent(self.Events.GC_INCOMPLETE)
+            self._RaiseEvent(self.Events.GC_INCOMPLETE)
             return False
 
 # Instantate the class and add its attributes to the module

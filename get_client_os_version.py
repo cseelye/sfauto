@@ -25,6 +25,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetClientOsVersionAction(ActionBase):
     class Events:
@@ -40,11 +41,10 @@ class GetClientOsVersionAction(ActionBase):
         libsf.ValidateArgs({"client_ip" : libsf.IsValidIpv4Address},
             args)
 
-    def Execute(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+    def Get(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
         """
         Get the OS of a client
         """
-
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -58,7 +58,20 @@ class GetClientOsVersionAction(ActionBase):
             client_os = client.GetOsVersion()
         except ClientError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
+            return False
+
+        self.SetSharedValue(SharedValues.clientOS, client_os)
+        self.SetSharedValue(client_ip + "-clientOS", client_os)
+        return client_os
+
+    def Execute(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Show the OS of a client
+        """
+        del self
+        client_os = Get(**locals())
+        if client_os is False:
             return False
 
         if csv or bash:
@@ -66,7 +79,7 @@ class GetClientOsVersionAction(ActionBase):
             sys.stdout.write("\n")
             sys.stdout.flush()
         else:
-            mylog.info(client.Hostname + " has OS " + str(client_os))
+            mylog.info(client_ip + " has OS " + str(client_os))
         return True
 
 # Instantate the class and add its attributes to the module

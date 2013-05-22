@@ -38,6 +38,7 @@ import lib.sfdefaults as sfdefaults
 import logging
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RemoveClientsFromVolgroupAction(ActionBase):
     class Events:
@@ -74,7 +75,7 @@ class RemoveClientsFromVolgroupAction(ActionBase):
         try:
             volgroup = libsfcluster.SFCluster(mvip, username, password).FindVolumeAccessGroup(volgroupName=volgroup_name, volgroupID=volgroup_id)
         except SfError as e:
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             mylog.error(str(e))
             return False
 
@@ -92,21 +93,21 @@ class RemoveClientsFromVolgroupAction(ActionBase):
             mylog.info("  " + client.Hostname + " has IQN " + iqn)
             if iqn in remove_iqn_list:
                 mylog.error("Duplicate IQN")
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Duplicate IQN")
                 return False
             remove_iqn_list.append(iqn)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE)
+        self._RaiseEvent(self.Events.BEFORE_REMOVE)
         mylog.info("Removing clients from group")
         try:
             volgroup.RemoveInitiators(remove_iqn_list)
         except SfError as e:
             mylog.error("Failed to modify group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Successfully removed clients from group")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REMOVE)
+        self._RaiseEvent(self.Events.AFTER_REMOVE)
         return True
 
 # Instantate the class and add its attributes to the module

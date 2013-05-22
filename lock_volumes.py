@@ -41,6 +41,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class LockVolumesAction(ActionBase):
     class Events:
@@ -68,7 +69,7 @@ class LockVolumesAction(ActionBase):
             libsf.CallApiMethod(mvip, username, password, "ModifyVolume", params)
         except libsf.SfApiError as e:
             mylog.error("Failed to modify " + volume_name + ": " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.VOLUME_UPDATE_FAILED, volumeName=volume_name, exception=e)
+            self._RaiseEvent(self.Events.VOLUME_UPDATE_FAILED, volumeName=volume_name, exception=e)
             return
 
         results[myname] = True
@@ -94,7 +95,7 @@ class LockVolumesAction(ActionBase):
             volumes = libsf.SearchForVolumes(mvip, username, password, VolumeId=volume_id, VolumeName=volume_name, VolumeRegex=volume_regex, VolumePrefix=volume_prefix, AccountName=source_account, VolumeCount=volume_count)
         except libsf.SfError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         count = len(volumes.keys())
@@ -122,9 +123,9 @@ class LockVolumesAction(ActionBase):
             th.daemon = True
             self._threads.append(th)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_UPDATE_VOLUMES)
+        self._RaiseEvent(self.Events.BEFORE_UPDATE_VOLUMES)
         allgood = libsf.ThreadRunner(self._threads, results, parallel_calls)
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_UPDATE_VOLUMES)
+        self._RaiseEvent(self.Events.AFTER_UPDATE_VOLUMES)
 
         if allgood:
             mylog.passed("Successfully locked all volumes")

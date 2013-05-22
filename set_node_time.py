@@ -5,10 +5,10 @@ This action will set the time on a node
 
 When run as a script, the following options/env variables apply:
     --node_ip           The node management IP
-    
+
     --user              The cluster admin username
     SFUSER env var
-    
+
     --pass              The cluster admin password
     SFPASS env var
 
@@ -22,6 +22,7 @@ import time
 import lib.libsf as libsf
 from lib.libsf import mylog
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 import lib.libsfnode as libsfnode
 import lib.sfdefaults as sfdefaults
 
@@ -55,25 +56,25 @@ class SetNodeTimeAction(ActionBase):
 
         allgood = True
         for node_ip in nodeIPs:
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SET_TIME, nodeIP=node_ip, newTime=newTime)
+            self._RaiseEvent(self.Events.BEFORE_SET_TIME, nodeIP=node_ip, newTime=newTime)
             mylog.info("Setting time to '" + newTime + "' on node " + str(node_ip))
-            
+
             node = libsfnode.SFNode(node_ip, sshUser, sshPass)
             try:
                 node_time = node.SetTime(newTime)
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.SET_TIME_FAILED, nodeIP=node_ip, newTime=newTime, exception=e)
+                self._RaiseEvent(self.Events.SET_TIME_FAILED, nodeIP=node_ip, newTime=newTime, exception=e)
                 allgood = False
                 continue
-            
+
             mylog.passed("Successfully set time on " + node_ip)
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SET_TIME, nodeIP=node_ip, newTime=newTime)
+            self._RaiseEvent(self.Events.AFTER_SET_TIME, nodeIP=node_ip, newTime=newTime)
 
         if time.time() > node_time:
-            super(self.__class__, self)._RaiseEvent(self.Events.TIME_SET_PAST, nodeIP=node_ip, newTime=newTime)
+            self._RaiseEvent(self.Events.TIME_SET_PAST, nodeIP=node_ip, newTime=newTime)
         else:
-            super(self.__class__, self)._RaiseEvent(self.Events.TIME_SET_FUTURE, nodeIP=node_ip, newTime=newTime)
+            self._RaiseEvent(self.Events.TIME_SET_FUTURE, nodeIP=node_ip, newTime=newTime)
 
         if allgood:
             mylog.passed("Successfully set time on all nodes")

@@ -28,6 +28,7 @@ from lib.libsf import mylog
 from lib.libsf import ColorTerm
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RunVdbenchAction(ActionBase):
     class Events:
@@ -63,7 +64,7 @@ class RunVdbenchAction(ActionBase):
             arg_list = ["/opt/vdbench/vdbench", "-o", outputDir, "-f ", inputFile]
             mylog.debug("Using command line " + " ".join(arg_list))
             log.write("Using command line " + " ".join(arg_list))
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_START_VDBENCH)
+            self._RaiseEvent(self.Events.BEFORE_START_VDBENCH)
 
             self._vdbench_process = subprocess.Popen(arg_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             for line in iter(self._vdbench_process.stdout.readline, ""):
@@ -74,7 +75,7 @@ class RunVdbenchAction(ActionBase):
                     ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
                 elif (re.search("Starting RD", line)):
                     ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
-                    super(self.__class__, self)._RaiseEvent(self.Events.STARTING_RD)
+                    self._RaiseEvent(self.Events.STARTING_RD)
                 elif (re.search("Vdbench execution completed successfully", line)):
                     ColorTerm.screen.set_color(ColorTerm.ConsoleColors.GreenFore, ColorTerm.ConsoleColors.BlackBack)
                 elif (re.search("No read validations done", line)):
@@ -86,19 +87,19 @@ class RunVdbenchAction(ActionBase):
                 elif (re.search("conn error", line)):
                     ColorTerm.screen.set_color(ColorTerm.ConsoleColors.YellowFore, ColorTerm.ConsoleColors.BlackBack)
                     self.ReturnCode = 4
-                    super(self.__class__, self)._RaiseEvent(self.Events.VDBENCH_ERROR)
+                    self._RaiseEvent(self.Events.VDBENCH_ERROR)
                 elif (re.search("error", line, re.IGNORECASE)):
                     ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
                     self.ReturnCode = 8
-                    super(self.__class__, self)._RaiseEvent(self.Events.VDBENCH_ERROR)
+                    self._RaiseEvent(self.Events.VDBENCH_ERROR)
                 elif (re.search("invalid", line, re.IGNORECASE)):
                     ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
                     self.ReturnCode = 16
-                    super(self.__class__, self)._RaiseEvent(self.Events.VDBENCH_ERROR)
+                    self._RaiseEvent(self.Events.VDBENCH_ERROR)
                 elif (re.search("exception", line, re.IGNORECASE)):
                     ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
                     self.ReturnCode = 32
-                    super(self.__class__, self)._RaiseEvent(self.Events.VDBENCH_ERROR)
+                    self._RaiseEvent(self.Events.VDBENCH_ERROR)
 
                 line = time.strftime("%Y-%m-%d ", time.localtime()) + line.rstrip()
                 print line
@@ -127,7 +128,7 @@ class RunVdbenchAction(ActionBase):
             os.kill(self._vdbench_process.pid, signal.SIGINT)
         self.ReturnCode = 0
         ColorTerm.screen.reset()
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_STOP_VDBENCH)
+        self._RaiseEvent(self.Events.AFTER_STOP_VDBENCH)
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute

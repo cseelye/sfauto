@@ -26,6 +26,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CheckClientHealthAction(ActionBase):
     class Events:
@@ -46,7 +47,7 @@ class CheckClientHealthAction(ActionBase):
         except ClientError as e:
             mylog.error("  " + client_ip + ": " + e.message)
             results[index] = False
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         healthy = False
@@ -55,7 +56,7 @@ class CheckClientHealthAction(ActionBase):
         except ClientError as e:
             mylog.error("  " + client_ip + ": " + str(e))
             results[index] = False
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         results[index] = healthy

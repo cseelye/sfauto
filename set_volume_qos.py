@@ -48,6 +48,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class SetVolumeQosAction(ActionBase):
     class Events:
@@ -86,7 +87,7 @@ class SetVolumeQosAction(ActionBase):
             libsf.CallApiMethod(mvip, username, password, "ModifyVolume", params)
         except libsf.SfApiError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.VOLUME_UPDATE_FAILED, volumeName=volumeName, exception=e)
+            self._RaiseEvent(self.Events.VOLUME_UPDATE_FAILED, volumeName=volumeName, exception=e)
             return
 
         results[myname] = True
@@ -137,12 +138,12 @@ class SetVolumeQosAction(ActionBase):
             th.deamon = True
             self._threads.append(th)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_UPDATE_VOLUMES)
+        self._RaiseEvent(self.Events.BEFORE_UPDATE_VOLUMES)
         allgood = libsf.ThreadRunner(self._threads, results, parallel_calls)
 
         if allgood:
             mylog.passed("Successfully updated Qos on all volumes")
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_UPDATE_VOLUMES)
+            self._RaiseEvent(self.Events.AFTER_UPDATE_VOLUMES)
             return True
         else:
             mylog.error("Could not update QoS on all volumes")

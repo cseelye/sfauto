@@ -27,6 +27,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RemoveDrivesFromNodeAction(ActionBase):
     class Events:
@@ -68,11 +69,11 @@ class RemoveDrivesFromNodeAction(ActionBase):
                 node = cluster.GetNode(node_ip)
             except libsf.SfUnknownObjectError:
                 mylog.error("Could not find node " + node_ip)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             node_list.append(node)
 
@@ -85,17 +86,17 @@ class RemoveDrivesFromNodeAction(ActionBase):
                     drive_list.append(drive["driveID"])
 
         # Remove the drives from the cluster
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE)
+        self._RaiseEvent(self.Events.BEFORE_REMOVE)
         if len(drive_list) > 0:
             mylog.info("Removing " + str(len(drive_list)) + " drives")
             try:
                 libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': drive_list})
             except libsf.SfError as e:
                 mylog.error("Failed to remove drives: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SYNC)
+            self._RaiseEvent(self.Events.BEFORE_SYNC)
             mylog.info("Waiting for syncing")
             time.sleep(60)
             try:
@@ -107,15 +108,15 @@ class RemoveDrivesFromNodeAction(ActionBase):
                     time.sleep(30)
             except libsf.SfError as e:
                 mylog.error("Failed to wait for syncing: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SYNC)
+            self._RaiseEvent(self.Events.AFTER_SYNC)
 
         else:
             mylog.info("Found no drives to remove")
 
         mylog.passed("Successfully removed drives")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REMOVE)
+        self._RaiseEvent(self.Events.AFTER_REMOVE)
         return True
 
 # Instantate the class and add its attributes to the module

@@ -28,6 +28,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class MountVolumesAction(ActionBase):
     class Events:
@@ -49,7 +50,7 @@ class MountVolumesAction(ActionBase):
             client.Connect(client_ip, client_user, client_pass)
         except ClientError as e:
             mylog.error(client_ip + ": " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return False
 
         mylog.info(client_ip + ": Mounting volumes on " + client.Hostname)
@@ -57,7 +58,7 @@ class MountVolumesAction(ActionBase):
             client.SetupVolumes()
         except ClientError as e:
             mylog.error(client_ip + ": " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return False
 
     def ValidateArgs(self, args):

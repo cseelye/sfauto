@@ -29,6 +29,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfnode as libsfnode
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class PowerCycleNodeAction(ActionBase):
     class Events:
@@ -69,24 +70,24 @@ class PowerCycleNodeAction(ActionBase):
         node = libsfnode.SFNode(node_ip, ipmiIP=ipmi_ip, ipmiUsername=ipmi_user, ipmiPassword=ipmi_pass)
 
         mylog.info("Powering off node " + node_ip)
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_POWEROFF, nodeIP=node_ip)
+        self._RaiseEvent(self.Events.BEFORE_POWEROFF, nodeIP=node_ip)
         try:
             node.PowerOff()
         except libsf.SfError as e:
             mylog.error("Failed to power off node - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
             return False
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_POWEROFF, nodeIP=node_ip)
+        self._RaiseEvent(self.Events.AFTER_POWEROFF, nodeIP=node_ip)
 
         mylog.info("Powering on node " + node_ip)
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_POWERON, nodeIP=node_ip)
+        self._RaiseEvent(self.Events.BEFORE_POWERON, nodeIP=node_ip)
         try:
             node.PowerOn()
         except libsf.SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
             return False
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_POWERON, nodeIP=node_ip)
+        self._RaiseEvent(self.Events.AFTER_POWERON, nodeIP=node_ip)
 
         mylog.passed(node_ip + " power cycled successfully")
         return True

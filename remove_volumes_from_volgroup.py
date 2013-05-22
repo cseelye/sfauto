@@ -40,6 +40,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RemoveVolumesFromVolgroupAction(ActionBase):
     class Events:
@@ -84,7 +85,7 @@ class RemoveVolumesFromVolgroupAction(ActionBase):
             volumes_to_remove = cluster.SearchForVolumes(volumeID=volume_id, volumeName=volume_name, volumeRegex=volume_regex, volumePrefix=volume_prefix, accountName=source_account, accountID=source_account_id, volumeCount=volume_count)
         except SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         names = []
@@ -98,16 +99,16 @@ class RemoveVolumesFromVolgroupAction(ActionBase):
 
         # Remove the requested volumes
         mylog.info("Removing volumes from group")
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE)
+        self._RaiseEvent(self.Events.BEFORE_REMOVE)
         try:
             volgroup.RemoveVolumes(volumes_to_remove.keys())
         except SfError as e:
             mylog.error("Failed to add volumes to group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Successfully removed volumes from group")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REMOVE)
+        self._RaiseEvent(self.Events.AFTER_REMOVE)
         return True
 
 # Instantate the class and add its attributes to the module

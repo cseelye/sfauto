@@ -25,6 +25,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CreateAdminAction(ActionBase):
     class Events:
@@ -63,7 +64,7 @@ class CreateAdminAction(ActionBase):
                 return True
             else:
                 mylog.error("Failed to create admin: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
         return True

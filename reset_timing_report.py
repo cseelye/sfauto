@@ -21,6 +21,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ResetTimingReportAction(ActionBase):
     class Events:
@@ -53,7 +54,7 @@ class ResetTimingReportAction(ActionBase):
             result = libsf.HttpRequest(url, username, password)
         except libsf.SfError as e:
             mylog.error("Failed to reset timing report: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Failed to reset timing report: " + str(e))
             return False
 
         return True

@@ -33,6 +33,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RemoveDrivesAction(ActionBase):
     class Events:
@@ -75,7 +76,7 @@ class RemoveDrivesAction(ActionBase):
             nodes_obj = libsf.CallApiMethod(mvip, username, password, "ListActiveNodes", {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for no in nodes_obj["nodes"]:
             mip = no["mip"]
@@ -96,7 +97,7 @@ class RemoveDrivesAction(ActionBase):
                     drive_list = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
                 except libsf.SfError as e:
                     mylog.error("Failed to get drive list: " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
                 for do in drive_list["drives"]:
                     if (do["status"] == "active" and str(node_id) == str(do["nodeID"])) and int(do["slot"]) in drive_slots:
@@ -104,19 +105,19 @@ class RemoveDrivesAction(ActionBase):
                         mylog.info("  Removing driveID " + str(do["driveID"]) + " from slot " + str(do["slot"]))
                 if len(drives2remove) != len(drive_slots):
                     mylog.error("Could not find the correct list of drives to remove (check that specified drives are active)")
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                    self.RaiseFailureEvent(message="Could not find the correct list of drives to remove (check that specified drives are active)")
                     return False
 
                 # Remove the drives
-                super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE)
+                self._RaiseEvent(self.Events.BEFORE_REMOVE)
                 try:
                     libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': drives2remove})
                 except libsf.SfError as e:
                     mylog.error("Failed to remove drives: " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
 
-                super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SYNC)
+                self._RaiseEvent(self.Events.BEFORE_SYNC)
                 mylog.info("Waiting for syncing")
                 time.sleep(60)
                 try:
@@ -128,9 +129,9 @@ class RemoveDrivesAction(ActionBase):
                         time.sleep(30)
                 except libsf.SfError as e:
                     mylog.error("Failed to wait for syncing - " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
-                super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SYNC)
+                self._RaiseEvent(self.Events.AFTER_SYNC)
 
         else:
             for node_ip in node_ips:
@@ -138,7 +139,7 @@ class RemoveDrivesAction(ActionBase):
                 node_id = nodeip2nodeid[node_ip]
                 if (node_id == None):
                     mylog.error("Could not find node " + str(node_ip) + " in cluster " + str(mvip))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                    self.RaiseFailureEvent(message="Could not find node " + str(node_ip) + " in cluster " + str(mvip))
                     return False
                 mylog.info("Removing drives from " + str(node_ip) + " (nodeID " + str(node_id) + ")")
 
@@ -148,7 +149,7 @@ class RemoveDrivesAction(ActionBase):
                     drives_obj = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
                 except libsf.SfError as e:
                     mylog.error("Failed to get drive list: " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
                 for do in drives_obj["drives"]:
                     if (do["status"] == "active" and str(node_id) == str(do["nodeID"])) and int(do["slot"]) in drive_slots:
@@ -157,18 +158,18 @@ class RemoveDrivesAction(ActionBase):
 
             if len(drives2remove) != len(drive_slots) * len(node_ips):
                 mylog.error("Could not find the correct list of drives to remove (check that specified drives are active)")
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Could not find the correct list of drives to remove (check that specified drives are active)")
                 return False
 
             # Remove the drives
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REMOVE)
+            self._RaiseEvent(self.Events.BEFORE_REMOVE)
             try:
                 libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': drives2remove})
             except libsf.SfError as e:
                 mylog.error("Failed to remove drives: " + str(e))
                 return False
 
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_SYNC)
+            self._RaiseEvent(self.Events.BEFORE_SYNC)
             mylog.info("Waiting for syncing")
             time.sleep(60)
             try:
@@ -180,12 +181,12 @@ class RemoveDrivesAction(ActionBase):
                     time.sleep(30)
             except libsf.SfError as e:
                 mylog.error("Failed to wait for syncing - " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_SYNC)
+            self._RaiseEvent(self.Events.AFTER_SYNC)
 
         mylog.passed("Finished removing drives")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REMOVE)
+        self._RaiseEvent(self.Events.AFTER_REMOVE)
         return True
 
 # Instantate the class and add its attributes to the module

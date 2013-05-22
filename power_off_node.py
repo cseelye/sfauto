@@ -30,6 +30,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfnode as libsfnode
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class PowerOffNodeAction(ActionBase):
     class Events:
@@ -63,22 +64,22 @@ class PowerOffNodeAction(ActionBase):
                 ipmi_ip = libsf.GetIpmiIp(node_ip, ssh_user, ssh_pass)
             except libsf.SfError as e:
                 mylog.error("Failed to get IPMI address - " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
                 return False
 
         node = libsfnode.SFNode(node_ip, ipmiIP=ipmi_ip, ipmiUsername=ipmi_user, ipmiPassword=ipmi_pass)
 
         mylog.info("Powering off node " + node_ip)
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_POWEROFF, nodeIP=node_ip)
+        self._RaiseEvent(self.Events.BEFORE_POWEROFF, nodeIP=node_ip)
         try:
             node.PowerOff()
         except libsf.SfError as e:
             mylog.error("Failed to power off node - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
             return False
 
         mylog.passed(node_ip + " powered off successfully")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_POWEROFF, nodeIP=node_ip)
+        self._RaiseEvent(self.Events.AFTER_POWEROFF, nodeIP=node_ip)
         return True
 
 # Instantate the class and add its attributes to the module

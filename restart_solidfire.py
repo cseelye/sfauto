@@ -25,6 +25,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RestartSolidfireAction(ActionBase):
     class Events:
@@ -87,10 +88,10 @@ class RestartSolidfireAction(ActionBase):
                 th.terminate()
                 th.join()
             mylog.error("Failed to restart solidfire on all nodes")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Failed to restart solidfire on all nodes")
             return False
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_RESTART_SOLIDFIRE)
+        self._RaiseEvent(self.Events.BEFORE_RESTART_SOLIDFIRE)
 
         mylog.debug("Releasing threads")
         starter.set()
@@ -105,7 +106,7 @@ class RestartSolidfireAction(ActionBase):
                 mylog.error("Failed to restart solidfire on all nodes")
                 return False
 
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_RESTART_SOLIDFIRE)
+        self._RaiseEvent(self.Events.AFTER_RESTART_SOLIDFIRE)
 
         mylog.passed("Successfully restarted solidfire on all nodes")
         return True

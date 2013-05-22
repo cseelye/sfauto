@@ -22,6 +22,7 @@ from libclient import SfClient, ClientError
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class RebootClientAction(ActionBase):
     class Events:
@@ -52,7 +53,7 @@ class RebootClientAction(ActionBase):
 
         allgood = True
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_REBOOT)
+        self._RaiseEvent(self.Events.BEFORE_REBOOT)
         clients = dict()
         for client_ip in client_ips:
             # Connect to client
@@ -62,7 +63,7 @@ class RebootClientAction(ActionBase):
                 client.Connect(client_ip, client_user, client_pass)
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 allgood = False
                 continue
 
@@ -72,7 +73,7 @@ class RebootClientAction(ActionBase):
                 client.RebootSoft()
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 allgood = False
                 continue
             clients[client_ip] = client
@@ -87,12 +88,12 @@ class RebootClientAction(ActionBase):
                 client.WaitTillUp()
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 allgood = False
                 continue
             mylog.passed(client_ip + ": Rebooted successfully")
 
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_REBOOT)
+        self._RaiseEvent(self.Events.AFTER_REBOOT)
         if allgood:
             mylog.passed("All clients rebooed successfully")
             return True

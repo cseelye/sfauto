@@ -39,6 +39,7 @@ from libclient import SfClient, ClientError
 from xml.etree import ElementTree
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class KvmSfcloneVmAction(ActionBase):
     class Events:
@@ -71,11 +72,11 @@ class KvmSfcloneVmAction(ActionBase):
             conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         if conn == None:
             mylog.error("Failed to connect")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Failed to connect")
             return False
 
         try:
@@ -83,7 +84,7 @@ class KvmSfcloneVmAction(ActionBase):
             hypervisor.Connect(vmhost, host_user, host_pass)
         except ClientError as e:
             mylog.error("Failed to connect - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.info("Searching for source VM " + vm_name)
@@ -96,7 +97,7 @@ class KvmSfcloneVmAction(ActionBase):
             running_vm_list = sorted(running_vm_list, key=lambda vm: vm.name())
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for vm in running_vm_list:
             if vm.name() == vm_name:
@@ -111,7 +112,7 @@ class KvmSfcloneVmAction(ActionBase):
                 stopped_vm_list = sorted(stopped_vm_list, key=lambda vm: vm.name())
             except libvirt.libvirtError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             for vm in stopped_vm_list:
                 if vm.name() == vm_name:
@@ -168,7 +169,7 @@ class KvmSfcloneVmAction(ActionBase):
                 break
         if not source_volume_id:
             mylog.error("Could not find volume with IQN " + source_volume_iqn)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not find volume with IQN " + source_volume_iqn)
             return False
         mylog.debug("Source volume ID is " + source_volume_name + " (" + str(source_volume_id) + ")")
 
@@ -192,7 +193,7 @@ class KvmSfcloneVmAction(ActionBase):
                     break
                 else:
                     mylog.error("  Clone " + clone_name + " failed -- " + result["error"]["name"] + ": " + result["error"]["message"])
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                    self.RaiseFailureEvent(message="Clone " + clone_name + " failed -- " + result["error"]["name"] + ": " + result["error"]["message"])
                     return False
             else:
                 time.sleep(10)
@@ -206,7 +207,7 @@ class KvmSfcloneVmAction(ActionBase):
                 break
         if clone_iqn == None:
             mylog.error("Could not find volume '" + str(clone_volume_id) + "'")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not find volume '" + str(clone_volume_id) + "'")
             return False
 
         # Get the SVIP of the cluster
@@ -220,7 +221,7 @@ class KvmSfcloneVmAction(ActionBase):
             hypervisor.LoginTargets(svip, pTargetList=[clone_iqn])
         except ClientError as e:
             mylog.error("Failed to log in to volume - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Get the disk device of the clone volume
@@ -230,7 +231,7 @@ class KvmSfcloneVmAction(ActionBase):
                 return_code, stdout, stderr = hypervisor.ExecuteCommand("find /dev/disk/by-path/ -name '*" + clone_iqn + "*' | sort | head -1")
             except ClientError as e:
                 mylog.error("Could not get device path for clone - " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             clone_device_path = stdout.strip()
             if not clone_device_path:
@@ -255,11 +256,11 @@ class KvmSfcloneVmAction(ActionBase):
             newvm = conn.defineXML(ElementTree.tostring(clone_vm_xml))
         except libvirt.libvirtError as e:
             mylog.error("Could not create new VM - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         if not newvm:
             mylog.error("Could not create new VM")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not create new VM")
             return False
 
         mylog.info("Powering on the new VM")
@@ -267,7 +268,7 @@ class KvmSfcloneVmAction(ActionBase):
             newvm.create()
         except libvirt.libvirtError as e:
             mylog.error("Could not power on VM - " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Successfully cloned the VM")

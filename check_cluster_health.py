@@ -40,6 +40,7 @@ import lib.sfdefaults as sfdefaults
 import lib.libsfnode as libsfnode
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CheckClusterHealthAction(ActionBase):
     class Events:
@@ -75,7 +76,7 @@ class CheckClusterHealthAction(ActionBase):
             node_ips = cluster.ListActiveNodeIPs()
         except libsf.SfError as e:
             mylog.error("Failed to get list of nodes: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         healthy = True
@@ -88,7 +89,7 @@ class CheckClusterHealthAction(ActionBase):
                 core_list = node.GetCoreFileList(since)
             except libsf.SfError as e:
                 mylog.error("Failed to check for core files: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             if (len(core_list) > 0):
                 if checkForCores:
@@ -105,7 +106,7 @@ class CheckClusterHealthAction(ActionBase):
                 mylog.error("Found xUnknownBlockId in the event log")
         except libsf.SfError as e:
             mylog.error("Failed to check events: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Check current cluster faults
@@ -120,7 +121,7 @@ class CheckClusterHealthAction(ActionBase):
                 current_faults = cluster.GetCurrentFaultSet()
             except libsf.SfError as e:
                 mylog.error("Failed to get list of faults: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
             if current_faults & fault_whitelist == current_faults:

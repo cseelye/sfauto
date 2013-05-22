@@ -22,6 +22,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class StartSliceRebalanceAction(ActionBase):
     class Events:

@@ -46,6 +46,7 @@ from lib.libsf import mylog, SfError
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class MoveVolumeToAccountAction(ActionBase):
     class Events:
@@ -72,7 +73,7 @@ class MoveVolumeToAccountAction(ActionBase):
             libsf.CallApiMethod(mvip, username, password, "ModifyVolume", params, ApiVersion=5.0)
         except libsf.SfApiError as e:
             mylog.error("Failed to move " + volume_name + ": " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.VOLUME_UPDATE_FAILED, volumeName=volume_name, exception=e)
+            self._RaiseEvent(self.Events.VOLUME_UPDATE_FAILED, volumeName=volume_name, exception=e)
             return
 
         results[myname] = True
@@ -102,7 +103,7 @@ class MoveVolumeToAccountAction(ActionBase):
                 account_info = libsf.FindAccount(mvip, username, password, AccountName=dest_account, AccountId=dest_account_id)
             except SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             dest_account_id = account_info["accountID"]
 
@@ -112,7 +113,7 @@ class MoveVolumeToAccountAction(ActionBase):
             volumes_to_move = libsf.SearchForVolumes(mvip, username, password, VolumeId=volume_id, VolumeName=volume_name, VolumeRegex=volume_regex, VolumePrefix=volume_prefix, AccountName=source_account, AccountId=source_account_id, VolumeCount=volume_count)
         except SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         count = len(volumes_to_move.keys())
@@ -141,11 +142,11 @@ class MoveVolumeToAccountAction(ActionBase):
             th.daemon = True
             self._threads.append(th)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_UPDATE_VOLUMES)
+        self._RaiseEvent(self.Events.BEFORE_UPDATE_VOLUMES)
         allgood = libsf.ThreadRunner(self._threads, results, parallel_calls)
         if allgood:
             mylog.passed("Successfully moved all volumes")
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_UPDATE_VOLUMES)
+            self._RaiseEvent(self.Events.AFTER_UPDATE_VOLUMES)
             return True
         else:
             mylog.error("Could not move all volumes")

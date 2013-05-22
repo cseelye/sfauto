@@ -25,6 +25,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetNodeIpmiIpAction(ActionBase):
     class Events:
@@ -40,7 +41,7 @@ class GetNodeIpmiIpAction(ActionBase):
         libsf.ValidateArgs({"node_ip" : libsf.IsValidIpv4Address},
             args)
 
-    def Execute(self, node_ip, csv=False, bash=False, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+    def Get(self, node_ip, csv=False, bash=False, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
         """
         Get the IPMI IP address of the node
         """
@@ -55,7 +56,20 @@ class GetNodeIpmiIpAction(ActionBase):
             ipmi_ip = libsf.GetIpmiIp(node_ip, ssh_user, ssh_pass)
         except libsf.SfError as e:
             mylog.error("Failed to get IP: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+
+        self.SetSharedValue(SharedValues.ipmiIP, ipmi_ip)
+        self.SetSharedValue(node_ip + "-ipmiIP", ipmi_ip)
+        return ipmi_ip
+
+    def Execute(self, node_ip, csv=False, bash=False, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+        """
+        Show the IPMI IP address of the node
+        """
+        del self
+        ipmi_ip = Get(**locals())
+        if ipmi_ip is False:
             return False
 
         if csv or bash:

@@ -28,6 +28,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class KvmCountVmsAction(ActionBase):
     class Events:
@@ -61,11 +62,11 @@ class KvmCountVmsAction(ActionBase):
             conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         if conn == None:
             mylog.error("Failed to connect")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Failed to connect")
             return False
 
         mylog.info("Searching for matching VMs")
@@ -91,7 +92,7 @@ class KvmCountVmsAction(ActionBase):
             running_vm_list = sorted(running_vm_list, key=lambda vm: vm.name())
         except libvirt.libvirtError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for vm in running_vm_list:
             m = re.search("^" + vm_prefix + r"0*(\d+)$", vm.name())

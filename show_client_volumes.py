@@ -25,6 +25,7 @@ from lib.libsf import mylog
 from libclient import SfClient, ClientError, OsType
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ShowClientVolumesAction(ActionBase):
     class Events:
@@ -56,14 +57,14 @@ class ShowClientVolumesAction(ActionBase):
             sort = "iqn"
 
         for client_ip in clientIPs:
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_CLIENT, clientIP=client_ip)
+            self._RaiseEvent(self.Events.BEFORE_CLIENT, clientIP=client_ip)
             client = SfClient()
             mylog.info(client_ip + ": Connecting to client")
             try:
                 client.Connect(client_ip, clientUser, clientPass)
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.CLIENT_FAILED, clientIP=client_ip, exception=e)
+                self._RaiseEvent(self.Events.CLIENT_FAILED, clientIP=client_ip, exception=e)
                 continue
 
             mylog.info(client_ip + ": Gathering information about connected volumes...")
@@ -71,7 +72,7 @@ class ShowClientVolumesAction(ActionBase):
                 volumes = client.GetVolumeSummary()
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.CLIENT_FAILED, clientIP=client_ip, exception=e)
+                self._RaiseEvent(self.Events.CLIENT_FAILED, clientIP=client_ip, exception=e)
                 continue
 
             mylog.info(client_ip + ": Found " + str(len(volumes.keys())) + " iSCSI volumes on " + client.Hostname + ":")
@@ -82,7 +83,7 @@ class ShowClientVolumesAction(ActionBase):
                 if "state" in volume:
                     outstr += ", Session: " + volume["state"]
                 mylog.info(outstr)
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_CLIENT, clientIP=client_ip)
+            self._RaiseEvent(self.Events.AFTER_CLIENT, clientIP=client_ip)
 
             return True
 

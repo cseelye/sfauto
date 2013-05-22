@@ -27,6 +27,7 @@ import lib.XenAPI as XenAPI
 import lib.libxen as libxen
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class XenCountVmsAction(ActionBase):
     class Events:
@@ -62,7 +63,7 @@ class XenCountVmsAction(ActionBase):
             session = libxen.Connect(vmhost, host_user, host_pass)
         except libxen.XenError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.info("Searching for matching VMs")
@@ -71,7 +72,7 @@ class XenCountVmsAction(ActionBase):
             vm_ref_list = session.xenapi.VM.get_all()
         except XenAPI.Failure as e:
             mylog.error("Could not get VM list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Count the VMs that have the specified prefix and end in a number

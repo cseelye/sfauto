@@ -24,6 +24,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class AddNodeAction(ActionBase):
     class Events:
@@ -48,6 +49,10 @@ class AddNodeAction(ActionBase):
         """
         Add a node to the cluster
         """
+        if not node_ip:
+            node_ip = self.GetSharedValue("nodeIP")
+        if not node_ip:
+            node_ip = self.GetNextSharedValue("pendingNodeList")
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -59,7 +64,7 @@ class AddNodeAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, "ListPendingNodes", {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for node in result["pendingNodes"]:
             if node["mip"] == node_ip:
@@ -67,23 +72,23 @@ class AddNodeAction(ActionBase):
                 break
         if node_id <= 0:
             mylog.error("Could not find node " + node_ip)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(failure="Could not find node " + node_ip)
             return False
         mylog.info("Found node " + node_ip + " is nodeID " + str(node_id))
 
         # Add the node
         mylog.info("Adding " + node_ip + " to cluster")
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ADD)
+        self._RaiseEvent(self.Events.BEFORE_ADD)
         try:
             result = libsf.CallApiMethod(mvip, username, password, "AddNodes", {"pendingNodes" : [node_id]})
         except libsf.SfError as e:
             mylog.error("Failed to add node to cluster: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         time.sleep(20)
 
         mylog.passed("Successfully added " + node_ip + " to cluster")
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ADD)
+        self._RaiseEvent(self.Events.AFTER_ADD)
         return True
 
 # Instantate the class and add its attributes to the module

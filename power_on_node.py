@@ -29,6 +29,7 @@ import logging
 import lib.libsfnode as libsfnode
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class PowerOnNodeAction(ActionBase):
     class Events:
@@ -59,15 +60,15 @@ class PowerOnNodeAction(ActionBase):
         node = libsfnode.SFNode(node_ip, ipmiIP=ipmi_ip, ipmiUsername=ipmi_user, ipmiPassword=ipmi_pass)
 
         mylog.info("Powering on node " + node_ip)
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_POWERON)
+        self._RaiseEvent(self.Events.BEFORE_POWERON)
         try:
             node.PowerOn()
         except libsf.SfError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, nodeIP=node_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
             return False
 
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_POWERON)
+        self._RaiseEvent(self.Events.AFTER_POWERON)
         mylog.passed(node_ip + " powered on successfully")
         return True
 

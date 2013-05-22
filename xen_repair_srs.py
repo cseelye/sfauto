@@ -21,6 +21,7 @@ import lib.XenAPI as XenAPI
 import lib.libxen as libxen
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class XenRepairSrsAction(ActionBase):
     class Events:
@@ -53,7 +54,7 @@ class XenRepairSrsAction(ActionBase):
             session = libxen.Connect(vmhost, host_user, host_pass)
         except libxen.XenError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Make a list of icsi SRs
@@ -89,7 +90,7 @@ class XenRepairSrsAction(ActionBase):
                         mylog.error("  Could not plug PBD - " + str(e))
                         retry -= 1
                         if retry <= 0:
-                            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                            self.RaiseFailureEvent(message=str(e), exception=e)
                             return False
                         else:
                             mylog.info("    Retrying in " + str(wait) + " sec...")

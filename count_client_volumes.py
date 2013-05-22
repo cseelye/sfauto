@@ -24,6 +24,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CountClientVolumesAction(ActionBase):
     class Events:
@@ -94,7 +95,7 @@ class CountClientVolumesAction(ActionBase):
                     allgood = False
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 allgood = False
                 continue
 

@@ -30,6 +30,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CheckEnsembleHealthAction(ActionBase):
     class Events:
@@ -60,7 +61,7 @@ class CheckEnsembleHealthAction(ActionBase):
         mylog.info("Checking the MVIP")
         if not libsf.Ping(mvip):
             mylog.error("Cannot ping " + mvip)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Find the nodes in the cluster
@@ -69,7 +70,7 @@ class CheckEnsembleHealthAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'ListActiveNodes', {})
         except libsf.SfError as e:
             mylog.error("Failed to get node list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for node in result["nodes"]:
             node_list[node["cip"]] = node["mip"]
@@ -81,7 +82,7 @@ class CheckEnsembleHealthAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'GetClusterInfo', {})
         except libsf.SfError as e:
             mylog.error("Failed to get cluster info: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         ensemble_nodes = sorted(result["clusterInfo"]["ensemble"])
         ensemble_count = len(ensemble_nodes)
@@ -90,15 +91,15 @@ class CheckEnsembleHealthAction(ActionBase):
         # Make sure we have the correct number of ensemble members
         if node_count < 3 and ensemble_count != 1: # Less then 3 node, ensemble of 1
             mylog.error("Found " + str(ensemble_count) + " ensemble nodes but expected 1")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         elif node_count < 5 and ensemble_count != 3: # 3-4 nodes, ensemble of 3
             mylog.error("Found " + str(ensemble_count) + " ensemble nodes but expected 3")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         elif node_count >= 5 and ensemble_count != 5: #  5 or more nodes, ensemble of 5
             mylog.error("Found " + str(ensemble_count) + " ensemble nodes but expected 5")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Make sure we can connect to and query all of the ensemble servers
@@ -117,14 +118,14 @@ class CheckEnsembleHealthAction(ActionBase):
                         return False
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
         mylog.info("Getting the ensemble report")
         ensemble_report = libsf.HttpRequest("https://" + mvip + "/reports/ensemble", username, password)
         if not ensemble_report:
             mylog.error("Failed to get ensemble report")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         if "error" in ensemble_report:
@@ -136,7 +137,7 @@ class CheckEnsembleHealthAction(ActionBase):
                 mylog.error("Ensemble error detected: " + m.group(1))
             else:
                 mylog.error("Ensemble error detected")
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Ensemble is healthy")

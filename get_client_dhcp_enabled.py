@@ -29,6 +29,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetClientDhcpEnabledAction(ActionBase):
     class Events:
@@ -48,7 +49,7 @@ class GetClientDhcpEnabledAction(ActionBase):
         if not args["interface_name"] and not args["interface_mac"]:
             raise libsf.SfArgumentError("Please specify interface_name or interface_mac")
 
-    def Execute(self, client_ip, interface_name=None, interface_mac=None, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+    def Get(self, client_ip, interface_name=None, interface_mac=None, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
         """
         Check if DHCP is enabled on a client
         """
@@ -67,8 +68,19 @@ class GetClientDhcpEnabledAction(ActionBase):
             dhcp = client.GetDhcpEnabled(interface_name, interface_mac)
         except ClientError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return False
+
+        self.SetSharedValue(SharedValues.clientDHCPEnabled, dhcp)
+        self.SetSharedValue(client_ip + "-clientDHCPEnabled", hostname)
+        return dhcp
+
+    def Execute(self, client_ip, interface_name=None, interface_mac=None, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Show if DHCP is enabled on a client
+        """
+        del self
+        dhcp = Get(**locals())
 
         if dhcp:
             if bash or csv:
@@ -107,7 +119,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.client_ip, options.csv, options.bash, options.client_user, options.client_pass, options.debug):
+        if Execute(options.client_ip, options.interface_name, options.interface_mac, options.csv, options.bash, options.client_user, options.client_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

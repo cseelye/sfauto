@@ -28,6 +28,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class WaitForNoFaultsAction(ActionBase):
     class Events:
@@ -61,7 +62,7 @@ class WaitForNoFaultsAction(ActionBase):
             mylog.console.setLevel(logging.DEBUG)
 
         mylog.info("Waiting for no unresolved cluster faults on cluster " + mvip)
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_WAIT)
+        self._RaiseEvent(self.Events.BEFORE_WAIT)
 
         if faultWhitelist == None:
             faultWhitelist = set()
@@ -84,7 +85,7 @@ class WaitForNoFaultsAction(ActionBase):
                 current_faults = cluster.GetCurrentFaultSet()
             except libsf.SfError as e:
                 mylog.error("Failed to get list of faults: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Failed to get list of faults: " + str(e))
                 return False
 
             # Break if there are no faults
@@ -98,19 +99,19 @@ class WaitForNoFaultsAction(ActionBase):
             # Print the list of faults if it is the first time or if it has changed
             if previous_faults == set() or current_faults & previous_faults != previous_faults:
                 mylog.info("   Current faults: " + ",".join(current_faults))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAULT_LIST_CHANGED)
+                self._RaiseEvent(self.Events.FAULT_LIST_CHANGED)
 
             # Abort if there are any blacklisted faults
             if len(current_faults & faultBlacklist) > 0:
                 mylog.error("Blacklisted fault found")
-                super(self.__class__, self)._RaiseEvent(self.Events.BLACKLISTED_FAULT_FOUND)
+                self._RaiseEvent(self.Events.BLACKLISTED_FAULT_FOUND)
                 return False
 
             previous_faults = current_faults
             time.sleep(60)
 
         mylog.passed("There are no current cluster faults on " + mvip)
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_WAIT)
+        self._RaiseEvent(self.Events.AFTER_WAIT)
         return True
 
 # Instantate the class and add its attributes to the module

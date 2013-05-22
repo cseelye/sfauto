@@ -25,6 +25,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class WaitForClusterFullnessAction(ActionBase):
     class Events:
@@ -57,7 +58,7 @@ class WaitForClusterFullnessAction(ActionBase):
         mylog.info("Waiting for cluster at " + mvip + " to be at least " + str(full) + " GB used")
         cluster = libsfcluster.SFCluster(mvip, username, password)
         start_time = time.time()
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_WAIT)
+        self._RaiseEvent(self.Events.BEFORE_WAIT)
         previous_fullness = -1
         while True:
             current_fullness = cluster.GetClusterUsedSpace()
@@ -71,7 +72,7 @@ class WaitForClusterFullnessAction(ActionBase):
             time.sleep(30)
             if time.time() - start_time > timeout:
                 mylog.error("Timeout waiting for bin syncing")
-                super(self.__class__, self)._RaiseEvent(self.Events.WAIT_TIMEOUT)
+                self._RaiseEvent(self.Events.WAIT_TIMEOUT)
                 return False
 
         end_time = time.time()
@@ -81,7 +82,7 @@ class WaitForClusterFullnessAction(ActionBase):
         mylog.info("Cluster used space is " + libsf.HumanizeDecimal(current_fullness, 1, "G") + "B")
         mylog.info("Duration " + libsf.SecondsToElapsedStr(duration))
         mylog.passed("Cluster is filled to specified level")
-        super(self.__class__, self)._RaiseEvent(self.Events.CLUSTER_FILLED)
+        self._RaiseEvent(self.Events.CLUSTER_FILLED)
         return True
 
 # Instantate the class and add its attributes to the module

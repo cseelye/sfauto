@@ -22,6 +22,7 @@ from libclient import SfClient, ClientError
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ParseVdbenchErrorsAction(ActionBase):
     class Events:

@@ -25,6 +25,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ListSliceServicesAction(ActionBase):
     class Events:
@@ -57,13 +58,25 @@ class ListSliceServicesAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, 'ListServices', {})
         except libsf.SfError as e:
             mylog.error("Failed to get service list: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         slices = []
         for item in result["services"]:
             if 'service' in item and item['service']['serviceType'] == "slice":
                 slices.append(item['service']['serviceID'])
+        self.SetSharedValue(SharedValues.sliceServiceIDList, slices)
+
+        return slices
+
+    def Execute(self, mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Get a list of active nodes in the cluster
+        """
+        del self
+        slices = Get(**locals())
+        if slices is False:
+            return False
         slices = map(str, sorted(slices))
 
         if csv or bash:
@@ -74,7 +87,7 @@ class ListSliceServicesAction(ActionBase):
             sys.stdout.flush()
         else:
             for ss_id in slices:
-                mylog.info("slice" + ss_id)
+                mylog.info("  slice" + ss_id)
 
         return True
 

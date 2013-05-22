@@ -63,6 +63,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class CreateVolumesForClientAction(ActionBase):
     class Events:
@@ -105,7 +106,7 @@ class CreateVolumesForClientAction(ActionBase):
             volumes_list = libsf.CallApiMethod(mvip, username, password, "ListVolumesForAccount", params)
         except libsf.SfError as e:
             mylog.error("Failed to get volume list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return False
         for vol in volumes_list["volumes"]:
             m = re.search(r"(\d+)$", vol["name"])
@@ -134,7 +135,7 @@ class CreateVolumesForClientAction(ActionBase):
                 libsf.CallApiMethod(mvip, username, password, "CreateVolume", params)
             except libsf.SfError as e:
                 mylog.error("Failed to create volume: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 return False
 
             mylog.info(client_ip + ":   Created volume " + volume_name)
@@ -173,7 +174,7 @@ class CreateVolumesForClientAction(ActionBase):
             accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
         except libsf.SfError as e:
             mylog.error("Failed to get account list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Run the client operations in parallel if there are enough clients

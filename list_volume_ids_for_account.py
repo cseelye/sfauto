@@ -27,6 +27,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ListVolumeIdsForAccountAction(ActionBase):
     class Events:
@@ -45,7 +46,7 @@ class ListVolumeIdsForAccountAction(ActionBase):
                             "source_account" : None},
             args)
 
-    def Execute(self, mvip, source_account, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip, source_account, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         List the volume IDs for an account
         """
@@ -60,7 +61,7 @@ class ListVolumeIdsForAccountAction(ActionBase):
             accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
         except libsf.SfError as e:
             mylog.error("Failed to get account list: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         # Find the corresponding account on the cluster
@@ -71,19 +72,31 @@ class ListVolumeIdsForAccountAction(ActionBase):
                 break
         if account_id == 0:
             mylog.error("Could not find account " + source_account + " on " + mvip)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+            self.RaiseFailureEvent(message="Could not find account " + source_account + " on " + mvip)
             return False
 
         try:
             volume_list = libsf.CallApiMethod(mvip, username, password, "ListVolumesForAccount", { "accountID" : account_id })
         except libsf.SfError as e:
             mylog.error("Failed to get account list: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         vols = []
         for vol in volume_list["volumes"]:
             vols.append(str(vol["volumeID"]))
+
+        self.SetSharedValue(SharedValues.volumeIDList, vols)
+        return vols
+
+    def Execute(self, mvip, source_account, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        List the volume IDs for an account
+        """
+        del self
+        vols = Get(**locals())
+        if vols is False:
+            return False
 
         if csv or bash:
             separator = ","
@@ -92,7 +105,7 @@ class ListVolumeIdsForAccountAction(ActionBase):
             sys.stdout.write(separator.join(vols) + "\n")
             sys.stdout.flush()
         else:
-            mylog.info("Account " + source_account + " has volumes ")
+            mylog.info("Account " + source_account + " has " + str(len(vols)) + " volumes:")
             mylog.info(", ".join(vols))
 
         return True

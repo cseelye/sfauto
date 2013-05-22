@@ -38,6 +38,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class DeleteVolumesFromClientAction(ActionBase):
     class Events:
@@ -57,7 +58,7 @@ class DeleteVolumesFromClientAction(ActionBase):
             client.Connect(client_ip, client_user, client_pass)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         # Search for account name and volumes
@@ -88,14 +89,14 @@ class DeleteVolumesFromClientAction(ActionBase):
                 libsf.CallApiMethod(mvip, username, password, "DeleteVolume", params)
             except libsf.SfError as e:
                 mylog.error(client_ip + ": failed to delete volumes: " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 return
 
             try:
                 libsf.CallApiMethod(mvip, username, password, "PurgeDeletedVolume", params)
             except libsf.SfError as e:
                 mylog.error(client_ip + ": failed to purge volumes: " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 return
 
         results[index] = True

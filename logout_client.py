@@ -32,6 +32,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class LogoutClientAction(ActionBase):
     class Events:
@@ -59,31 +60,31 @@ class LogoutClientAction(ActionBase):
             client.Connect(client_ip, client_user, client_pass)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
         # Log out of all volumes
         mylog.info(client_ip + ": Logging out of iSCSI volumes on client '" + client.Hostname + "'")
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_CLIENT_LOGOUT, clientIP=client_ip)
+        self._RaiseEvent(self.Events.BEFORE_CLIENT_LOGOUT, clientIP=client_ip)
         try:
             client.LogoutTargets(target_list)
         except ClientError as e:
             mylog.error(client_ip + ": " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_CLIENT_LOGOUT, clientIP=client_ip)
+        self._RaiseEvent(self.Events.AFTER_CLIENT_LOGOUT, clientIP=client_ip)
 
         # Clean iSCSI
         if clean:
             mylog.info(client_ip + ": Cleaning iSCSI on client '" + client.Hostname + "'")
-            super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_CLIENT_CLEAN, clientIP=client_ip)
+            self._RaiseEvent(self.Events.BEFORE_CLIENT_CLEAN, clientIP=client_ip)
             try:
                 client.CleanIscsi()
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 return
-            super(self.__class__, self)._RaiseEvent(self.Events.AFTER_CLIENT_CLEAN, clientIP=client_ip)
+            self._RaiseEvent(self.Events.AFTER_CLIENT_CLEAN, clientIP=client_ip)
 
         results[myname] = True
         return
@@ -119,9 +120,9 @@ class LogoutClientAction(ActionBase):
             th = multiprocessing.Process(target=self._ClientThread, name=thread_name, args=(client_ip, client_user, client_pass, target_list, clean, results))
             all_threads.append(th)
 
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_ALL)
+        self._RaiseEvent(self.Events.BEFORE_ALL)
         allgood = libsf.ThreadRunner(all_threads, results, parallel_clients)
-        super(self.__class__, self)._RaiseEvent(self.Events.AFTER_ALL)
+        self._RaiseEvent(self.Events.AFTER_ALL)
 
         if allgood:
             mylog.passed("Successfully logged out of volumes on all clients")

@@ -178,7 +178,8 @@ class SFCluster(object):
         # Wait for GC to start
         mylog.info("Waiting for GC to start")
         wait_start = time.time()
-        while True:
+        started = False
+        while not started:
             time.sleep(3)
             if time.time() - wait_start > 120:
                 raise libsf.SfError("Timeout waiting for GC to start")
@@ -189,10 +190,12 @@ class SFCluster(object):
                 if event_time < request_time:
                     continue
 
-                if ("GCStarted" in event["message"]) and event_time > request_time:
+                if ("GCStarted" in event["message"]):
+                    started = True
                     break
 
-                if ("GCRescheduled" in event["message"]) and event_time > request_time:
+                if ("GCRescheduled" in event["message"]):
+                    started = True
                     break
 
     def WaitForGC(self, timeout=60):
@@ -215,9 +218,10 @@ class SFCluster(object):
                 elif gc_info.EndTime <= 0:
                     if time.time() - gc_info.StartTime > 60 * timeout:
                         raise libsf.SfTimeoutError("Timeout waiting for GC to finish")
-                    continue
+                    break
                 else:
                     return gc_info
+            time.sleep(30)
 
     def IsBinSyncing(self):
         """

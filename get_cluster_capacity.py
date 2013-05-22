@@ -27,6 +27,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetClusterCapacityAction(ActionBase):
     class Events:
@@ -44,7 +45,7 @@ class GetClusterCapacityAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip, stat=None, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip=sfdefaults.mvip, stat=None, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Get cluster capacity stats
         """
@@ -58,14 +59,30 @@ class GetClusterCapacityAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, "GetClusterCapacity", {})
         except libsf.SfError as e:
             mylog.error("Failed to get capacity stats: " + e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         if stat:
             if stat not in result["clusterCapacity"]:
                 mylog.error(stat + " is not in clusterCapacity")
                 return False
+            self.SetSharedValue(stat, result["clusterCapacity"][stat])
+        else:
+            for key, value in result["clusterCapacity"].iteritems():
+                self.SetSharedValue(str(key), str(value))
 
+        return result
+
+    def Execute(self, mvip=sfdefaults.mvip, stat=None, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show cluster capacity stats
+        """
+        del self
+        result = Get(**locals())
+        if result is False:
+            return False
+
+        if stat:
             if csv or bash:
                 sys.stdout.write(str(result["clusterCapacity"][stat]) + "\n")
                 sys.stdout.flush()

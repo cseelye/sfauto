@@ -25,6 +25,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetClientHostnameAction(ActionBase):
     class Events:
@@ -40,11 +41,10 @@ class GetClientHostnameAction(ActionBase):
         libsf.ValidateArgs({"client_ip" : libsf.IsValidIpv4Address},
             args)
 
-    def Execute(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+    def Get(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
         """
         Get the hostname of a client
         """
-
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
@@ -55,10 +55,23 @@ class GetClientHostnameAction(ActionBase):
         try:
             client = SfClient()
             client.Connect(client_ip, client_user, client_pass)
-            client_name = client.Hostname
+            hostname = client.Hostname
         except ClientError as e:
             mylog.error(e.message)
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
+            return False
+
+        self.SetSharedValue(SharedValues.clientHostname, hostname)
+        self.SetSharedValue(client_ip + "-clientHostname", hostname)
+        return hostname
+
+    def Execute(self, client_ip, csv=False, bash=False, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+        """
+        Show the hostname of a client
+        """
+        del self
+        client_name = Get(**locals())
+        if client_name is False:
             return False
 
         if csv or bash:

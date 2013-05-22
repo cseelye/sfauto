@@ -25,6 +25,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class WaitSyncingAction(ActionBase):
     class Events:
@@ -60,13 +61,13 @@ class WaitSyncingAction(ActionBase):
 
         mylog.info("Waiting for there to be no slice syncing on " + mvip)
         start_time = time.time()
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_WAIT)
+        self._RaiseEvent(self.Events.BEFORE_WAIT)
         while True:
             try:
                 syncing = cluster.IsSliceSyncing()
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             if not syncing:
                 break
@@ -74,7 +75,7 @@ class WaitSyncingAction(ActionBase):
             time.sleep(30)
             if time.time() - start_time > timeout:
                 mylog.error("Timeout waiting for slice syncing")
-                super(self.__class__, self)._RaiseEvent(self.Events.WAIT_TIMEOUT)
+                self._RaiseEvent(self.Events.WAIT_TIMEOUT)
                 return False
 
         end_time = time.time()
@@ -82,18 +83,18 @@ class WaitSyncingAction(ActionBase):
 
         mylog.info("Duration " + libsf.SecondsToElapsedStr(duration))
         mylog.passed("Slice syncing is finished")
-        super(self.__class__, self)._RaiseEvent(self.Events.SLICE_SYNC_FINISHED)
+        self._RaiseEvent(self.Events.SLICE_SYNC_FINISHED)
 
 
         mylog.info("Waiting for there to be no bin syncing on " + mvip)
         start_time = time.time()
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_WAIT)
+        self._RaiseEvent(self.Events.BEFORE_WAIT)
         while True:
             try:
                 syncing = cluster.IsBinSyncing()
             except libsf.SfError as e:
                 mylog.error(str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             if not syncing:
                 break
@@ -101,7 +102,7 @@ class WaitSyncingAction(ActionBase):
             time.sleep(30)
             if time.time() - start_time > timeout:
                 mylog.error("Timeout waiting for bin syncing")
-                super(self.__class__, self)._RaiseEvent(self.Events.WAIT_TIMEOUT)
+                self._RaiseEvent(self.Events.WAIT_TIMEOUT)
                 return False
 
         end_time = time.time()
@@ -109,10 +110,10 @@ class WaitSyncingAction(ActionBase):
 
         mylog.info("Duration " + libsf.SecondsToElapsedStr(duration))
         mylog.passed("Bin syncing is finished")
-        super(self.__class__, self)._RaiseEvent(self.Events.BIN_SYNC_FINISHED)
+        self._RaiseEvent(self.Events.BIN_SYNC_FINISHED)
 
         mylog.passed("All syncing is finished on " + mvip)
-        super(self.__class__, self)._RaiseEvent(self.Events.ALL_SYNC_FINISHED)
+        self._RaiseEvent(self.Events.ALL_SYNC_FINISHED)
         return True
 
 # Instantate the class and add its attributes to the module

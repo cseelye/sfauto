@@ -25,6 +25,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class ClusterSfnoderesetAction(ActionBase):
     class Events:
@@ -76,7 +77,7 @@ class ClusterSfnoderesetAction(ActionBase):
             return
         except Exception as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             results[index] = False
 
     def ValidateArgs(self, args):

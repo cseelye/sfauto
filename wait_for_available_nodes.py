@@ -27,6 +27,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class WaitForAvailableNodesAction(ActionBase):
     class Events:
@@ -66,7 +67,7 @@ class WaitForAvailableNodesAction(ActionBase):
         mylog.info("Waiting up to " + str(timeout) + " sec for nodes " + ",".join(nodeIPs) + " to be available in cluster " + mvip)
         cluster = libsfcluster.SFCluster(mvip, username, password)
         start_time = time.time()
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_WAIT)
+        self._RaiseEvent(self.Events.BEFORE_WAIT)
         previous_pending = set()
         while True:
             try:
@@ -82,18 +83,18 @@ class WaitForAvailableNodesAction(ActionBase):
             # Display the list if it has changed
             if previous_pending & avail_ips != previous_pending:
                 mylog.info("Pending node list: " + ",".join(avail_ips))
-                super(self.__class__, self)._RaiseEvent(self.Events.PENDING_LIST_CHANGED)
+                self._RaiseEvent(self.Events.PENDING_LIST_CHANGED)
             previous_pending = avail_ips
 
             # Break if the list contains all of the requested nodes
             if nodeIPs & avail_ips == nodeIPs:
-                super(self.__class__, self)._RaiseEvent(self.Events.ALL_NODES_FOUND)
+                self._RaiseEvent(self.Events.ALL_NODES_FOUND)
                 return True
 
             time.sleep(10)
             if time.time() - start_time > timeout:
                 mylog.error("Timeout waiting for pending nodes")
-                super(self.__class__, self)._RaiseEvent(self.Events.WAIT_TIMEOUT)
+                self._RaiseEvent(self.Events.WAIT_TIMEOUT)
                 return False
 
 # Instantate the class and add its attributes to the module

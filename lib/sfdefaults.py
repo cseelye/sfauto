@@ -10,6 +10,10 @@ For example,
 """
 
 # =============================================================================
+# Default Behaviors
+stop_on_error = False               # Behavior when an error occurs
+# =============================================================================
+# Default Values
 mvip = None                         # Cluster MVIP
 svip = None                         # Cluster SVIP
 username = "admin"                  # Cluster admin username
@@ -61,7 +65,8 @@ vmhost_kvm = None                   # KVM hypervisor host
 vmhost_xen = None                   # XenServer hypervisor host
 xenapi_parallel_calls_thresh = 2    # Run multiple XenServer API operations in parallel if there are more than this many
 xenapi_parallel_calls_max = 5       # Run at most this many parallel operations with XenServer API
-
+# =============================================================================
+# Default Choices
 all_volume_acess_levels = [         # Valid volume access levels
     "readWrite",
     "readOnly",

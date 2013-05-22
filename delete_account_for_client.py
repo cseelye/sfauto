@@ -31,6 +31,7 @@ from libclient import SfClient, ClientError
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class DeleteAccountForClientAction(ActionBase):
     class Events:
@@ -66,7 +67,7 @@ class DeleteAccountForClientAction(ActionBase):
             accounts_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
         except libsf.SfError as e:
             mylog.error("Failed to get account list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         allgood = True
@@ -77,7 +78,7 @@ class DeleteAccountForClientAction(ActionBase):
                 client.Connect(client_ip, client_user, client_pass)
             except ClientError as e:
                 mylog.error(client_ip + ": " + e.message)
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 return False
 
             account_id = 0
@@ -95,7 +96,7 @@ class DeleteAccountForClientAction(ActionBase):
                 mylog.passed(client_ip + ": Successfully deleted account " + client.Hostname)
             except libsf.SfError as e:
                 mylog.error(client_ip + ": Failed to delete account: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, clientIP=client_ip, exception=e)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
                 allgood = False
 
         if allgood:

@@ -27,6 +27,7 @@ from lib.libsf import mylog
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class GetNodeDriveCountAction(ActionBase):
     class Events:
@@ -45,9 +46,9 @@ class GetNodeDriveCountAction(ActionBase):
                             "node_ip" : libsf.IsValidIpv4Address},
             args)
 
-    def Execute(self, node_ip, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, node_ip, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
-        Count the number of drives in a node
+        Get the number of drives in a node
         """
         self.ValidateArgs(locals())
         if debug:
@@ -82,6 +83,19 @@ class GetNodeDriveCountAction(ActionBase):
         for drive in result["drives"]:
             if drive["nodeID"] == node_id:
                 drive_count += 1
+
+        self.SetSharedValue(SharedValues.nodeDriveCount, drive_count)
+        self.SetSharedValue(node_ip + "-driveCount", ipmi_ip)
+        return drive_count
+
+    def Execute(self, node_ip, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Show the number of drives in a node
+        """
+        del self
+        drive_count = Get(**locals())
+        if drive_count is False:
+            return False
 
         if csv or bash:
             sys.stdout.write(str(drive_count) + "\n")

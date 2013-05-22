@@ -27,6 +27,7 @@ import lib.XenAPI as XenAPI
 import lib.libxen as libxen
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class XenShutdownVmsAction(ActionBase):
     class Events:
@@ -59,7 +60,7 @@ class XenShutdownVmsAction(ActionBase):
             session = libxen.Connect(vmhost, host_user, host_pass)
         except libxen.XenError as e:
             mylog.error(str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         if vm_name:
@@ -77,7 +78,7 @@ class XenShutdownVmsAction(ActionBase):
                 session.xenapi.VM.clean_shutdown(vm_ref)
             except XenAPI.Failure as e:
                 mylog.error("Could not shutdown " + vm_name + " - " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
         mylog.info("Searching for matching VMs")
@@ -88,7 +89,7 @@ class XenShutdownVmsAction(ActionBase):
             vm_ref_list = session.xenapi.VM.get_all()
         except XenAPI.Failure as e:
             mylog.error("Could not get VM list: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         for vm_ref in vm_ref_list:
             vm = session.xenapi.VM.get_record(vm_ref)
@@ -126,7 +127,7 @@ class XenShutdownVmsAction(ActionBase):
                     mylog.passed("  Successfully shutdown " + vname)
                 except XenAPI.Failure as e:
                     mylog.error("  Failed to shutdown " + vm["name_label"] + " - " + str(e))
-                    super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                    self.RaiseFailureEvent(message=str(e), exception=e)
 
         if shutdown_count == len(matched_vms):
             mylog.passed("All VMs shutdown successfully")

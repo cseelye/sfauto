@@ -30,6 +30,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class StartGcAction(ActionBase):
     class Events:
@@ -61,7 +62,7 @@ class StartGcAction(ActionBase):
         cluster = libsfcluster.SFCluster(mvip, username, password)
 
         # Start a GC cycle
-        super(self.__class__, self)._RaiseEvent(self.Events.BEFORE_START_GC)
+        self._RaiseEvent(self.Events.BEFORE_START_GC)
         try:
             cluster.StartGC(force)
         except libsf.SfError as e:
@@ -75,15 +76,15 @@ class StartGcAction(ActionBase):
                 gc_info = cluster.WaitForGC(timeout)
             except libsf.SfTimeoutError:
                 mylog.error("Timed out waiting for GC to finish")
-                super(self.__class__, self)._RaiseEvent(self.Events.GC_TIMEOUT)
+                self._RaiseEvent(self.Events.GC_TIMEOUT)
                 return False
             except libsf.SfError as e:
                 mylog("Failed to wait for GC: " + str(e))
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+                self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             mylog.info("GC generation " + str(gc_info.Generation) + " started " + libsf.TimestampToStr(gc_info.StartTime) + ", duration " + libsf.SecondsToElapsedStr(gc_info.EndTime - gc_info.StartTime) + ", " + libsf.HumanizeBytes(gc_info.DiscardedBytes) + " discarded")
             mylog.info("    " + str(len(gc_info.ParticipatingSSSet)) + " participating SS: " + ",".join(map(str, gc_info.ParticipatingSSSet)) + "  " + str(len(gc_info.EligibleBSSet)) + " eligible BS: " + ",".join(map(str, gc_info.EligibleBSSet)) + "")
-            super(self.__class__, self)._RaiseEvent(self.Events.GC_FINISHED, GCInfo=gc_info)
+            self._RaiseEvent(self.Events.GC_FINISHED, GCInfo=gc_info)
 
         return True
 

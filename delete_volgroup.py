@@ -28,6 +28,7 @@ import lib.sfdefaults as sfdefaults
 import logging
 import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
+from lib.datastore import SharedValues
 
 class DeleteVolgroupAction(ActionBase):
     class Events:
@@ -67,16 +68,15 @@ class DeleteVolgroupAction(ActionBase):
             volgroup = cluster.FindVolumeAccessGroup(volgroupName=volgroup_name, volgroupID=volgroup_id)
         except libsf.SfApiError as e:
             mylog.error("Could not find volume group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
         except SfError:
             if strict:
                 mylog.error("Group does not exist")
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
+                self.RaiseFailureEvent(message="Group already exists")
                 return False
             else:
                 mylog.passed("Group does not exist")
-                super(self.__class__, self)._RaiseEvent(self.Events.FAILURE)
                 return True
 
         # Delete the group
@@ -84,7 +84,7 @@ class DeleteVolgroupAction(ActionBase):
             volgroup.Delete()
         except libsf.SfError as e:
             mylog.error("Failed to delete group: " + str(e))
-            super(self.__class__, self)._RaiseEvent(self.Events.FAILURE, exception=e)
+            self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         mylog.passed("Group deleted successfully")
