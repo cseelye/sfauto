@@ -1,44 +1,15 @@
 #!/usr/bin/python
+"""
+Monitor a SolidFire cluster, including cluster stats, process resource utilization, etc.
 
-# ----------------------------------------------------------------------------
-# Configuration
-#  These may also be set on the command line
+This script will display a table of information from each node in the cluster, as well as cluster wide information.
+Node information includes CPU, memory and disk usage, process uptime, network traffic, etc.
+Cluster information includes the number of objects (accounts, volumes, sessions, etc), capacity stats, GC info, syncing, ssload, scache usage, cluster faults, etc.
 
-mvip = ""                           # The MVIP of the cluster
-                                    # --mvip
-
-node_ips = [                        # The IP addresses of the nodes to monitor (if mvip is not specified)
-    #"192.168.133.0",               # --node_ips
-]
-
-ssh_user = "root"                   # The SSH username for the nodes
-                                    # --ssh_user
-
-ssh_pass = "password"              # The SSH password for the nodes
-                                    # --ssh_pass
-
-api_user = "admin"                  # The API username for the nodes
-                                    # --api_user
-
-api_pass = "solidfire"              # The API password for the nodes
-                                    # --api_pass
-
-keyfile = ""                        # Keyfile where your RSA key is stored. Mostly interesting for Windows.
-                                    # --keyfile
-
-interval = 1                        # The number of seconds between each refresh
-                                    # --interval
-
-cluster_interval = 0                # Refresh interval for cluster info - zero means use the same interval
-                                    # --cluster_interval
-
-columns = 3                         # The number of columns to use for display
-                                    # --columns
-
-output_dir = "sf-top-out"           # The directory to save exported data/reports in
-                                    # --output_dir
-
-# ----------------------------------------------------------------------------
+All of the information can be logged to CSV files as well using the --export flag
+Collection intervals can be changed with --interval and --cluster_interval
+Display size can be changed with --columns and --compact
+"""
 
 # cover a couple different ways of doing this
 __version__ = '2.2'
@@ -66,6 +37,7 @@ import signal
 import copy
 import inspect
 import BaseHTTPServer
+import lib.sfdefaults as sfdefaults
 
 missing_modules = []
 try:
@@ -357,8 +329,7 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams):
     return response_obj['result']
 
 def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
-    if not os.path.exists(pKeyFile): pKeyFile = None
-    if pKeyFile == '': pKeyFile = None
+    if not pKeyFile or not os.path.exists(pKeyFile): pKeyFile = None
 
     begin = datetime.datetime.now()
     #start_time = datetime.datetime.now()
@@ -1890,33 +1861,24 @@ def Abort():
 
 if __name__ == '__main__':
 
-    # Pull in values from ENV if they are present
-    env_enabled_vars = [ "node_ips", "ssh_user", "ssh_pass", "api_user", "api_pass" ]
-    for vname in env_enabled_vars:
-        env_name = "SF" + vname.upper()
-        if os.environ.get(env_name):
-            vars()[vname] = os.environ[env_name]
-    if isinstance(node_ips, basestring):
-        node_ips = node_ips.split(",")
-
     # Parse command line arguments
-    parser = OptionParser(version="%prog Version " + __version__, description="Monitor a SolidFire cluster, including cluster stats, process resource utilization, etc.")
+    parser = OptionParser(version="%prog Version " + __version__, description="sf-top v" + __version__ + " - Monitor a SolidFire cluster, including cluster stats, resource utilization, etc.")
 
-    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=mvip, help="the MVIP of the cluster")
-    parser.add_option("-n", "--node_ips", type="string", dest="node_ips", default=node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
-    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=ssh_user, help="the SSH username for the nodes [%default]")
-    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=ssh_pass, help="the SSH password for the nodes [%default]")
-    parser.add_option("--api_user", type="string", dest="api_user", default=api_user, help="the API username for the cluster [%default]")
-    parser.add_option("--api_pass", type="string", dest="api_pass", default=api_pass, help="the API password for the cluster [%default]")
-    parser.add_option("--keyfile", type="string", dest="keyfile", default=keyfile, help="the full path to your RSA key (Windows only)")
-    parser.add_option("--interval", type="int", dest="interval", default=interval, help="the number of seconds between each refresh [%default]")
-    parser.add_option("--cluster_interval", type="int", dest="cluster_interval", default=cluster_interval, help="the number of seconds between each cluster refresh (leave at zero to use the same interval) [%default]")
-    parser.add_option("--columns", type="int", dest="columns", default=columns, help="the number of columns to use for display [%default]")
-    parser.add_option("--compact", action="store_true", dest="compact", help="show a compact view (useful for large clusters)")
+    parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the MVIP of the cluster")
+    parser.add_option("-n", "--node_ips", type="string", dest="node_ips", default=sfdefaults.node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
+    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes [%default]")
+    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes [%default]")
+    parser.add_option("--api_user", type="string", dest="api_user", default=sfdefaults.username, help="the API username for the cluster [%default]")
+    parser.add_option("--api_pass", type="string", dest="api_pass", default=sfdefaults.password, help="the API password for the cluster [%default]")
+    parser.add_option("--keyfile", type="string", dest="keyfile", default=None, help="the full path to your RSA key (Windows only)")
+    parser.add_option("--interval", type="int", dest="interval", default=1, help="the number of seconds between each refresh [%default]")
+    parser.add_option("--cluster_interval", type="int", dest="cluster_interval", default=0, help="the number of seconds between each cluster refresh (leave at zero to use the same interval) [%default]")
+    parser.add_option("--columns", type="int", dest="columns", default=3, help="the number of columns to use for display [%default]")
+    parser.add_option("--compact", action="store_true", dest="compact", default=False, help="show a compact view (useful for large clusters)")
     parser.add_option("--noclusterinfo", action="store_false", dest="clusterinfo", default=True, help="do not gather/show cluster information (node info only)")
-    parser.add_option("--export", action="store_true", dest="export", help="save the results in a file as well as print to the screen")
-    parser.add_option("--output_dir", type="string", dest="output_dir", default=output_dir, help="the directory to save exported data")
-    parser.add_option("--debug", action="store_true", dest="debug", help="write detailed debug info to a log file")
+    parser.add_option("--export", action="store_true", dest="export", default=False, help="save the results in a file as well as print to the screen")
+    parser.add_option("--output_dir", type="string", dest="output_dir", default="sf-top-out", help="the directory to save exported data")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="write detailed debug info to a log file")
 
     (options, args) = parser.parse_args()
     mvip = options.mvip
