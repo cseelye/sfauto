@@ -72,12 +72,14 @@ class CreateAccountAction(ActionBase):
         except libsf.SfApiError as e:
             if (e.name == "xDuplicateUsername" and not strict):
                 mylog.passed("Account already exists")
+                self.SetSharedValue(SharedValues.accountName, account_name)
                 return True
             else:
                 mylog.error(str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
+        self.SetSharedValue(SharedValues.accountName, account_name)
         mylog.passed("Account created successfully")
         return True
 
@@ -102,7 +104,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.account_name, options.mvip, options.initiator_secret, options.target_secret, options.username, options.password, options.debug):
+        if Execute(options.account_name, options.mvip, options.initiator_secret, options.target_secret, options.strict, options.username, options.password, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

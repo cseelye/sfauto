@@ -74,7 +74,7 @@ class GetActiveNodesAction(ActionBase):
         Show the list of active nodes in the cluster
         """
         del self
-        node_list = Get(**args)
+        node_list = Get(**locals())
         if node_list is False:
             return False
 

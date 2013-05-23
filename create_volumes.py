@@ -60,7 +60,6 @@ class CreateVolumesAction(ActionBase):
         libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
                             "username" : None,
                             "password" : None,
-                            "volume_prefix" : None,
                             "volume_size" : None,
                             "volume_count" : None,
                             "min_iops" : libsf.IsInteger,
@@ -69,25 +68,16 @@ class CreateVolumesAction(ActionBase):
                             },
                     args)
 
-    def Execute(self, mvip, volume_prefix, volume_size, volume_count, volume_start=1, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=None, account_id=0, wait=0, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, volume_size, volume_count, volume_prefix=None, volume_start=1, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=None, account_id=0, wait=0, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Create volumes
         """
+        if not account_name and account_id <= 0:
+            account_name = self.GetSharedValue(SharedValues.accountName)
 
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
-
-        mylog.info("Management VIP = " + mvip)
-        mylog.info("Username       = " + username)
-        mylog.info("Password       = " + password)
-        mylog.info("Volume prefix  = " + volume_prefix)
-        mylog.info("Volume size    = " + str(volume_size) + " GB")
-        mylog.info("Volume count   = " + str(volume_count))
-        mylog.info("Max IOPS       = " + str(max_iops))
-        mylog.info("Min IOPS       = " + str(min_iops))
-        mylog.info("Burst IOPS     = " + str(burst_iops))
-        mylog.info("512e           = " + str(enable_512))
 
         # Find the account
         if account_id > 0:
@@ -104,6 +94,17 @@ class CreateVolumesAction(ActionBase):
 
         mylog.info("Account name   = " + account_name)
         mylog.info("Account ID     = " + str(account_id))
+
+        if volume_prefix is None:
+            volume_prefix = account_name + "-"
+
+        mylog.info("Volume prefix  = " + volume_prefix)
+        mylog.info("Volume size    = " + str(volume_size) + " GB")
+        mylog.info("Volume count   = " + str(volume_count))
+        mylog.info("Max IOPS       = " + str(max_iops))
+        mylog.info("Min IOPS       = " + str(min_iops))
+        mylog.info("Burst IOPS     = " + str(burst_iops))
+        mylog.info("512e           = " + str(enable_512))
 
         # Create the requested volumes
         created = 0
@@ -165,7 +166,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.volume_prefix, options.volume_size, options.volume_count, options.volume_start, options.enable_512, options.min_iops, options.max_iops, options.burst_iops, options.account_name, options.account_id, options.wait, options.username, options.password, options.debug):
+        if Execute(options.volume_size, options.volume_count, options.volume_prefix, options.volume_start, options.enable_512, options.min_iops, options.max_iops, options.burst_iops, options.account_name, options.account_id, options.wait, options.mvip, options.username, options.password, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

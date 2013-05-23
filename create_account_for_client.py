@@ -103,6 +103,9 @@ class CreateAccountForClientAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
             return
 
+        self.SetSharedValue(SharedValues.accountName, account_name)
+        self.SetSharedValue(client_ip + "-accountName", account_name)
+
         results[index] = True
         return
 

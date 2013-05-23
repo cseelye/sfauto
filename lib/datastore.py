@@ -35,6 +35,7 @@ class SharedValues:
     """
     List of defined shared values that actions use
     """
+    accountName = "accountName"
     activeNodeList = "activeNodeList"
     blockServiceIDList = "blockServiceIDList"
     clientDhcpEnabled = "clientDHCPEnabled"
