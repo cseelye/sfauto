@@ -140,6 +140,7 @@ class MyLogLevels:
     PASS = 21
     RAW = 22
     TIME = 23
+    BANNER = 24
 for attr, value in vars(MyLogLevels).iteritems():
     logging.addLevelName(attr, value)
 
@@ -170,6 +171,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
         MyLogLevels.PASS: ('black', 'green', True),
         MyLogLevels.RAW: ('black', 'white', True),
         MyLogLevels.TIME: ('black', 'cyan', False),
+        MyLogLevels.BANNER: ('black', 'magenta', True),
     }
     csi = '\x1b['
     reset = '\x1b[0m'
@@ -266,8 +268,10 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
 # Custom formatter with different formats for different log levels
 class MultiFormatter(logging.Formatter):
+    banner_width = 120
     raw_format = "%(message)s"
     std_format = "%(asctime)s: %(levelname)-7s %(message)s"
+    banner_format = "="*banner_width + "\n%(message)s\n" + "="*banner_width
 
     def __init__(self, fmt=std_format):
         self.std_format = fmt
@@ -275,10 +279,22 @@ class MultiFormatter(logging.Formatter):
     def format(self, record):
         if record.levelno == MyLogLevels.RAW or record.levelno == MyLogLevels.TIME:
             self._fmt = self.raw_format
-            result = logging.Formatter.format(self, record)
+        elif record.levelno == MyLogLevels.BANNER:
+            # Center the message and make sure it fits within the banner
+            modified = []
+            for line in record.msg.split("\n"):
+                if len(line) > self.banner_width:
+                    pieces = SplitMessage(line, self.banner_width)
+                else:
+                    pieces = [line]
+                for piece in pieces:
+                    modified.append(piece.center(self.banner_width, ' '))
+            record.msg = "\n".join(modified)
+            self._fmt = self.banner_format
         else:
             self._fmt = self.std_format
-            result = logging.Formatter.format(self, record)
+
+        result = logging.Formatter.format(self, record)
 
         self._fmt = self.std_format
         return result
@@ -327,7 +343,7 @@ class mylog:
     sftestlog.setLevel(logging.DEBUG)
 
     # Log everything to syslog on non-windows
-    if "win" not in platform.system().lower():
+    if not platform.system().lower().startswith("win"):
         syslog_formatter = logging.Formatter("%(name)s: %(levelname)s %(message)s") # prepend with ident and our severities
         syslog_address = "/dev/log"
         if "darwin" in platform.system().lower(): syslog_address="/var/run/syslog"
@@ -344,73 +360,79 @@ class mylog:
     sftestlog.addHandler(console)
 
     @staticmethod
-    def _split_message(message):
-        lines = []
-        remain = str(message)
-        while len(remain) > 1024:
-            index = string.rfind(remain, " ", 0, 1024)
-            if index <= 0:
-                index = 1000
-            lines.append(remain[:index])
-            remain = remain[index:]
-        lines.append(remain)
-        return lines
-
-    @staticmethod
     def debug(message):
         if mylog.silence: return
-        lines = mylog._split_message(message)
+        lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.debug(line)
 
     @staticmethod
     def info(message):
         if mylog.silence: return
-        lines = mylog._split_message(message)
+        lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.info(line)
 
     @staticmethod
     def warning(message):
         if mylog.silence: return
-        lines = mylog._split_message(message)
+        lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.warning(line)
 
     @staticmethod
     def error(message):
         if mylog.silence: return
-        lines = mylog._split_message(message)
+        lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.error(line)
 
     @staticmethod
     def exception(message):
         if mylog.silence: return
-        lines = mylog._split_message(message)
+        lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.exception(line)
 
     @staticmethod
     def passed(message):
         if mylog.silence: return
-        lines = mylog._split_message(message)
+        lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.log(MyLogLevels.PASS, line)
 
     @staticmethod
     def time(message):
         if mylog.silence: return
-        lines = mylog._split_message(message)
+        lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.log(MyLogLevels.TIME, line)
 
     @staticmethod
     def raw(message):
         if mylog.silence: return
-        lines = mylog._split_message(message)
+        lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.log(MyLogLevels.RAW, line)
+
+    @staticmethod
+    def banner(message):
+        if mylog.silence: return
+        lines = SplitMessage(message)
+        for line in lines:
+            mylog.sftestlog.log(MyLogLevels.BANNER, line)
+
+def SplitMessage(message, length=1024):
+    lines = []
+    remain = str(message)
+    while len(remain) > length:
+        index = string.rfind(remain, " ", 0, length)
+        if index <= 0:
+            index = length - 1
+        lines.append(remain[:index])
+        remain = remain[index:]
+    lines.append(remain)
+    return lines
 
 class ColorTerm:
     try:
