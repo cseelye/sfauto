@@ -61,7 +61,7 @@ class AddDrivesAction(ActionBase):
                             },
             args)
 
-    def Execute(self, mvip, node_ips=None, by_node=False, drive_slots=None, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, node_ips=None, by_node=False, drive_slots=None, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Add available drives to the cluster, by node and/or slot, and wait for syncing
         """

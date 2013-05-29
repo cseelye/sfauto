@@ -51,7 +51,7 @@ class RemoveDrivesFromNodeAction(ActionBase):
                             },
             args)
 
-    def Execute(self, mvip, node_ips, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, node_ips, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Remove drives from the nodes
         """
@@ -78,11 +78,13 @@ class RemoveDrivesFromNodeAction(ActionBase):
             node_list.append(node)
 
         # Find all of the active drives in the nodes
+        mylog.info("Looking for drives")
         drive_list = []
         for node in node_list:
             node_drives = node.ListDrives()
             for drive in node_drives:
                 if drive["status"].lower() == "active" or drive["status"].lower() == "failed":
+                    mylog.info("  Found driveID " + str(drive["driveID"]) + " from slot " + str(drive["slot"]))
                     drive_list.append(drive["driveID"])
 
         # Remove the drives from the cluster
@@ -137,7 +139,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.node_ips, options.username, options.password, options.debug):
+        if Execute(options.node_ips, options.mvip, options.username, options.password, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
