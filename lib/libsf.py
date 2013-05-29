@@ -141,6 +141,7 @@ class MyLogLevels:
     RAW = 22
     TIME = 23
     BANNER = 24
+    STEP = 25
 for attr, value in vars(MyLogLevels).iteritems():
     logging.addLevelName(attr, value)
 
@@ -172,6 +173,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
         MyLogLevels.RAW: ('black', 'white', True),
         MyLogLevels.TIME: ('black', 'cyan', False),
         MyLogLevels.BANNER: ('black', 'magenta', True),
+        MyLogLevels.STEP: ('black', 'cyan', False),
     }
     csi = '\x1b['
     reset = '\x1b[0m'
@@ -291,6 +293,8 @@ class MultiFormatter(logging.Formatter):
                     modified.append(piece.center(self.banner_width, ' '))
             record.msg = "\n".join(modified)
             self._fmt = self.banner_format
+        elif record.levelno == MyLogLevels.STEP:
+            record.msg = ">>> " + record.msg
         else:
             self._fmt = self.std_format
 
@@ -421,6 +425,13 @@ class mylog:
         lines = SplitMessage(message)
         for line in lines:
             mylog.sftestlog.log(MyLogLevels.BANNER, line)
+
+    @staticmethod
+    def step(message):
+        if mylog.silence: return
+        lines = SplitMessage(message)
+        for line in lines:
+            mylog.sftestlog.log(MyLogLevels.STEP, line)
 
 def SplitMessage(message, length=1024):
     lines = []
