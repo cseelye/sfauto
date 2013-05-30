@@ -80,9 +80,9 @@ class StressVolumeRebalanceAction(ActionBase):
         BEFORE_START_GC = "BEFORE_START_GC"
         GC_FINISHED = "GC_FINISHED"
         DRIVES_ADDED = "DRIVES_ADDED"
-        DRIVES_NOT_ADDED = "DRIVES_NOT_ADDED" 
-        MASTER_NODE_NOT_FOUND = "MASTER_NODE_NOT_FOUND"  
-        PUSHED_SSH_KEYS = "PUSHED_SSH_KEYS"     
+        DRIVES_NOT_ADDED = "DRIVES_NOT_ADDED"
+        MASTER_NODE_NOT_FOUND = "MASTER_NODE_NOT_FOUND"
+        PUSHED_SSH_KEYS = "PUSHED_SSH_KEYS"
 
 
 
@@ -129,6 +129,10 @@ class StressVolumeRebalanceAction(ActionBase):
             if push_ssh_keys_to_node.Execute(node_ips=node_list):
                 mylog.info("Pushed SSH Keys to Nodes")
                 self._RaiseEvent(self.Events.PUSHED_SSH_KEYS)
+            else:
+                message = "Failed pushing SSH keys to nodes"
+                fail(message, emailTo)
+                return False
         else:
             mylog.info("Not pushing SSH Keys to Nodes")
 

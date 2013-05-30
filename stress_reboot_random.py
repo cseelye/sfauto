@@ -128,6 +128,10 @@ class StressRebootRandomAction(ActionBase):
             if push_ssh_keys_to_node.Execute(node_ips=node_list):
                 mylog.info("Pushed SSH Keys to Nodes")
                 self._RaiseEvent(self.Events.PUSHED_SSH_KEYS)
+            else:
+                message = "Failed pushing SSH keys to nodes"
+                fail(message, emailTo)
+                return False
         else:
             mylog.info("Not pushing SSH Keys to Nodes")
 
