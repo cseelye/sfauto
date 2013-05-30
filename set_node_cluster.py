@@ -41,7 +41,7 @@ class SetNodeClusterAction(ActionBase):
         libsf.ValidateArgs({"nodeIPs" : libsf.IsValidIpv4AddressList,
                             "username" : None,
                             "password" : None,
-                            "cluster_name": None},
+                            "clusterName": None},
             args)
 
     def Execute(self, nodeIPs, clusterName, username=sfdefaults.username, password=sfdefaults.password, debug=False):

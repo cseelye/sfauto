@@ -72,7 +72,7 @@ libsf.PopulateActionModule(sys.modules[__name__])
 if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
-    parser.add_option("-n", "--node_ip", tpye="string", dest="node_ip", default=None, help="the management IP of the node")
+    parser.add_option("-n", "--node_ip", type="string", dest="node_ip", default=None, help="the management IP of the node")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
     parser.add_option("--hostname", type="string", dest="hostname", default=None, help="the new hostname for the node")

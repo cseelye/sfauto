@@ -637,7 +637,7 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
         http_retry = 5
         while True:
             api_resp = None
-            mylog.debug("Calling API on " + Url + ": " + api_call)
+            mylog.debug("Calling API on " + Url + ": " + api_call + " as " + Username + " : " + Password)
             try:
                 api_resp = urllib2.urlopen(Url, api_call)
                 break

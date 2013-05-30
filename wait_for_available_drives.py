@@ -81,7 +81,7 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
-    parser.add_option("--drive_count", type="string", dest="drive_count", default=0, help="the number of drives to wait for")
+    parser.add_option("--drive_count", type="int", dest="drive_count", default=0, help="the number of drives to wait for")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 

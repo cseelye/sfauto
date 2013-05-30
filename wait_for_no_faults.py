@@ -69,13 +69,13 @@ class WaitForNoFaultsAction(ActionBase):
         else:
             faultWhitelist = set(faultWhitelist)
         if len(faultWhitelist) > 0:
-            mylog.info("  If these faults are present, they will be ignored: " + ", ".join(faultWhitelist))
+            mylog.info("If these faults are present, they will be ignored: " + ", ".join(faultWhitelist))
         if faultBlacklist == None:
             faultBlacklist = set()
         else:
             faultBlacklist = set(faultBlacklist)
         if len(faultBlacklist) > 0:
-            mylog.info("  If these faults are present, they will cause an immediately fail: " + ", ".join(faultBlacklist))
+            mylog.info("If these faults are present, they will cause an immediately fail: " + ", ".join(faultBlacklist))
 
         cluster = libsfcluster.SFCluster(mvip, username, password)
         previous_faults = set()
@@ -98,7 +98,7 @@ class WaitForNoFaultsAction(ActionBase):
 
             # Print the list of faults if it is the first time or if it has changed
             if previous_faults == set() or current_faults & previous_faults != previous_faults:
-                mylog.info("   Current faults: " + ",".join(current_faults))
+                mylog.warning("Current faults: " + ",".join(current_faults))
                 self._RaiseEvent(self.Events.FAULT_LIST_CHANGED)
 
             # Abort if there are any blacklisted faults

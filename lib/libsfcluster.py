@@ -659,7 +659,7 @@ class SFCluster(object):
         """
         Get a list of all the available drives
         """
-        mylog.info("Searching for available drives...")
+        mylog.debug("Searching for available drives...")
         result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListDrives", {})
 
         available = []

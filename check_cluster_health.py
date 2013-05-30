@@ -115,7 +115,7 @@ class CheckClusterHealthAction(ActionBase):
 
             fault_whitelist = set(fault_whitelist)
             if len(fault_whitelist) > 0:
-                mylog.info("  If these faults are present, they will be ignored: " + ", ".join(fault_whitelist))
+                mylog.info("If these faults are present, they will be ignored: " + ", ".join(fault_whitelist))
 
             try:
                 current_faults = cluster.GetCurrentFaultSet()
@@ -125,7 +125,7 @@ class CheckClusterHealthAction(ActionBase):
                 return False
 
             if current_faults & fault_whitelist == current_faults:
-                mylog.info("Current cluster faults found: " + ", ".join(current_faults))
+                mylog.warning("Current cluster faults found: " + ", ".join(current_faults))
             else:
                 healthy = False
                 mylog.error("Current cluster faults found: " + ", ".join(current_faults))

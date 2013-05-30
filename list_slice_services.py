@@ -43,7 +43,7 @@ class ListSliceServicesAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Get(self, mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Get a list of active nodes in the cluster
         """
