@@ -70,9 +70,9 @@ class StressRebootMasterAction(ActionBase):
         BEFORE_START_GC = "BEFORE_START_GC"
         GC_FINISHED = "GC_FINISHED"
         DRIVES_ADDED = "DRIVES_ADDED"
-        DRIVES_NOT_ADDED = "DRIVES_NOT_ADDED" 
-        MASTER_NODE_NOT_FOUND = "MASTER_NODE_NOT_FOUND"  
-        PUSHED_SSH_KEYS = "PUSHED_SSH_KEYS"     
+        DRIVES_NOT_ADDED = "DRIVES_NOT_ADDED"
+        MASTER_NODE_NOT_FOUND = "MASTER_NODE_NOT_FOUND"
+        PUSHED_SSH_KEYS = "PUSHED_SSH_KEYS"
 
 
 
@@ -150,9 +150,9 @@ class StressRebootMasterAction(ActionBase):
                 return False
             else:
                 mylog.info("Master Node: " + str(master_node[0]))
-            
-            
+
             #reboot each node
+            mylog.step("Rebooting Node")
             if(reboot_node.Execute(node_ip=master_node[0]) == True):
                 #mylog.info("Node: " + str(node) + " has been rebooted")
                 self._RaiseEvent(self.Events.NODE_REBOOTED)
@@ -173,10 +173,11 @@ class StressRebootMasterAction(ActionBase):
                 return False
 
             #make sure the cluster is healthy
+            mylog.step("Checking Health")
             if(check_cluster_health.Execute(mvip, since=start_time) == True):
                 mylog.info("Cluster " + mvip + " is Healthy")
                 self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
-            else: 
+            else:
                 message = "Cluster " + mvip + " failed health check"
                 fail(message, emailTo)
                 self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
@@ -195,10 +196,10 @@ class StressRebootMasterAction(ActionBase):
 
             #check to see if there are avaiable drives because the node took too long to reboot
             if(count_available_drives.Execute(expected=0, compare="gt", mvip=mvip) != True):
-                
+
                 #notify the user about this but continue the test
                 send_email.Execute(emailTo=emailTo, emailSubject="Node " + str(master_node[0]) + " took too long to reboot" )
-                
+
                 #add the drives back to the culster and wait for sync
                 if(add_available_drives.Execute.Execute(mvip=mvip, username=username, password=password) == True):
                     mylog.info("Available drives were added to the cluster")
@@ -221,10 +222,11 @@ class StressRebootMasterAction(ActionBase):
 
             #wait before going to the next node
             if(waitTime > 0):
-                mylog.info("Waiting for " + str(waitTime) + " seconds")
+                mylog.step("Waiting for " + str(waitTime) + " seconds")
                 time.sleep(waitTime)
 
             #start gc to keep the cluster from filling up
+            mylog.step("Starting Garbage Collection")
             self._RaiseEvent(self.Events.BEFORE_START_GC)
             if(start_gc.Execute(mvip=mvip) == True):
                 mylog.info("GC started")
@@ -254,8 +256,8 @@ class StressRebootMasterAction(ActionBase):
         end_time = time.time()
         delta_time = libsf.SecondsToElapsedStr(end_time - start_time)
 
-        send_email.Execute(emailTo=emailTo, emailSubject="Finished Master Node Reboot on: " + mvip +" in " + delta_time)    
-        
+        send_email.Execute(emailTo=emailTo, emailSubject="Finished Master Node Reboot on: " + mvip +" in " + delta_time)
+
         return True
 
 

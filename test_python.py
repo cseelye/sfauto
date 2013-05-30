@@ -58,12 +58,14 @@ try:
     from lib.libsf import mylog
     import logging
     mylog.console.setLevel(logging.DEBUG)
-    print "  You should see 5 log statements with different levels:"
+    print "  You should see 7 log statements with different levels:"
+    mylog.banner("Banner message")
     mylog.debug("Debug message")
     mylog.info("Informational message")
     mylog.warning("Warning message")
     mylog.error("Error message")
     mylog.passed("Passing message")
+    mylog.step("Step message")
 except ImportError as e:
     print "  ERROR: You appear to be missing lib/libsf.py or one of it's dependencies.  It's best to run these scripts straight out of where you clone the lab repo"
     print str(e)

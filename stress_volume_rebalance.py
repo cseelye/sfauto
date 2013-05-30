@@ -173,6 +173,7 @@ class StressVolumeRebalanceAction(ActionBase):
                 volume_count = 1
 
             #create volumes, need to add more here
+            mylog.step("Create Volumes")
             if(create_volumes.Execute(mvip=mvip, account_name=accountName, volume_prefix="huge", volume_count=volume_count, volume_size=volumeSize, min_iops=minIOPS, max_iops=maxIOPS, burst_iops=burstIOPS) == True):
                 mylog.info(str(volume_count) + " volumes created")
             else:
@@ -185,10 +186,11 @@ class StressVolumeRebalanceAction(ActionBase):
             time.sleep(1800)
 
             #make sure the cluster is healthy
+            mylog.step("Checking Health")
             if(check_cluster_health.Execute(mvip, since=start_time) == True):
                 mylog.info("Cluster " + mvip + " is Healthy")
                 self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
-            else: 
+            else:
                 message = "Cluster " + mvip + " failed health check"
                 fail(message, emailTo)
                 self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
@@ -206,6 +208,7 @@ class StressVolumeRebalanceAction(ActionBase):
                     return False
 
             #delete volumes
+            mylog.step("Deleting Volumes")
             if(delete_volumes.Execute(mvip=mvip, source_account=accountName, volume_prefix="huge", purge=True) == True):
                 mylog.info("The Volumes that were created have been deleted")
             else:
@@ -218,10 +221,11 @@ class StressVolumeRebalanceAction(ActionBase):
             time.sleep(1800)
 
             #make sure cluster is healthy
+            mylog.step("Checking Health")
             if(check_cluster_health.Execute(mvip, since=start_time) == True):
                 mylog.info("Cluster " + mvip + " is Healthy")
                 self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
-            else: 
+            else:
                 message = "Cluster " + mvip + " failed health check"
                 fail(message, emailTo)
                 self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
@@ -246,16 +250,16 @@ class StressVolumeRebalanceAction(ActionBase):
                 if(iteration <= 0):
                     break
 
-            #wait before going to the next node
+            #wait before starting the next iteration
             if(waitTime > 0):
-                mylog.info("Waiting for " + str(waitTime) + " seconds")
+                mylog.step("Waiting for " + str(waitTime) + " seconds")
                 time.sleep(waitTime)
 
         end_time = time.time()
         delta_time = libsf.SecondsToElapsedStr(end_time - start_time)
 
-        send_email.Execute(emailTo=emailTo, emailSubject="Finished Stress Volume Rebalance on: " + mvip +" in " + delta_time)    
-        
+        send_email.Execute(emailTo=emailTo, emailSubject="Finished Stress Volume Rebalance on: " + mvip +" in " + delta_time)
+
         return True
 
 
@@ -281,8 +285,8 @@ if __name__ == '__main__':
     parser.add_option("--volumeSize", type="int", dest="volumeSize", default=4000, help="The size of each volume to be created in GB")
     parser.add_option("--minIOPS", type="int", dest="minIOPS", default=10000, help="The min iops for the new volume")
     parser.add_option("--maxIOPS", type="int", dest="maxIOPS", default=100000, help="The max iops for the new volume")
-    parser.add_option("--burstIOPS", type="int", dest="burstIOPS", default=100000, help="The burst iops for the new volume")    
-    parser.add_option("--waitTime", type="int", dest="waitTime", default=300, help="Wait time between each iteration")    
+    parser.add_option("--burstIOPS", type="int", dest="burstIOPS", default=100000, help="The burst iops for the new volume")
+    parser.add_option("--waitTime", type="int", dest="waitTime", default=300, help="Wait time between each iteration")
     (options, extra_args) = parser.parse_args()
 
     try:

@@ -73,9 +73,9 @@ class StressNodeFailSequentialAction(ActionBase):
         BEFORE_START_GC = "BEFORE_START_GC"
         GC_FINISHED = "GC_FINISHED"
         DRIVES_ADDED = "DRIVES_ADDED"
-        DRIVES_NOT_ADDED = "DRIVES_NOT_ADDED" 
-        MASTER_NODE_NOT_FOUND = "MASTER_NODE_NOT_FOUND"  
-        PUSHED_SSH_KEYS = "PUSHED_SSH_KEYS"     
+        DRIVES_NOT_ADDED = "DRIVES_NOT_ADDED"
+        MASTER_NODE_NOT_FOUND = "MASTER_NODE_NOT_FOUND"
+        PUSHED_SSH_KEYS = "PUSHED_SSH_KEYS"
 
 
 
@@ -129,7 +129,6 @@ class StressNodeFailSequentialAction(ActionBase):
         else:
             mylog.info("Not pushing SSH Keys to Nodes")
 
-      
         #get the IPMI IP address for each node
         drac_list = []
 
@@ -196,7 +195,7 @@ class StressNodeFailSequentialAction(ActionBase):
                     return False
 
                 #wait for the services to be decommissioned and synced out of the cluster
-                log.info("Waiting for 10 minutes")
+                log.step("Waiting for 10 minutes")
                 time.sleep(600)
 
                 #wait for faults to clear
@@ -212,6 +211,7 @@ class StressNodeFailSequentialAction(ActionBase):
 
                 #Check the health of the clients
                 if(check_client == True):
+                    mylog.step("Checking Health")
                     if(check_client_health.Execute(client_ips=clientIPs, client_user=clientUser, client_pass=clientPass) == True):
                         mylog.info("Client is Healthy")
                         self._RaiseEvent(self.Events.CLIENT_HEALTHY)
@@ -222,6 +222,7 @@ class StressNodeFailSequentialAction(ActionBase):
                         return False
 
                 #bring the node back up
+                mylog.step("Trying to power on the node")
                 if(power_on_node.Execute(node_ip=node, ipmi_ip=drac_list[node_index]) == True):
                     mylog.info("Node: " + str(node) + " is back online")
                 else:
@@ -230,6 +231,7 @@ class StressNodeFailSequentialAction(ActionBase):
                     return False
 
                 #wait for the node to be fully up and drives available
+                mylog.step("Wait for the node to be fully up and drives available")
                 if(wait_for_available_drives.Execute(mvip=mvip, drive_count=drive_count) == True):
                     mylog.info("All drives are available")
                 else:
@@ -238,6 +240,7 @@ class StressNodeFailSequentialAction(ActionBase):
                     return False
 
                 #make sure the cluster is healthy
+                mylog.step("Checking Health")
                 if(check_cluster_health.Execute(mvip, since=start_time) == True):
                     mylog.info("Cluster " + mvip + " is Healthy")
                     self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
@@ -259,6 +262,7 @@ class StressNodeFailSequentialAction(ActionBase):
                         return False
 
                 #add the drives back to the culster and wait for sync
+                mylog.step("Add drives back to the cluster and wait for sync")
                 if(add_available_drives.Execute.Execute(mvip=mvip, username=username, password=password) == True):
                     mylog.info("Available drives were added to the cluster")
                 else:
@@ -280,10 +284,11 @@ class StressNodeFailSequentialAction(ActionBase):
 
                 #wait before going to the next node
                 if(waitTime > 0):
-                    mylog.info("Waiting for " + str(waitTime) + " seconds")
+                    mylog.step("Waiting for " + str(waitTime) + " seconds")
                     time.sleep(waitTime)
 
                 #start gc to keep the cluster from filling up
+                mylog.step("Start Garbage Collection")
                 self._RaiseEvent(self.Events.BEFORE_START_GC)
                 if(start_gc.Execute(mvip=mvip) == True):
                     mylog.info("GC started")
@@ -312,7 +317,7 @@ class StressNodeFailSequentialAction(ActionBase):
         end_time = time.time()
         delta_time = libsf.SecondsToElapsedStr(end_time - start_time)
 
-        send_email.Execute(emailTo=emailTo, emailSubject="Finished Stress Nodefail Sequential on: " + mvip +" in " + delta_time)    
+        send_email.Execute(emailTo=emailTo, emailSubject="Finished Stress Nodefail Sequential on: " + mvip + " in " + delta_time)
 
         return True
 
