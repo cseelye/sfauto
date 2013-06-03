@@ -210,7 +210,7 @@ class SFCluster(object):
         Returns boolean
         """
 
-        mylog.info("Checking if GC is in progress")
+        mylog.debug("Checking if GC is in progress")
         gc_in_progress = False
         gc_list = self.GetAllGCInfo()
         for gc_info in reversed(gc_list):

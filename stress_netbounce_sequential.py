@@ -79,7 +79,7 @@ class StressNetbounceSequentialAction(ActionBase):
 
     def fail(self, message, emailTo):
         mylog.error(message)
-        send_email.Execute(emailTo=emailTo, emailSubject="Failed Stress Reboot Sequential", emailBody=message)
+        send_email.Execute(emailTo=emailTo, emailSubject="Failed Stress Netbounce Sequential", emailBody=message)
 
     def ValidateArgs(self, args):
         libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
@@ -156,7 +156,7 @@ class StressNetbounceSequentialAction(ActionBase):
 
 
                 #take down the network interface on each node
-                mylog.step("10G interface going down")
+                mylog.step("Bouncing the 10G interface")
                 if(node_network_up_down.Execute(nodeIP=node, username=username, password=password, interface="10g", action="down") == True):
                     #mylog.info("Node: " + str(node) + " has been rebooted")
                     #self._RaiseEvent(self.Events.NODE_REBOOTED)
@@ -256,7 +256,6 @@ class StressNetbounceSequentialAction(ActionBase):
             self._RaiseEvent(self.Events.BEFORE_START_GC)
             if(start_gc.Execute(mvip=mvip) == True):
                 pass
-
             else:
                 message = "GC not started"
                 fail(message, emailTo)
@@ -285,7 +284,6 @@ class StressNetbounceSequentialAction(ActionBase):
         send_email.Execute(emailTo=emailTo, emailSubject="Finished Stress Reboot Sequential on: " + mvip + " in " + delta_time)
 
         return True
-
 
 
 # Instantate the class and add its attributes to the module
