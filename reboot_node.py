@@ -58,7 +58,7 @@ class RebootNodeAction(ActionBase):
 
         mylog.info("Rebooting " + node_ip)
         try:
-            #node.Reboot(waitForUp)
+            node.Reboot(waitForUp)
             pass
         except libsf.SfError as e:
             mylog.error("Failed to reboot node: " + str(e))
