@@ -117,6 +117,7 @@ class NodeInfo:
         self.Processes = dict()
         self.Nics = dict()
         self.SCache = dict()
+        self.ExpectedBSCount = 0
 
 class ProcessResourceUsage:
     def __init__(self):
@@ -140,6 +141,8 @@ class SliceInfo:
         self.PriCacheBytes = 0
         self.SecCacheBytes = 0
         self.FlusherThroughput = 0
+        self.PreviousSecCacheBytes = -1
+
 
 class NicResourceUsage:
     def __init__(self):
@@ -193,6 +196,26 @@ class ClusterInfo:
         self.LastGcDiscarded = 0
         self.SliceServices = dict()
         self.SfMajorVersion = 0
+        self.ExpectedBSCount = 0
+        self.ExpectedSSCount = 0
+        self.AvailableDriveCount = 0
+        self.FailedDriveCount = 0
+        self.NodeCount = 0
+        self.LastGc = GCInfo()
+
+class GCInfo(object):
+    """
+    Data structure containing information about a GC cycle
+    """
+    def __init__(self):
+        self.StartTime = 0
+        self.EndTime = 0
+        self.DiscardedBytes = 0
+        self.Rescheduled = False
+        self.Generation = 0
+        self.ParticipatingSSSet = set()
+        self.EligibleBSSet = set()
+        self.CompletedBSSet = set()
 
 class ConsoleColors:
 # Background colors
@@ -415,6 +438,12 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         usage.NvramDevice = volumes["/mnt/pendingDirtyBlocks"]
     else:
         usage.NvramMounted = False
+
+    # Use mem size to determine platform type and expected BS count
+    if usage.TotalMemory <= 72 * 1024 * 1024 * 1024:
+        usage.ExpectedBSCount = 10
+    elif usage.TotalMemory <= 144 * 1024 * 1024 * 1024:
+        usage.ExpectedBSCount = 9
 
     # sfapp Release UC Version: 4.06 sfdev: 1.90 Revision: f13bebca8736 Build date: 2011-12-20 10:02
     # sfapp Debug Version: 4.08 sfdev: 1.91 Revision: 58220b8bd90a Build date: 2012-01-07 14:28 Tag: TSIP4v1
@@ -778,11 +807,13 @@ def TimestampToStr(pTimestamp, pFormatString = "%Y-%m-%d %H:%M:%S", pTimeZone = 
     display_time = datetime.datetime.fromtimestamp(pTimestamp, pTimeZone)
     return display_time.strftime(pFormatString)
 
-def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
+def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterInfo=None):
 
     info = ClusterInfo()
 
     log.debug("checking node info")
+
+    info.NodeCount = len(pNodesInfo.keys())
 
     sf_version = 0
     for node_ip in pNodesInfo.keys():
@@ -842,6 +873,15 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
             info.NvramNotMounted.append(pNodesInfo[node_ip].Hostname)
         if "ram" in pNodesInfo[node_ip].NvramDevice:
             info.NvramRamdrive.append(pNodesInfo[node_ip].Hostname)
+
+    # Expected service counts
+    for node_ip in pNodesInfo.keys():
+        if pNodesInfo[node_ip] == None: continue
+        info.ExpectedBSCount += pNodesInfo[node_ip].ExpectedBSCount
+        if info.SfMajorVersion <= 5:
+            info.ExpectedSSCount += 2
+        else:
+            info.ExpectedSSCount += 1
 
     log.debug("gathering cluster info")
 
@@ -994,35 +1034,81 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
                     info.OldEvents.append("FOUND_DATA_ON_FAKE_READ_EVENT")
 
         # Look for GC info
-        blocks_discarded = 0
-        gc_generation = 0
-        gc_complete_count = 0
-        gc_start_time = 0
-        gc_end_time = 0
-        for i in range(len(event_list['events'])):
+        #blocks_discarded = 0
+        #gc_generation = 0
+        #gc_complete_count = 0
+        #gc_start_time = 0
+        #gc_end_time = 0
+        #for i in range(len(event_list['events'])):
+            #event = event_list['events'][i]
+            #if ("GCStarted" in event["message"]):
+                #details = event["details"]
+                #m = re.search(r'GC generation:(\d+)', details)
+                #if (m):
+                    #if (int(m.group(1)) == gc_generation):
+                        #gc_start_time = ParseTimestamp(event['timeOfReport'])
+                        #break
+
+            #if ("GCCompleted" in event["message"]):
+                #details = event["details"]
+                #pieces = details.split()
+                #if (gc_generation <= 0): gc_generation = int(pieces[0])
+                #if (int(pieces[0]) == gc_generation):
+                    #gc_complete_count += 1
+                    #blocks_discarded += int(pieces[1])
+                    #end_time = ParseTimestamp(event['timeOfReport'])
+                    #if (end_time > gc_end_time):
+                        #gc_end_time = end_time
+        #info.LastGcStart = gc_start_time
+        #if (gc_complete_count >= info.BSCount):
+            #info.LastGcEnd = gc_end_time
+            #info.LastGcDiscarded = blocks_discarded * 4096
+
+
+        gc_objects = dict()
+        gc_info = GCInfo()
+        # go through the list in chronological order
+        for i in range(len(event_list['events'])-1, -1, -1):
             event = event_list['events'][i]
             if ("GCStarted" in event["message"]):
-                details = event["details"]
-                m = re.search(r'GC generation:(\d+)', details)
-                if (m):
-                    if (int(m.group(1)) == gc_generation):
-                        gc_start_time = ParseTimestamp(event['timeOfReport'])
-                        break
+                gc_info = GCInfo()
+                gc_info.StartTime = ParseTimestamp(event['timeOfReport'])
+                m = re.search(r"GC generation:(\d+).+participatingSServices={(.+)}.+eligibleBSs={(.+)}", event["details"])
+                if m:
+                    gc_info.Generation = int(m.group(1))
+                    gc_info.ParticipatingSSSet = set(map(int, m.group(2).split(",")))
+                    gc_info.EligibleBSSet = set(map(int, m.group(3).split(",")))
+                    gc_objects[gc_info.Generation] = gc_info
+
+            if ("GCRescheduled" in event["message"]):
+                m = re.search(r"GC rescheduled:(\d+)", event["details"])
+                if m:
+                    generation = int(m.group(1))
+                    if generation in gc_objects:
+                        gc_objects[generation].Rescheduled = True
+                        gc_objects[generation].EndTime = ParseTimestamp(event['timeOfReport'])
+                    else:
+                        gc_info = GCInfo()
+                        gc_info.Generation = generation
+                        gc_info.StartTime = ParseTimestamp(event['timeOfReport'])
+                        gc_info.Rescheduled = True
+                        gc_objects[gc_info.Generation] = gc_info
 
             if ("GCCompleted" in event["message"]):
-                details = event["details"]
-                pieces = details.split()
-                if (gc_generation <= 0): gc_generation = int(pieces[0])
-                if (int(pieces[0]) == gc_generation):
-                    gc_complete_count += 1
-                    blocks_discarded += int(pieces[1])
-                    end_time = ParseTimestamp(event['timeOfReport'])
-                    if (end_time > gc_end_time):
-                        gc_end_time = end_time
-        info.LastGcStart = gc_start_time
-        if (gc_complete_count >= info.BSCount):
-            info.LastGcEnd = gc_end_time
-            info.LastGcDiscarded = blocks_discarded * 4096
+                pieces = event["details"].split(" ")
+                generation = int(pieces[0])
+                blocks_discarded = int(pieces[1])
+                service_id = int(event["serviceID"])
+                end_time = ParseTimestamp(event['timeOfReport'])
+                if generation in gc_objects:
+                    gc_objects[generation].CompletedBSSet.add(service_id)
+                    gc_objects[generation].DiscardedBytes += (blocks_discarded * 4096)
+                    if end_time > gc_objects[generation].EndTime:
+                        gc_objects[generation].EndTime = end_time
+        gc_list = []
+        for gen in sorted(gc_objects.keys()):
+            gc_list.append(gc_objects[gen])
+        info.LastGc = gc_list[-1]
 
     # Slice cache usage
     result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'GetCompleteStats', {})
@@ -1041,12 +1127,24 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo):
                         current_slice.SSLoad = service["ssLoadPrimary"][0]
                     if "scacheBytesInUse" in service.keys():
                         current_slice.SecCacheBytes = service["scacheBytesInUse"][0]
+                        if previousClusterInfo:
+                            for oldssid in previousClusterInfo.SliceServices:
+                                if oldssid == current_slice.ServiceId:
+                                    current_slice.PreviousSecCacheBytes = previousClusterInfo.SliceServices[oldssid].SecCacheBytes
                     else:
                         for node in pNodesInfo.itervalues():
                             if "slice" + str(service_id) in node.SCache.keys():
                                 current_slice.SecCacheBytes = node.SCache["slice" + service_id]
                                 break
                     info.SliceServices[service_id] = current_slice
+
+    # Look for failed/available drives
+    result = CallApiMethod(log, pMvip, pApiUser, pApiPass, "ListDrives", {})
+    for drive in result["drives"]:
+        if drive["status"] == "available":
+            info.AvailableDriveCount += 1
+        if drive["status"] == "failed":
+                    info.FailedDriveCount += 1
 
     return info
 
@@ -1210,6 +1308,10 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
             screen.set_color(ConsoleColors.RedFore)
         elif (top.TotalCpu >= 80):
             screen.set_color(ConsoleColors.YellowFore)
+        elif top.TotalCpu >= 50:
+            screen.set_color(ConsoleColors.WhiteFore)
+        else:
+            screen.set_color(ConsoleColors.GreenFore)
         print '%4.1f%%' % (top.TotalCpu),
         screen.reset()
         screen.set_color(ConsoleColors.WhiteFore)
@@ -1223,6 +1325,10 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
             screen.set_color(ConsoleColors.RedFore)
         elif (mem_pct >= 80):
             screen.set_color(ConsoleColors.YellowFore)
+        elif mem_pct >= 50:
+            screen.set_color(ConsoleColors.WhiteFore)
+        else:
+            screen.set_color(ConsoleColors.GreenFore)
         print '%4.1f%%' % (mem_pct),
         screen.reset()
         print ' (%s / %s, %s cache)' % (HumanizeBytes(top.UsedMemory, 0, 'MiB'), HumanizeBytes(top.TotalMemory, 0, 'MiB'), HumanizeBytes(top.CacheMemory, 0, 'MiB'))
@@ -1237,6 +1343,10 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
             screen.set_color(ConsoleColors.RedFore)
         elif (top.TotalCpu >= 80):
             screen.set_color(ConsoleColors.YellowFore)
+        elif top.TotalCpu >= 50:
+            screen.set_color(ConsoleColors.WhiteFore)
+        else:
+            screen.set_color(ConsoleColors.GreenFore)
         print '%5.1f%%' % (top.TotalCpu),
         screen.reset()
         print ' (%s)' % (top.CpuDetail)
@@ -1255,6 +1365,12 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
             screen.set_color(ConsoleColors.RedFore)
         elif (mem_pct >= 80):
             screen.set_color(ConsoleColors.YellowFore)
+        elif mem_pct >= 50:
+            screen.set_color(ConsoleColors.WhiteFore)
+        else:
+            screen.set_color(ConsoleColors.GreenFore)
+
+
         print '%5.1f%%' % (mem_pct),
         screen.reset()
         print ' (%s / %s, %s cache)' % (HumanizeBytes(top.UsedMemory, 0, 'MiB'), HumanizeBytes(top.TotalMemory, 0, 'MiB'), HumanizeBytes(top.CacheMemory, 0, 'MiB'))
@@ -1406,10 +1522,18 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     screen.set_color(ConsoleColors.WhiteFore)
     print "  BS count: ",
     screen.reset()
+    if pClusterInfo.BSCount < pClusterInfo.ExpectedBSCount:
+        screen.set_color(ConsoleColors.YellowFore)
+    else:
+        screen.set_color(ConsoleColors.GreenFore)
     print "%-2d" % pClusterInfo.BSCount,
     screen.set_color(ConsoleColors.WhiteFore)
     print "  SS count: ",
     screen.reset()
+    if pClusterInfo.SSCount < pClusterInfo.ExpectedSSCount:
+        screen.set_color(ConsoleColors.YellowFore)
+    else:
+        screen.set_color(ConsoleColors.GreenFore)
     print "%-2d" % pClusterInfo.SSCount
 
     # accounts, volumes, iSCSI sessions, IOPs
@@ -1472,9 +1596,9 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         if "stage5" in str(pClusterInfo.ClusterFullThreshold) or "stage4" in str(pClusterInfo.ClusterFullThreshold):
             screen.set_color(ConsoleColors.RedFore)
         elif "stage3" in str(pClusterInfo.ClusterFullThreshold):
-            screen.set_color(ConsoleColors.RedFore)
+            screen.set_color(ConsoleColors.YellowFore)
         else:
-            screen.reset()
+            screen.set_color(ConsoleColors.GreenFore)
         print pClusterInfo.ClusterFullThreshold
         screen.reset()
 
@@ -1488,11 +1612,26 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     screen.set_color(ConsoleColors.WhiteFore)
     print "  Deduplication: ",
     screen.reset()
-    print "%d%%" % pClusterInfo.DedupPercent,
+    if pClusterInfo.DedupPercent > 0:
+        if pClusterInfo.DedupPercent < 95:
+            screen.set_color(ConsoleColors.RedFore)
+            if pClusterInfo.DedupPercent > 400:
+                screen.set_color(ConsoleColors.YellowFore)
+        print "%0.02fx" % (float(pClusterInfo.DedupPercent)/100),
+    else:
+        print "0.00"
     screen.set_color(ConsoleColors.WhiteFore)
     print "  Compression: ",
     screen.reset()
-    print "%d%%" % pClusterInfo.CompressionPercent
+    if pClusterInfo.CompressionPercent > 0:
+        if pClusterInfo.CompressionPercent < 95:
+            screen.set_color(ConsoleColors.RedFore)
+        if pClusterInfo.CompressionPercent > 400:
+            screen.set_color(ConsoleColors.YellowFore)
+        print "%0.02fx" % (float(pClusterInfo.CompressionPercent)/100),
+    else:
+        print "0.00"
+    screen.reset()
 
     # GC info
     current_line += 1
@@ -1500,27 +1639,32 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     screen.set_color(ConsoleColors.WhiteFore)
     print " Last GC Start: ",
     screen.reset()
-    if pClusterInfo.LastGcStart > 0:
-        print TimestampToStr(pClusterInfo.LastGcStart),
+    if pClusterInfo.LastGc.StartTime > 0:
+        if pClusterInfo.LastGc.StartTime < time.time() - 60 * 60:
+            screen.set_color(ConsoleColors.YellowFore)
+        print TimestampToStr(pClusterInfo.LastGc.StartTime),
     else:
         print " never",
     screen.set_color(ConsoleColors.WhiteFore)
     screen.reset()
-    if pClusterInfo.LastGcEnd > 0:
+    if pClusterInfo.LastGc.EndTime > 0:
         screen.set_color(ConsoleColors.WhiteFore)
         print "  Elapsed: ",
-        delta = pClusterInfo.LastGcEnd - pClusterInfo.LastGcStart
+        delta = pClusterInfo.LastGc.EndTime - pClusterInfo.LastGc.StartTime
         if (delta >= 60 * 30):
             screen.set_color(ConsoleColors.RedFore)
         elif (delta >= 60 * 25):
             screen.set_color(ConsoleColors.YellowFore)
         else:
-            screen.reset()
+            screen.set_color(ConsoleColors.GreenFore)
         print TimeDeltaToStr(datetime.timedelta(seconds=delta)),
         screen.set_color(ConsoleColors.WhiteFore)
         print "  Discarded: ",
         screen.reset()
-        print HumanizeDecimal(pClusterInfo.LastGcDiscarded)
+        print HumanizeDecimal(pClusterInfo.LastGc.DiscardedBytes) + "B"
+    if pClusterInfo.LastGc.Rescheduled:
+        screen.set_color(ConsoleColors.YellowFore)
+        print " Rescheduled"
     screen.reset()
 
     # Syncing
@@ -1529,14 +1673,18 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     screen.set_color(ConsoleColors.WhiteFore)
     print " Slice Syncing: ",
     screen.reset()
-    if (pClusterInfo.SliceSyncing != "No"):
+    if pClusterInfo.SliceSyncing.lower() == "no":
+        screen.set_color(ConsoleColors.GreenFore)
+    else:
         screen.set_color(ConsoleColors.YellowFore)
     print "%3s" % str(pClusterInfo.SliceSyncing),
     screen.reset()
     screen.set_color(ConsoleColors.WhiteFore)
-    print " Bin Syncing: ",
+    print "  Bin Syncing: ",
     screen.reset()
-    if (pClusterInfo.BinSyncing != "No"):
+    if pClusterInfo.BinSyncing.lower() == "no":
+        screen.set_color(ConsoleColors.GreenFore)
+    else:
         screen.set_color(ConsoleColors.YellowFore)
     print str(pClusterInfo.BinSyncing)
     screen.reset()
@@ -1548,21 +1696,45 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     count = 0
     for sliceid in sorted(pClusterInfo.SliceServices):
         x_offset = 1
-        x_offset = count % columns * 40 + 1
+        x_offset = count % columns * 43 + 1
         if count % columns == 0:
             current_line += 1
         count += 1
-        #if count % 2 == 0:
-        #    x_offset = 40
-        #else:
-        #    current_line += 1
 
+        ss = pClusterInfo.SliceServices[sliceid]
+        log.debug("slice " + str(ss.ServiceId) + " ss load = " + str(ss.SSLoad))
         screen.gotoXY(pStartX + x_offset, pStartY + current_line)
         screen.set_color(ConsoleColors.WhiteFore)
-        ss = pClusterInfo.SliceServices[sliceid]
         sys.stdout.write(" slice%-3s" % str(ss.ServiceId))
+        sys.stdout.write(" ssLoad: ")
+        if ss.SSLoad < 30:
+            screen.set_color(ConsoleColors.GreenFore)
+        elif ss.SSLoad < 60:
+            screen.set_color(ConsoleColors.WhiteFore)
+        elif ss.SSLoad < 80:
+            screen.set_color(ConsoleColors.YellowFore)
+        else:
+            screen.set_color(ConsoleColors.RedFore)
+        sys.stdout.write(" %2d" % ss.SSLoad)
         screen.reset()
-        sys.stdout.write(" ssLoad: %2d  sCache: %9s" % (ss.SSLoad, HumanizeBytes(ss.SecCacheBytes, 1)))
+
+        screen.set_color(ConsoleColors.WhiteFore)
+        sys.stdout.write("  sCache: ")
+        if ss.PreviousSecCacheBytes >= 0 and ss.PreviousSecCacheBytes < ss.SecCacheBytes:
+            screen.set_color(ConsoleColors.YellowFore)
+        elif ss.PreviousSecCacheBytes >= 0 and ss.PreviousSecCacheBytes > ss.SecCacheBytes:
+            screen.set_color(ConsoleColors.GreenFore)
+        elif ss.SecCacheBytes <= 131072:
+            screen.set_color(ConsoleColors.GreenFore)
+        else:
+            screen.set_color(ConsoleColors.WhiteFore)
+        sys.stdout.write("%9s" % HumanizeBytes(ss.SecCacheBytes, 1))
+
+        if ss.PreviousSecCacheBytes >= 0:
+            if ss.PreviousSecCacheBytes < ss.SecCacheBytes > 0:
+                sys.stdout.write(u'\u25b2') # up triangle
+            elif ss.PreviousSecCacheBytes > ss.SecCacheBytes < 0:
+                sys.stdout.write(u'\u25bC') # down triangle
 
     # software version warnings
     if (not pClusterInfo.SameSoftwareVersions):
@@ -1649,6 +1821,25 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         print " "
         screen.reset()
 
+    # Failed or available drives
+    if pClusterInfo.FailedDriveCount > 0:
+        current_line += 1
+        screen.gotoXY(pStartX + 1, pStartY + current_line)
+        screen.set_color(ConsoleColors.RedFore)
+        if pClusterInfo.FailedDriveCount > 1:
+            print " %d Failed Drives" % pClusterInfo.FailedDriveCount
+        else:
+            print " %d Failed Drive" % pClusterInfo.FailedDriveCount
+    if pClusterInfo.AvailableDriveCount > 0:
+        current_line += 1
+        screen.gotoXY(pStartX + 1, pStartY + current_line)
+        screen.set_color(ConsoleColors.YellowFore)
+        if pClusterInfo.AvailableDriveCount > 1:
+            print " %d Available Drives" % pClusterInfo.AvailableDriveCount
+        else:
+            print " %d Available Drive" % pClusterInfo.AvailableDriveCount
+
+previous_cluster_columns = ""
 def LogClusterResult(pOutputDir, pClusterInfo):
     if (pClusterInfo == None): return
 
@@ -1656,12 +1847,17 @@ def LogClusterResult(pOutputDir, pClusterInfo):
 
     if not os.path.isfile(filename):
         log = open(filename, 'w')
-        columns = "Timestamp,Time,ClusterMaster,VolumeCount,SessionCount,AccountCount,BSCount,SSCount,CurrentIops,UsedSpace,ProvisionedSpace,Fullness,DedupPercent,CompressionPercent,LastGcStart,LastGcDurationSeconds,LastGcDiscarded"
-        log.write(columns)
-        log.write("\n")
     else:
         log = open(filename, 'a')
 
+    columns = "Timestamp,Time,ClusterMaster,VolumeCount,SessionCount,AccountCount,BSCount,SSCount,CurrentIops,UsedSpace,ProvisionedSpace,Fullness,DedupPercent,CompressionPercent,LastGcStart,LastGcDurationSeconds,LastGcDiscarded"
+    for ss in pClusterInfo.SliceServices.values():
+        columns += ",slice" + str(ss.ServiceId) + " sCache Bytes"
+    columns.strip(',')
+    global previous_cluster_columns
+    if not os.path.isfile(filename) or not previous_cluster_columns or previous_cluster_columns != columns:
+        previous_cluster_columns = columns
+        log.write(columns + "\n")
 
     log.write("\"" + str(pClusterInfo.Timestamp) + "\"")
     log.write(",\"" + TimestampToStr(pClusterInfo.Timestamp) + "\"")
@@ -1677,9 +1873,11 @@ def LogClusterResult(pOutputDir, pClusterInfo):
     log.write(",\"" + str(pClusterInfo.ClusterFullThreshold) + "\"")
     log.write(",\"" + str(pClusterInfo.DedupPercent) + "\"")
     log.write(",\"" + str(pClusterInfo.CompressionPercent) + "\"")
-    log.write(",\"" + TimestampToStr(pClusterInfo.LastGcStart) + "\"")
-    log.write(",\"" + str(pClusterInfo.LastGcEnd - pClusterInfo.LastGcStart) + "\"")
-    log.write(",\"" + str(pClusterInfo.LastGcDiscarded) + "\"")
+    log.write(",\"" + TimestampToStr(pClusterInfo.GcInfo.StartTime) + "\"")
+    log.write(",\"" + str(pClusterInfo.GcInfo.EndTime - pClusterInfo.GcInfo.StartTime) + "\"")
+    log.write(",\"" + str(pClusterInfo.GcInfo.DiscardedBytes) + "\"")
+    for ss in pClusterInfo.SliceServices.values():
+        log.write(",\"" + str(ss.SecCacheBytes) + "\"")
     log.write("\n")
 
     log.flush()
@@ -1703,6 +1901,7 @@ def LogNodeResult(pOutputDir, pNodeIp, pNodeInfo):
     columns.strip(',')
 
     # See if we need to create a new file/write out the column header
+    global previous_columns
     if pNodeIp not in previous_columns:
         previous_columns[pNodeIp] = columns
         log = open(filename, 'w')
@@ -1795,14 +1994,16 @@ def GatherNodeInfoThread(log, pNodeResults, pInterval, pNodeIpList, pNodeUser, p
 
 def ClusterInfoThread(log, pClusterResults, pNodeResults, pInterval, pMvip, pApiUser, pApiPass):
     try:
+        previous_cluster_info = None
         while True:
             try:
-                cluster_info = GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodeResults)
+                cluster_info = GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodeResults, previous_cluster_info)
                 if cluster_info: log.debug("got cluster info")
                 else: log.debug("no cluster info")
 
                 pClusterResults[pMvip] = copy.deepcopy(cluster_info)
                 #if shutdown_event.is_set(): break
+                previous_cluster_info = cluster_info
                 time.sleep(pInterval)
             except KeyboardInterrupt: raise
             except Exception as e:
@@ -2101,7 +2302,7 @@ if __name__ == '__main__':
                 if export:
                     try: LogClusterResult(output_dir, cluster_results[mvip])
                     except KeyboardInterrupt: raise
-                    except:
+                    except Exception as e:
                         log.debug("exception in LogClusterResult: " + str(e) + " - " + traceback.format_exc())
                 try:
                     DrawClusterInfoCell(cell_x, cell_y, cluster_cell_width, cell_height, cluster_results[mvip])
