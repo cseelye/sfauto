@@ -776,6 +776,10 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
                 mylog.warning("HTTPException: " + str(e))
                 last_error_code = "HTTPException"
                 last_error_mess = str(e)
+            except socket.errno as e:
+                mylog.warning("Socket error: " + str(e))
+                last_error_code = "SocketError"
+                last_error_mess = str(e)
 
             http_retry -= 1
             if http_retry <= 0:
