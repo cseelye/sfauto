@@ -25,15 +25,30 @@ class ClusterVersion(object):
             return True
         return False
 
+    def gt(self, version):
+        if(self.CompareTwoVersions(self.version, version) == "gt"):
+            return True
+        return False
+
     #will return true if self is lt the input clusterVersion object
     def lt(self, clusterVersion):
         if(self.CompareTwoVersions(self.version, clusterVersion.version) == "lt"):
             return True
         return False
 
+    def lt(self, version):
+        if(self.CompareTwoVersions(self.version, version) == "lt"):
+            return True
+        return False
+
     #will return true if self is eq the input clusterVersion object
     def eq(self, clusterVersion):
         if(self.CompareTwoVersions(self.version, clusterVersion.version) == "eq"):
+            return True
+        return False
+
+    def eq(self, version):
+        if(self.CompareTwoVersions(self.version, version) == "eq"):
             return True
         return False
 
@@ -342,9 +357,12 @@ class SFCluster(object):
             A boolean indicating if the cluster is syncing (True) or not (False)
         """
         version = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterVersionInfo", {})
-        cluster_version = self.clipVersionAndMakeFloat(version['clusterVersion'])
+        cluster_version = version['clusterVersion']
+        checkClusterVersion = ClusterVersion()
+        checkClusterVersion.version = cluster_version
+
         #cluster_version = float(cluster_version)
-        if cluster_version >= 5.0:
+        if checkClusterVersion.gt("5.0"):
             # Get the bin assignments report
             result = libsf.HttpRequest("https://" + self.mvip + "/reports/bins.json", self.username, self.password)
             bin_report = json.loads(result)
@@ -379,8 +397,11 @@ class SFCluster(object):
             A boolean indicating if the cluster is syncing (True) or not (False)
         """
         version = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterVersionInfo", {})
-        cluster_version = self.clipVersionAndMakeFloat(version["clusterVersion"])
-        if cluster_version >= 5.0:
+        cluster_version = version['clusterVersion']
+        checkClusterVersion = ClusterVersion()
+        checkClusterVersion.version = cluster_version
+
+        if checkClusterVersion.gt("5.0"):
             # Get the slice assignments report
             result = libsf.HttpRequest("https://" + self.mvip + "/reports/slices.json", self.username, self.password)
             slice_report = json.loads(result)

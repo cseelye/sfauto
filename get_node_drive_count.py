@@ -84,8 +84,8 @@ class GetNodeDriveCountAction(ActionBase):
             if drive["nodeID"] == node_id:
                 drive_count += 1
 
-        self.SetSharedValue(SharedValues.nodeDriveCount, drive_count)
-        self.SetSharedValue(node_ip + "-driveCount", ipmi_ip)
+       # self.SetSharedValue(SharedValues.nodeDriveCount, drive_count)
+       # self.SetSharedValue(node_ip + "-driveCount", ipmi_ip)
         return drive_count
 
     def Execute(self, node_ip, mvip=sfdefaults.mvip, csv=False, bash=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):

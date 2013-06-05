@@ -66,7 +66,7 @@ class StartGcAction(ActionBase):
         try:
             cluster.StartGC(force)
         except libsf.SfError as e:
-            mylog("Failed to start GC: " + str(e))
+            mylog.error("Failed to start GC: " + str(e))
             return False
 
         if wait:
@@ -79,7 +79,7 @@ class StartGcAction(ActionBase):
                 self._RaiseEvent(self.Events.GC_TIMEOUT)
                 return False
             except libsf.SfError as e:
-                mylog("Failed to wait for GC: " + str(e))
+                mylog.error("Failed to wait for GC: " + str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
             mylog.info("GC generation " + str(gc_info.Generation) + " started " + libsf.TimestampToStr(gc_info.StartTime) + ", duration " + libsf.SecondsToElapsedStr(gc_info.EndTime - gc_info.StartTime) + ", " + libsf.HumanizeBytes(gc_info.DiscardedBytes) + " discarded")

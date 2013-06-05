@@ -198,13 +198,13 @@ class StressRebootMasterAction(ActionBase):
             if(count_available_drives.Execute(expected=0, compare="gt", mvip=mvip) != True):
 
                 #notify the user about this but continue the test
-                send_email.Execute(emailTo=emailTo, emailSubject="Node " + str(master_node[0]) + " took too long to reboot" )
+                send_email.Execute(emailTo=emailTo, emailSubject="There are available drives on cluster: " +mvip)
 
                 #add the drives back to the culster and wait for sync
                 if(add_available_drives.Execute.Execute(mvip=mvip, username=username, password=password) == True):
                     mylog.info("Available drives were added to the cluster")
                 else:
-                    message = "Avaialbe drives were not added to the cluster"
+                    message = "Available drives were not added to the cluster"
                     fail(message, emailTo)
                     return False
 

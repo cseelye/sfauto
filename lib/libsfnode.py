@@ -103,14 +103,19 @@ class SFNode(object):
         while (libsf.Ping(self.ipAddress)):
             time.sleep(1)
 
-    def WaitForUp(self):
+    def WaitForUp(self, timeOut=600):
         """
         Wait for this node to be up on the network
         """
+        start_time = time.time()
         mylog.info("Waiting for " + self.ipAddress + " to come up")
         time.sleep(120)
         while (not libsf.Ping(self.ipAddress)):
             time.sleep(1)
+            current_time = time.time()
+            if current_time - start_time >= timeOut:
+                mylog.error("Method WaitForUp timed out after " + str(timeOut) + " seconds")
+                return False
 
         # Wait a few extra seconds for services to be started up
         time.sleep(10)

@@ -222,13 +222,13 @@ class StressNetbounceSequentialAction(ActionBase):
                 if(count_available_drives.Execute(expected=0, compare="gt", mvip=mvip) != True):
 
                     #notify the user about this but continue the test
-                    send_email.Execute(emailTo=emailTo, emailSubject="Node " + str(node) + " took too long to reboot" )
+                    send_email.Execute(emailTo=emailTo, emailSubject="There are available drives to add to the cluster: " + mvip)
 
                     #add the drives back to the culster and wait for sync
-                    if(add_available_drives.Execute.Execute(mvip=mvip, username=username, password=password) == True):
+                    if(add_available_drives.Execute(mvip=mvip, username=username, password=password) == True):
                         mylog.info("Available drives were added to the cluster")
                     else:
-                        message = "Avaialbe drives were not added to the cluster"
+                        message = "Available drives were not added to the cluster"
                         fail(message, emailTo)
                         return False
 
@@ -281,7 +281,7 @@ class StressNetbounceSequentialAction(ActionBase):
         end_time = time.time()
         delta_time = libsf.SecondsToElapsedStr(end_time - start_time)
 
-        send_email.Execute(emailTo=emailTo, emailSubject="Finished Stress Reboot Sequential on: " + mvip + " in " + delta_time)
+        send_email.Execute(emailTo=emailTo, emailSubject="Finished Stress Netbounce Sequential on: " + mvip + " in " + delta_time)
 
         return True
 
