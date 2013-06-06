@@ -39,6 +39,11 @@ my %opts = (
         help => "Display a minimal output that is formatted as a space separated list",
         required => 0,
     },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
+    },
     debug => {
         type => "",
         help => "Display more verbose messages",
@@ -144,6 +149,11 @@ eval
     else
     {
         mylog::info("The next VM number for $vm_prefix is " . ($highest + 1));
+    }
+    # Send the info back to parent script if requested
+    if (defined $result_address)
+    {
+        libsf::SendResultToParent(result_address => $result_address, result => ($highest + 1));
     }
 };
 if ($@)

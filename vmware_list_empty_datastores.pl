@@ -34,6 +34,11 @@ my %opts = (
         help => "Display a minimal output that is formatted as a space separated list",
         required => 0,
     },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
+    },
     debug => {
         type => "",
         help => "Display more verbose messages",
@@ -55,6 +60,7 @@ my $cluster_name = Opts::get_option('cluster');
 my $enable_debug = Opts::get_option('debug');
 my $csv = Opts::get_option('csv');
 my $bash = Opts::get_option('bash');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 $mylog::DisplayDebug = 1 if $enable_debug;
@@ -151,4 +157,9 @@ else
     {
         mylog::info("  $ds");
     }
+}
+# Send the info back to parent script if requested
+if (defined $result_address)
+{
+    libsf::SendResultToParent(result_address => $result_address, result => \@empty_ds);
 }

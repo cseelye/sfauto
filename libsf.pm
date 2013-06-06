@@ -7,6 +7,29 @@ package libsf;
     use Time::HiRes qw/ gettimeofday /;
     use IPC::Open3;
 
+    sub SendResultToParent
+    {
+	my %params = (
+	    result_address => undef,
+	    result => undef,
+	    @_
+	);
+
+	require JSON;
+	require ZMQ;
+	require ZMQ::Constants;
+
+	my %result;
+	$result{result} = $params{result};
+        my $result_json = JSON::encode_json(\%result);
+        mylog::debug("Sending result " . $result_json . " to " . $params{result_address});
+
+	my $ctx = ZMQ::Context->new();
+	my $zmq_sock = $ctx->socket($ZMQ::Constants::ZMQ_PAIR);
+	$zmq_sock->connect($params{result_address});
+	$zmq_sock->send(ZMQ::Message->new($result_json));
+    }
+
     sub SshCommand
     {
         # There is no good perl module for SSH that isn't hideously difficult to install, so we'll use python instead
@@ -145,6 +168,7 @@ package libsf;
 
 package mylog;
 {
+    use IO::Handle;
     use Sys::Syslog qw/:standard :macros/;
     use Term::ANSIScreen qw/:constants/;
     $Term::ANSIScreen::AUTORESET = 1;
@@ -186,11 +210,11 @@ package mylog;
         return if $Silent;
         if ($redirected)
         {
-	        print "$timestamp: ERROR  $message\n";
+	        STDOUT->printflush("$timestamp: ERROR   $message\n");
         }
         else
         {
-        	print BOLD RED ON BLACK "$timestamp: ERROR  $message\n";
+        	print BOLD RED ON BLACK "$timestamp: ERROR   $message\n";
         }
     }
 
@@ -205,11 +229,11 @@ package mylog;
 
         if ($redirected)
         {
-        	print "$timestamp: WARN   $message\n";
+        	STDOUT->printflush("$timestamp: WARN    $message\n");
         }
         else
         {
-        	print BOLD YELLOW ON BLACK "$timestamp: WARN   $message\n";
+        	print BOLD YELLOW ON BLACK "$timestamp: WARN    $message\n";
         }
     }
 
@@ -223,11 +247,11 @@ package mylog;
         return if $Silent;
         if ($redirected)
         {
-	        print "$timestamp: INFO   $message\n";
+	        STDOUT->printflush("$timestamp: INFO    $message\n");
         }
         else
         {
-        	print BOLD WHITE ON BLACK "$timestamp: INFO   $message\n";
+        	print BOLD WHITE ON BLACK "$timestamp: INFO    $message\n";
         }
     }
 
@@ -242,11 +266,11 @@ package mylog;
         return if !$DisplayDebug;
         if ($redirected)
         {
-        	print "$timestamp: DEBUG  $message\n";
+        	STDOUT->printflush("$timestamp: DEBUG   $message\n");
         }
         else
         {
-	        print WHITE ON BLACK "$timestamp: DEBUG  $message\n";
+	        STDOUT->printflush(WHITE ON BLACK "$timestamp: DEBUG   $message\n");
         }
     }
 
@@ -260,11 +284,11 @@ package mylog;
         return if $Silent;
         if ($redirected)
         {
-        	print "$timestamp: PASS   $message\n";
+        	STDOUT->printflush("$timestamp: PASS    $message\n");
         }
         else
         {
-	        print BOLD GREEN ON BLACK "$timestamp: PASS   $message\n";
+	        print BOLD GREEN ON BLACK "$timestamp: PASS    $message\n";
         }
     }
 }
