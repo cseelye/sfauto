@@ -218,6 +218,17 @@ class ChildScript(object):
 
         return self.result
 
+def kwargsToCommandlineArgs(kwargs):
+    script_args = ""
+    for arg_name in kwargs:
+        if kwargs[arg_name] is False:
+            continue
+        if kwargs[arg_name] is True:
+            script_args += "--" + arg_name
+            continue
+        script_args += " --" + arg_name + "=" + str(kwargs[arg_name])
+    return script_args
+
 # Class for a generic collection of stuff, or as a dummy for compatability
 class Bunch:
     __init__ = lambda self, **kw: setattr(self, '__dict__', kw)
