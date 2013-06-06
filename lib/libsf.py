@@ -37,6 +37,8 @@ try:
     import ssh
 except ImportError:
     import paramiko as ssh
+import zmq
+import shlex
 
 class SfError(Exception):
     """
@@ -125,6 +127,96 @@ class ListOption(Option):
             Option.take_action(
                 self, action, dest, opt, value, values, parser)
 
+class ChildScript(object):
+    """
+    Class to run a script as a subprocess
+    THe output of the script will be echoed to the screen
+    To get results back, the script must use 0MQ IPC to send the result back
+    """
+
+    def __init__(self, command, timeout=600):
+        self.cmd = command
+        self.timeout = timeout
+        self.run_listener = True
+        self.listener_ready = False
+        self.result = None
+        self.returncode = -1
+
+    def _ResultListener(self):
+        """
+        Private thread to start a 0MQ listener to receive the result from the child script
+        """
+        self.zmq_context = zmq.Context()
+        self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
+        self.zmq_port = self.zmq_socket.bind_to_random_port("tcp://*")
+        mylog.debug("Listening for script result on port " + str(self.zmq_port))
+        self.zmq_poller = zmq.Poller()
+        self.zmq_poller.register(self.zmq_socket, zmq.POLLIN)
+        self.listener_ready = True
+        while self.run_listener:
+            ready_sockets = dict(self.zmq_poller.poll(100))
+            if self.zmq_socket in ready_sockets:
+                msg = self.zmq_socket.recv()
+                mylog.debug("Received result " + msg)
+                try:
+                    data = json.loads(msg)
+                except ValueError as e:
+                    mylog.error("Could not parse result from script: " + str(e))
+                    return
+                if 'result' in data:
+                    self.result = data["result"]
+                return
+
+    def _ScriptRunner(self):
+        """
+        Private thread to run the child script and print the output to the screen
+        """
+        ColorTerm.screen.reset()
+        cmd_list = shlex.split(self.cmd)
+        cmd_list.append("--result_address=tcp://127.0.0.1:" + str(self.zmq_port))
+        mylog.debug("Launching " + " ".join(cmd_list))
+        self.process = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        for line in iter(self.process.stdout.readline, ""):
+            if "DEBUG" in line:
+                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.LightGreyFore, ColorTerm.ConsoleColors.BlackBack)
+            elif "INFO" in line:
+                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.WhiteFore, ColorTerm.ConsoleColors.BlackBack)
+            elif "WARN" in line:
+                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.YellowFore, ColorTerm.ConsoleColors.BlackBack)
+            elif "ERROR" in line:
+                ColorTerm.screen.set_color(ColorTerm.ConsoleColors.RedFore, ColorTerm.ConsoleColors.BlackBack)
+
+            print line.rstrip()
+            ColorTerm.screen.reset()
+        self.process.wait()
+        self.returncode = self.process.returncode
+
+    def Run(self):
+        """
+        Run the script and return the result
+        """
+        result_thread = threading.Thread(target=self._ResultListener, name="ResultListener")
+        result_thread.daemon = True
+        result_thread.start()
+        while not self.listener_ready: continue
+
+        script_thread = threading.Thread(target=self._ScriptRunner, name="ScriptRunner")
+        script_thread.daemon = True
+        script_thread.start()
+
+        # Wait for 'timeout' seconds for the script to complete and kill it if it is still running
+        script_thread.join(self.timeout)
+        if script_thread.is_alive():
+            mylog.debug("Killing child script " + self.cmd + " because it took too long")
+            script_thread.terminate()
+
+        # Shut down the result listener
+        self.run_listener = False
+        result_thread.join(5)
+        if result_thread.is_alive():
+            result_thread.terminate()
+
+        return self.result
 
 # Class for a generic collection of stuff, or as a dummy for compatability
 class Bunch:
