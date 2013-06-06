@@ -40,7 +40,7 @@ package libsf;
                 command     => undef,
                 @_);
         mylog::debug("Executing " . $params{command} . " on " . $params{client_ip});
-        my $command = "python execute_client_command.py --client_ip=$params{client_ip} --client_user=$params{client_user} --client_pass=$params{client_pass} --command=\"$params{command}\" --bash";
+        my $command = "python ../execute_client_command.py --client_ip=$params{client_ip} --client_user=$params{client_user} --client_pass=$params{client_pass} --command=\"$params{command}\" --bash";
         my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, $command);
         my @outlines = <CHLD_OUT>;
         my @errlines = <CHLD_ERR>;
