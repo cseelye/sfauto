@@ -160,12 +160,12 @@ class CreateAccountForClientAction(ActionBase):
             results[thread_index] = False
             th = multiprocessing.Process(target=self._ClientThread, args=(mvip, username, password, client_ip, client_user, client_pass, account_name, svip, accounts_list, results, thread_index))
             th.daemon = True
-            th.start()
+            #th.start()
             self._threads.append(th)
             thread_index += 1
 
         allgood = libsf.ThreadRunner(self._threads, results, parallel_clients)
-
+        
         if allgood:
             mylog.passed("Successfully created accounts for all clients")
             return True
