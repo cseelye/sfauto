@@ -192,7 +192,7 @@ class CreateVolumesForClientAction(ActionBase):
             results[thread_index] = False
             th = multiprocessing.Process(target=self._ClientThread, args=(client_ip, client_user, client_pass, accounts_list, mvip, username, password, volume_size, volume_count, enable_512, min_iops, max_iops, burst_iops, wait, results, thread_index))
             th.daemon = True
-            th.start()
+            #th.start()
             self._threads.append(th)
             thread_index += 1
 

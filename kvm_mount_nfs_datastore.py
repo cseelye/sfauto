@@ -72,7 +72,7 @@ class KvmMountNfsDatastoreAction(ActionBase):
             client.Connect(clientIP, clientUsername, clientPassword)
             mylog.info("Connection to the client has been established")
             self._RaiseEvent(self.Events.CLIENT_CONNECTED)
-        except ClientError as e:
+        except libclient.ClientError as e:
             mylog.error("Unable to connect to the client, error message: " + e.message)
             self._RaiseEvent(self.Events.CLIENT_CONNECTION_FAILED)
             return False
