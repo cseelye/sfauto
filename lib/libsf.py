@@ -175,7 +175,7 @@ class ChildScript(object):
         cmd_list = shlex.split(self.cmd)
         cmd_list.append("--result_address=tcp://127.0.0.1:" + str(self.zmq_port))
         mylog.debug("Launching " + " ".join(cmd_list))
-        self.process = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        self.process = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         for line in iter(self.process.stdout.readline, ""):
             if "DEBUG" in line:
                 ColorTerm.screen.set_color(ColorTerm.ConsoleColors.LightGreyFore, ColorTerm.ConsoleColors.BlackBack)
@@ -446,7 +446,7 @@ class mylog:
     silence = False
 
     logging.raiseExceptions = False
-    sftestlog = logging.getLogger("sftest")
+    sftestlog = logging.getLogger("sftest-py")
     sftestlog.setLevel(logging.DEBUG)
 
     # Log everything to syslog on non-windows

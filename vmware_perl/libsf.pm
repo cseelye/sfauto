@@ -193,7 +193,7 @@ package mylog;
     	$redirected = 1;
     }
 
-    openlog("sftest", "ndelay", LOG_LOCAL0);
+    openlog("sftest-pl", "ndelay", LOG_LOCAL0);
 
     END
     {
@@ -205,7 +205,7 @@ package mylog;
         my $message = shift;
         my $timestamp = libsf::GetCurrentDateString();
 
-        syslog(LOG_ERR, $message);
+        syslog(LOG_ERR, "ERROR $message");
 
         return if $Silent;
         if ($redirected)
@@ -223,7 +223,7 @@ package mylog;
         my $message = shift;
         my $timestamp = libsf::GetCurrentDateString();
 
-        syslog(LOG_WARNING, $message);
+        syslog(LOG_WARNING, " WARN  $message");
 
         return if $Silent;
 
@@ -242,7 +242,7 @@ package mylog;
         my $message = shift;
         my $timestamp = libsf::GetCurrentDateString();
 
-        syslog(LOG_INFO, $message);
+        syslog(LOG_INFO, "INFO  $message");
 
         return if $Silent;
         if ($redirected)
@@ -260,7 +260,7 @@ package mylog;
         my $message = shift;
         my $timestamp = libsf::GetCurrentDateString();
 
-        syslog(LOG_DEBUG, $message);
+        syslog(LOG_DEBUG, "DEBUG $message");
 
         return if $Silent;
         return if !$DisplayDebug;
@@ -279,7 +279,7 @@ package mylog;
         my $message = shift;
         my $timestamp = libsf::GetCurrentDateString();
 
-        syslog(LOG_INFO, $message);
+        syslog(LOG_INFO, "PASS  $message");
 
         return if $Silent;
         if ($redirected)
