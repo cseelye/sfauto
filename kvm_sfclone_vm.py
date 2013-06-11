@@ -35,7 +35,7 @@ if "win" in platform.system().lower():
 import libvirt
 import lib.libsf as libsf
 from lib.libsf import mylog
-from libclient import SfClient, ClientError
+from lib.libclient import SfClient, ClientError
 from xml.etree import ElementTree
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase

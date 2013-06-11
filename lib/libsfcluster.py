@@ -93,6 +93,41 @@ class ClusterVersion(object):
 #end ClusterVersion Class
 
 
+class ClusterTestInfo(object):
+    """
+    Holds information on how to stress a cluster
+    """
+
+    class ClusterServices(object):
+        """
+        Helper class that holds serviceType
+        """
+        def __init__(self, ServiceType, ServiceID, DriveID, NodeID):
+            self.ServiceType = ServiceType
+            self.ServiceID = ServiceID
+            self.DriveID = DriveID
+            self.NodeID = NodeID
+
+    def __init__(self):
+        self.Services = []
+        self.InGC = False
+        self.InSliceSync = False
+        self.InBinSync = False
+        self.NumberOfDrives = 0
+        self.NumberOfVolumes = 0
+
+
+    def AddServices(self, ServiceType, ServiceID, DriveID, NodeID):
+        temp = self.ClusterServices(ServiceType, ServiceID, DriveID, NodeID)
+        self.Services.append(temp)
+
+    def Sort(self):
+        self.Services.sort(key=lambda Services: self.Services[0].NodeID)
+
+
+
+#end ClusterTestInfo Class
+
 class GCInfo(object):
     """
     Data structure containing information about a GC cycle
