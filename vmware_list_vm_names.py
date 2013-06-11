@@ -84,6 +84,8 @@ class VmwareListVmNamesAction(ActionBase):
         try:
             script = ChildScript("perl -Ivmware_perl vmware_perl/vmware_list_vm_names.pl " + script_args)
             result = script.Run()
+            if script.returncode != 0:
+                return False
         except KeyboardInterrupt:
             return False
         except Exception as e:
@@ -101,6 +103,7 @@ class VmwareListVmNamesAction(ActionBase):
         vm_list = Get(*args, **kwargs)
         if vm_list is False:
             return False
+        return True
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
