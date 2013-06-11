@@ -1,13 +1,28 @@
 """
 This script will mount a nfs datastore on a remote client
 
+When run as a script, the following options/env variables apply:
+    --client_ip        The IP address of the client
+
+    --client_user       The username for the client
+
+    --client_pass       The password for the client
+
+    --nfs_ip            The IP address of the nfs datastore
+
+    --nfs_path          The path on the nfs datastore you want to mount
+
+    --mount_point       The location on the client where you want to mount the nfs datastore
+
+    --write             To mount the nfs datastore as ro or rw
+
+    --debug             More verbose logging
+
 """
 
 import lib.libsf as libsf
 import logging
 import lib.sfdefaults as sfdefaults
-import lib.libsfcluster as libsfcluster
-import lib.libsfnode as libsfnode
 import lib.libclient as libclient
 import time
 import sys
@@ -22,10 +37,10 @@ class KvmMountNfsDatastoreAction(ActionBase):
         Events that this action defines
         """
         FAILURE = "FAILURE"
-        PUSHED_SSH_KEYS = "PUSHED_SSH_KEYS"
-        BEFORE_SFNODE_RESET = "BEFORE_SFNODE_RESET"
-        AFTER_SFNODE_RESET = "AFTER_SFNODE_RESET"
-        CLUSTER_NAME_SET = "CLUSTER_NAME_SET"
+        CLIENT_CONNECTED = "CLIENT_CONNECTED"
+        CLIENT_CONNECTION_FAILED = "CLIENT_CONNECTION_FAILED"
+        MOUNT_EXISTS = "MOUNT_EXISTS"
+        CREATING_MOUNT = "CREATING_MOUNT"
 
 
     def __init__(self):
@@ -56,8 +71,10 @@ class KvmMountNfsDatastoreAction(ActionBase):
         try:
             client.Connect(clientIP, clientUsername, clientPassword)
             mylog.info("Connection to the client has been established")
+            self._RaiseEvent(self.Events.CLIENT_CONNECTED)
         except libsf.SfError as e:
             mylog.error("Unable to connect to the client, error message: " + e.message)
+            self._RaiseEvent(self.Events.CLIENT_CONNECTION_FAILED)
             return False
         
         #check to see if the mount already exists
@@ -69,6 +86,7 @@ class KvmMountNfsDatastoreAction(ActionBase):
                 mount_exists = nfsIP in result[i] and nfsPath in result[i] and mountPoint in result[i]
                 if mount_exists:
                     mylog.info("The mount already exists")
+                    self._RaiseEvent(self.Events.MOUNT_EXISTS)
                     return True
             except TypeError:
                 pass
@@ -94,6 +112,7 @@ class KvmMountNfsDatastoreAction(ActionBase):
         #create the mount if needed
         mylog.info("The mount does not exist. Trying to create it now")
         mount_result = client.ExecuteCommand("mount -t nfs " + nfsIP + ":" + nfsPath + " " + mountPoint)
+        self._RaiseEvent(self.Events.CREATING_MOUNT)
 
         #make sure the mount is actually there
         done = False
@@ -107,6 +126,7 @@ class KvmMountNfsDatastoreAction(ActionBase):
                 return True
             if(time.time() - start_time > 300):
                 mylog.error("Timed out while trying to created the mount")
+                self._RaiseEvent(self.Events.FAILURE)
                 return False
             time.sleep(15)
 
