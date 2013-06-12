@@ -130,8 +130,6 @@ class KvmMountNfsDatastoreAction(ActionBase):
                 return False
             time.sleep(15)
 
-    
-
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
