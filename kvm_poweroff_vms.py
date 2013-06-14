@@ -22,6 +22,7 @@ from optparse import OptionParser
 import logging
 import re
 import platform
+import multiprocessing
 if "win" in platform.system().lower():
     sys.path.insert(0, "C:\\Program Files (x86)\\Libvirt\\python27")
 import libvirt
@@ -48,7 +49,40 @@ class KvmPoweroffVmsAction(ActionBase):
                             "host_pass" : None},
             args)
 
-    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def _VmThreadPowerOff(self, vmHost, hostUser, hostPass, vm, results):
+        #connect again
+        mylog.info("Connecting to " + vm)
+        try:
+            conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+        if conn is None:
+            mylog.error("Failed to connect")
+            self.RaiseFailureEvent(message="Failed to connect")
+            return False
+
+        try:
+            vm = conn.lookupByName(vm)
+        except libvirt.libvirtError as e:
+            mylog.error("Unable to power on " + vm)
+            conn.close()
+            return
+
+        mylog.info("Powering on: " + vm.name())
+        try:
+            vm.destroy()
+            mylog.passed("Successfully powered on " + vm.name())
+            results[vm.name()] = True
+        except libvirt.libvirtError as e:
+            mylog.error("Failed to power on " + vm.name() + ": " + str(e))
+
+        #close when done
+        conn.close()
+
+
+    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, thread_max=1, debug=False):
         """
         Power off VMs
         """
@@ -58,7 +92,7 @@ class KvmPoweroffVmsAction(ActionBase):
 
         mylog.info("Connecting to " + vmhost)
         try:
-            conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
+            conn = libvirt.open("qemu+ssh://" + vmhost + "/system")
         except libvirt.libvirtError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
@@ -132,28 +166,31 @@ class KvmPoweroffVmsAction(ActionBase):
                 matched_vms.append(vm)
 
         # Power off the VMs
-        power_count = 0
+        self._threads = []
+        manager = multiprocessing.Manager()
+        results = manager.dict()
         matched_vms = sorted(matched_vms, key=lambda vm: vm.name())
         for vm in matched_vms:
             [state, maxmem, mem, ncpu, cputime] = vm.info()
             if state == libvirt.VIR_DOMAIN_SHUTOFF:
                 mylog.passed("  " + vm.name() + " is already powered off")
-                power_count += 1
             else:
-                mylog.info("  Powering off " + vm.name())
-                try:
-                    vm.destroy()
-                    power_count += 1
-                    mylog.passed("  Successfully powered off " + vm.name())
-                except libvirt.libvirtError as e:
-                    mylog.error("  Failed to power off " + vm.name() + ": " + str(e))
+                results[vm.name()] = False
+                th = multiprocessing.Process(target=self._VmThreadPowerOff, args=(vmhost, host_user, host_pass, vm.name(), results))
+                th.daemon = True
+                self._threads.append(th)
 
-        if power_count == len(matched_vms):
-            mylog.passed("All VMs powered off successfully")
+        allgood = libsf.ThreadRunner(self._threads, results, thread_max)
+
+        if allgood:
+            mylog.passed("All VMs powered on successfully")
             return True
         else:
-            mylog.error("Not all VMs were powered off")
+            mylog.error("Not all VMs could be powered on")
             return False
+
+
+
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
@@ -169,12 +206,13 @@ if __name__ == '__main__':
     parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to power off")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power off")
     parser.add_option("--vm_count", type="string", dest="vm_count", default=None, help="the number of matching VMs to power off")
+    parser.add_option("--thread_max", type="int", dest="thread_max", default=1, help="the number of threads to use")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.debug):
+        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.thread_max, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
