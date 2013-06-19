@@ -77,8 +77,11 @@ class KvmMountNfsDatastoreAction(ActionBase):
             self._RaiseEvent(self.Events.CLIENT_CONNECTION_FAILED)
             return False
         
+
+        #converting to retcode, stdout, stderr
         #check to see if the mount already exists
         result = client.ExecuteCommand("mount -v | grep " + nfsIP)
+        #retcode, stdout, stderr = client.ExecuteCommand("mount -v | grep " + nfsIP)
 
         #loop over the results
         for i in xrange(0, len(result)):

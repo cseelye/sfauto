@@ -42,7 +42,7 @@ class KvmSelectRandomVmsAction(ActionBase):
 
 
 
-    def Get(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, csv=False, bash=False, debug=False):
+    def Get(self, vm_name=None, vm_regex=None, vm_count=1, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, csv=False, bash=False, debug=False):
         """
         Select Random VMs
         """
@@ -124,7 +124,7 @@ class KvmSelectRandomVmsAction(ActionBase):
             return random_vms
 
 
-    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, csv=False, bash=False, debug=False):
+    def Execute(self, vm_name=None, vm_regex=None, vm_count=1, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, csv=False, bash=False, debug=False):
         """
         Show the random list of VMs 
         """
@@ -164,7 +164,7 @@ if __name__ == '__main__':
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
     parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to power on")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power on")
-    parser.add_option("--vm_count", type="int", dest="vm_count", default=None, help="the number of VMs to return")
+    parser.add_option("--vm_count", type="int", dest="vm_count", default=1, help="the number of VMs to return")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")

@@ -88,6 +88,26 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
         vm_xml.find("name").text = vmName
         return vm_xml.getroot()
 
+    def getIscsiPath(self, hypervisor):
+        """
+        Gets the path to the iscsi volume if none is provided
+        """
+
+        retcode, stdout, stderr = hypervisor.ExecuteCommand("ls /dev/disk/by-path/ | grep ip")
+        if retcode != 0:
+            mylog.error("Could not find the path to the iscsi volume")
+            return False
+        else:
+            stdout = stdout.split("\n")
+            stdout.remove("")
+            loc = stdout[-1]
+            for line in stdout:
+                temp = line
+                if "part" in temp:
+                    loc = temp
+        return "/dev/disk/by-path/" + loc
+
+
     def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, qcow2Path="/mnt/nfs/kvm-ubuntu-gold.qcow2", rawPath=None, vmName="kvm-ubuntu-gold-template", cpuCount=1, memorySize=512, osType="linux", debug=False):
 
         self.ValidateArgs(locals())
@@ -104,6 +124,15 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
         except libclient.ClientError as e:
             mylog.error("There was an error connecting to the hypervisor. Message: " + str(e))
             return False
+
+        #if no raw path is provided then find the correct one
+        if rawPath is None:
+            mylog.info("No raw path provided. Attemping to find the correct path")
+            rawPath = self.getIscsiPath(hypervisor)
+            if rawPath == False:
+                mylog.error("There was an error finding the iscsi volume")
+                return False
+            mylog.info("Using raw_path=" + rawPath)
 
         # convert qcow2 to raw - nfs to iscsi
         # use provided path
@@ -137,7 +166,39 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
             return False
 
         mylog.passed("The VM has been Imported")
+
+        mylog.step("Trying to power on the VM")
+
+        try:
+            newvm.create()
+        except libvirt.libvirtError as e:
+            mylog.error("There was and error trying to power on the VM. Message: " + str(e))
+            return False
+
+        mylog.step("Waiting 1 minute for the VM to boot")
+        time.sleep(60)
+
+        [state, maxmem, mem, ncpu, cputime] = newvm.info()
+        if state == libvirt.VIR_DOMAIN_RUNNING:
+            mylog.info("The VM has powered on successfully")
+
+        elif state == libvirt.VIR_DOMAIN_SHUTOFF:
+            mylog.error("The VM has not powered on successfully")
+            return False
+
+        mylog.step("Now powering off the VM")
+
+        try:
+            newvm.destroy()
+            mylog.info("The VM is now powered off")
+        except libvirt.libvirtError as e:
+            mylog.error("There was an error powering off the VM. Message: " + str(e))
+            return False
+
+        mylog.passed("The template VM is good to go")
         return True
+
+
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute

@@ -14,8 +14,6 @@ This script will
     --client_pass       The password for the client
     SFCLIENT_PASS env var
 
-    --mount_name        The name of the directory in /mnt/ to mount the volume
-
 """
 
 import sys
@@ -44,7 +42,7 @@ class MountVolumesTestAction(ActionBase):
         args)
 
 
-    def Execute(self, clientIP, clientUser, clientPass, mountName, debug=False):
+    def Execute(self, clientIP, clientUser, clientPass, debug=False):
 
         self.ValidateArgs(locals())
         if debug:
@@ -62,68 +60,64 @@ class MountVolumesTestAction(ActionBase):
 
         #get the iscsi volumes and the iqn
         retcode, stdout, stderr = client.ExecuteCommand("iscsiadm -m node")
-        if retcode == 1:
-            mylog.error("There was an error issuing an iscsiadm command. Make sure open-iscsi is installed")
+        print stderr
+        if retcode != 0:
+            mylog.error("There was an error issuing an iscsiadm command. Make sure open-iscsi is installed and your are logged into a volume")
             return False
 
         #get the iqn for later use
         stdout = stdout.split()
         iqn = stdout[1]
+        print iqn
 
         #use the iqn to find the disk path
-        retcode, stdout, stderr = client.ExecuteCommand("ls -l /dev/disk/by-path/ | grep " + iqn)
-        if retcode == 1:
+        retcode, stdout, stderr = client.ExecuteCommand("ls /dev/disk/by-path/ | grep " + iqn)
+        if retcode != 0:
             mylog.error("There was an error trying to find the disk path")
             return False
 
         #strip out everything but the location
         stdout = stdout.split("\n")
-        loc = stdout[0]
-        index = loc.rindex("/")
-        loc = loc[index + 1:]
+        stdout.remove("")
+        loc = stdout[-1]
+        print len(stdout)
+        for line in stdout:
+            temp = line
+            if "part" in temp:
+                loc = temp
+
 
         #partition and format the volume
-        #need to find a better way of doing this
+        #need to find a better way of doing this - hack
         #requires the file /home/solidfire/fdisk_input.txt - contents are n \n p \n 1 \n \n \n w
         #Creates a (n)ew partition, makes it (p)rimary, (1) partition,() start at the start,() end at the end, (w)rite
-        retcode, stdout, stderr = client.ExecuteCommand("cat /home/solidfire/fdisk_input.txt | fdisk /dev/" + loc)
+        mylog.step("Partitioning the volume")
+        retcode, stdout, stderr = client.ExecuteCommand("cat /home/solidfire/fdisk_input.txt | fdisk /dev/disk/by-path/" + loc)
+        mylog.debug("Retcode: " + str(retcode))
+        mylog.debug("Standard Output: " + str(stdout))
+        mylog.debug("Standard Error: " + str(stderr))
         if retcode == 0:
-            mylog.info("The volume has been partitioned")
-        elif retcode == 1:
+            mylog.passed("The volume has been partitioned")
+        else:
             mylog.error("There was an error partitioning the volume")
             return False
 
-        retcode, stdout, stderr = client.ExecuteCommand("mkfs.ext4 -E nodiscard /dev/" + loc + "1")
+        mylog.step("Formatting the volume ext4")
+        retcode, stdout, stderr = client.ExecuteCommand("mkfs.ext4 -E nodiscard /dev/disk/by-path/" + loc + "-part1")
+        mylog.debug("Retcode: " + str(retcode))
+        mylog.debug("Standard Output: " + str(stdout))
+        mylog.debug("Standard Error: " + str(stderr))
         if retcode == 0:
-            mylog.info("The volume has been formatted ext4")
-        elif retcode == 1:
+            mylog.passed("The volume has been formatted ext4")
+        else:
             mylog.error("There was an error formatting the volume")
             return False
 
-        #check to see if the directory where we will mount the volume already exists
-        #if it doesn't exist then we will create it
-        retcode, stdout, stderr = client.ExecuteCommand("cd /mnt/" + mountName)
-        if retcode == 1:
-            retcode, stdout, stderr = client.ExecuteCommand("mkdir /mnt/" + mountName)
-            if retcode == 0:
-                mylog.info("The directory /mnt/" + mountName + " has been created")
-            elif retcode == 1:
-                mylog.error("There was an error creating the directory /mnt/" + mountName)
-                return False
-        elif retcode == 0:
-            mylog.info("The directory already exists. Attempting to mount volume to it")
-
-        #attempt to mount the volume
-        #mount /dev/ + loc + "1 /mnt/" + mountName
-        retcode, stdout, stderr = client.ExecuteCommand("mount /dev/" + loc + "1 /mnt/" + mountName)
-        if retcode == 0:
-            mylog.info("The mount has been created")
-        elif retcode == 1:
-            mylog.error("There was an error creating the mount at /mnt/" + mountName)
-            return False
 
         #done
+        mylog.passed("The volume has been partitioned and formatted")
         return True
+
 
 
 # Instantate the class and add its attributes to the module
@@ -134,16 +128,15 @@ if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
     # Parse command line arguments
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
-    parser.add_option("-c", "--client_ip", type="string", dest="client_ip", default=sfdefaults.client_ip, help="the IP address of the client")
+    parser.add_option("-c", "--client_ip", type="string", dest="client_ip", default=None, help="the IP address of the client")
     parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the client")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the client")
-    parser.add_option("--mount_name", type="string", dest="mountName", default=None, help="The name of the directory to mount the volume in /mnt/")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.client_ip, options.client_user, options.client_pass, options.mountName, options.debug):
+        if Execute(options.client_ip, options.client_user, options.client_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
