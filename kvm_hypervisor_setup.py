@@ -61,7 +61,7 @@ class KvmHypervisorSetupAction(ActionBase):
         super(self.__class__, self).__init__(self.__class__.Events)
 
     def ValidateArgs(self, args):
-        libsf.ValidateArgs({"clientIP" : libsf.IsValidIpv4Address,
+        libsf.ValidateArgs({"clientIP" : libsf.IsValidIpv4AddressList,
                             "nfsIP" : libsf.IsValidIpv4Address,
                             "mvip" : libsf.IsValidIpv4Address,
                             "username" : None,
@@ -79,11 +79,6 @@ class KvmHypervisorSetupAction(ActionBase):
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        #workaround because create_account, create_volumes, and login_client expect a list of IP addresses while the rest expect only 1 IP address
-        temp = []
-        temp.append(clientIP)
-        clientIP = temp
-
         mylog.step("Creating an account for client")
         if(create_account_for_client.Execute(mvip=mvip, client_ips=clientIP, username=username, password=password, client_user=clientUser, client_pass=clientPass) == False):
             mylog.error("There was an error tying to create an account on the cluster")
@@ -92,7 +87,7 @@ class KvmHypervisorSetupAction(ActionBase):
         self._RaiseEvent(self.Events.CREATED_ACCOUNT)
 
         mylog.step("Creating 1 volume for client")
-        if(create_volumes_for_client.Execute(volume_size=40, volume_count=1, mvip=mvip, client_ips=clientIP, enable_512=False, username=username, password=password, client_user=clientUser, client_pass=clientPass) == False):
+        if(create_volumes_for_client.Execute(volume_size=65, volume_count=1, mvip=mvip, client_ips=clientIP, enable_512=False, username=username, password=password, client_user=clientUser, client_pass=clientPass) == False):
             mylog.error("Failed trying to create 1st volume")
             self._RaiseEvent(self.Events.FAILURE)
             return False
@@ -106,7 +101,7 @@ class KvmHypervisorSetupAction(ActionBase):
         self._RaiseEvent(self.Events.LOGGED_IN_CLIENT)
 
         mylog.step("Mounting 1 volume on client")
-        if(mount_volumes_test.Execute(clientIP=clientIP[0], clientUser=clientUser, clientPass=clientPass, mountName="kvmTemplate") == False):
+        if(mount_volumes_test.Execute(clientIP=clientIP[0], clientUser=clientUser, clientPass=clientPass) == False):
             mylog.error("Failed trying to mount volumes on client")
             self._RaiseEvent(self.Events.FAILURE)
             return False
@@ -123,23 +118,6 @@ class KvmHypervisorSetupAction(ActionBase):
         #done
         return True
 
-
-#mvip = "192.168.154.10"
-#username = "admin"
-#password = "solidfire"
-#clientIP = []
-#clientIP.append("192.168.135.47")
-#clientUser = "root"
-#clientPass = "solidfire"
-#nfsIP = "192.168.154.7"
-#mountPoint = "/mnt/nfs"
-#nfsPath = "/templates/kvm-templates"
-
-#Execute(mvip, username, password, clientIP, clientUser, clientPass, nfsIP, mountPoint, nfsPath)
-
-
-
-
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
 libsf.PopulateActionModule(sys.modules[__name__])
@@ -151,7 +129,7 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="The IP address of the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster  [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster  [%default]")
-    parser.add_option("-c", "--client_ip", type="string", dest="client_ip", default=sfdefaults.client_ip, help="the IP address of the client")
+    parser.add_option("-c", "--client_ip", action="list", dest="client_ip", default=None, help="the IP address of the client")
     parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the client")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the client")
     parser.add_option("--nfs_ip", type="string", dest="nfs_ip", default=None, help="the IP address of the nfs datastore")
