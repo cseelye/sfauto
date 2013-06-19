@@ -10,7 +10,7 @@ When run as a script, the following options/env variables apply:
 
     --host_pass         The password for the hypervisor
 
-    --vm_name           The name of the VM to power on
+    --vm_names          The name of the VMs to power on
 
     --vm_regex          Regex to match to select VMs to power on
 
@@ -85,7 +85,7 @@ class KvmPoweronVmsAction(ActionBase):
         conn.close()
 
 
-    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, thread_max=1, debug=False):
+    def Execute(self, vm_names=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, thread_max=1, debug=False):
         """
         Power on VMs
         """
@@ -105,27 +105,33 @@ class KvmPoweronVmsAction(ActionBase):
             self.RaiseFailureEvent(message="Failed to connect")
             return False
 
-        # Shortcut when only a single VM is specified
-        if vm_name:
-            try:
-                vm = conn.lookupByName(vm_name)
-            except libvirt.libvirtError as e:
-                mylog.error(str(e))
-                sys.exit(1)
-            [state, maxmem, mem, ncpu, cputime] = vm.info()
-            if state == libvirt.VIR_DOMAIN_RUNNING:
-                mylog.passed(vm_name + " is already powered on")
-                sys.exit(0)
-            else:
-                mylog.info("Powering on " + vm_name)
+        # Shortcut when a list of VMs is specified
+        if vm_names != None:
+            self._threads = []
+            manager = multiprocessing.Manager()
+            results = manager.dict()
+            for name in vm_names:
                 try:
-                    vm.create()
-                    mylog.passed("Successfully powered on " + vm.name())
-                    return True
+                    vm = conn.lookupByName(name)
                 except libvirt.libvirtError as e:
-                    mylog.error("Failed to power on " + vm.name() + ": " + str(e))
-                    self.RaiseFailureEvent(message=str(e), exception=e)
-                    return False
+                    mylog.error(str(e))
+                    sys.exit(1)
+                [state, maxmem, mem, ncpu, cputime] = vm.info()
+                if state == libvirt.VIR_DOMAIN_RUNNING:
+                    mylog.passed(vm.name() + " is already powered on")
+                else:
+                    results[vm.name()] = False
+                    th = multiprocessing.Process(target=self._VmThreadPowerOn, args=(vmhost, host_user, host_pass, vm.name(), results))
+                    th.daemon = True
+                    self._threads.append(th)
+
+            allgood = libsf.ThreadRunner(self._threads, results, thread_max)
+            if allgood:
+                mylog.passed("All VMs powered on successfully")
+                return True
+            else:
+                mylog.error("Not all VMs could be powered on")
+                return False
 
 
         mylog.info("Searching for matching VMs")
@@ -205,7 +211,7 @@ if __name__ == '__main__':
     parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_kvm, help="the management IP of the KVM hypervisor [%default]")
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
-    parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to power on")
+    parser.add_option("--vm_names", action="list", dest="vm_names", default=None, help="the name of the VM to power on")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power on")
     parser.add_option("--vm_count", type="string", dest="vm_count", default=None, help="the number of matching VMs to power on")
     parser.add_option("--thread_max", type="int", dest="thread_max", default=1, help="the number of threads to use")
@@ -214,7 +220,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.thread_max, options.debug):
+        if Execute(options.vm_names, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.thread_max, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
