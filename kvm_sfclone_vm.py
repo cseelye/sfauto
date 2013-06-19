@@ -69,7 +69,7 @@ class KvmSfcloneVmAction(ActionBase):
 
         mylog.info("Connecting to " + vmhost)
         try:
-            conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
+            conn = libvirt.open("qemu+ssh://" + vmhost + "/system")
         except libvirt.libvirtError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
@@ -135,6 +135,7 @@ class KvmSfcloneVmAction(ActionBase):
         mylog.info("Determining source volume")
         source_volume_iqn = None
         disk_path = disk_list[0]
+
         m = re.search(r"/dev/sd(\w+)", disk_path)
         if m:
             device = m.group(1)
@@ -154,6 +155,7 @@ class KvmSfcloneVmAction(ActionBase):
             if m:
                 source_volume_iqn = m.group(1)
 
+        mylog.info("Source IQN: " + str(source_volume_iqn))
         if not source_volume_iqn:
             mylog.error("Could not determine source volume for VM " + vm_name)
         mylog.debug("Source volume has IQN " + source_volume_iqn)
@@ -236,6 +238,8 @@ class KvmSfcloneVmAction(ActionBase):
             clone_device_path = stdout.strip()
             if not clone_device_path:
                 time.sleep(5)
+
+        clone_device_path += "-part1s"
 
         mylog.info("Importing the new VM")
         # Create the XML for the new VM
