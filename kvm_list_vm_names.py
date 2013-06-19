@@ -45,6 +45,55 @@ class KvmListVmNamesAction(ActionBase):
                             "host_pass" : None},
             args)
 
+    def Get(self, vmhost=sfdefaults.vmhost_kvm, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+        """
+        List VMs
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+        if bash or csv:
+            mylog.silence = True
+
+        mylog.info("Connecting to " + vmhost)
+        try:
+            conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+        if conn == None:
+            mylog.error("Failed to connect")
+            self.RaiseFailureEvent(message="Failed to connect")
+            return False
+
+        # Get a list of VMs
+        vm_list = []
+        try:
+            vm_ids = conn.listDomainsID()
+            running_vm_list = map(conn.lookupByID, vm_ids)
+            vm_list += running_vm_list
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+        try:
+            vm_ids = conn.listDefinedDomains()
+            stopped_vm_list = map(conn.lookupByName, vm_ids)
+            vm_list += stopped_vm_list
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+        vm_list = sorted(vm_list, key=lambda vm: vm.name())
+        vm_names = map(lambda vm: vm.name(), vm_list)
+
+        if csv or bash:
+            separator = ","
+            if bash:
+                separator = " "
+        return vm_names
+        
     def Execute(self, vmhost=sfdefaults.vmhost_kvm, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         List VMs
@@ -57,7 +106,7 @@ class KvmListVmNamesAction(ActionBase):
 
         mylog.info("Connecting to " + vmhost)
         try:
-            conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+            conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
         except libvirt.libvirtError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
