@@ -47,6 +47,7 @@ class SFNode(object):
         Get a list of the drives in this node
         """
         result = libsf.CallApiMethod(self.clusterMvip, self.clusterUsername, self.clusterPassword, "ListActiveNodes", {})
+
         for node in result["nodes"]:
             if node["mip"] == self.ipAddress:
                 node_id = node["nodeID"]
@@ -240,3 +241,11 @@ class SFNode(object):
             raise libsf.SfError("Failed to get version: " + "\n".join(stderr.readlines()))
         return lines[0].strip()
 
+    def KillMasterService(self):
+        ssh = libsf.ConnectSsh(self.ipAddress, self.sshUsername, self.sshPassword)
+        command = "top -b -n 1 | grep master-1"
+        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
+        lines = stdout.readlines() 
+        index = lines[0].strip().index(" ")
+        command = "kill " + str(lines[0].strip()[:index]) 
+        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)    
