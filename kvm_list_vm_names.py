@@ -45,15 +45,13 @@ class KvmListVmNamesAction(ActionBase):
                             "host_pass" : None},
             args)
 
-    def Get(self, vmhost=sfdefaults.vmhost_kvm, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def Get(self, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         List VMs
         """
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
-        if bash or csv:
-            mylog.silence = True
 
         mylog.info("Connecting to " + vmhost)
         try:
@@ -88,12 +86,8 @@ class KvmListVmNamesAction(ActionBase):
         vm_list = sorted(vm_list, key=lambda vm: vm.name())
         vm_names = map(lambda vm: vm.name(), vm_list)
 
-        if csv or bash:
-            separator = ","
-            if bash:
-                separator = " "
         return vm_names
-        
+
     def Execute(self, vmhost=sfdefaults.vmhost_kvm, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         List VMs
