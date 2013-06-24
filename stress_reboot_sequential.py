@@ -112,7 +112,7 @@ class StressRebootSequentialAction(ActionBase):
         node_list = get_active_nodes.Get(mvip=mvip, username=username, password=password)
         if(node_list == False):
             message = "Failied getting active nodes on " + mvip
-            fail(message,emailTo)
+            self.fail(message,emailTo)
             self._RaiseEvent(self.Events.NODES_NOT_FOUND)
             return False
 
@@ -123,7 +123,7 @@ class StressRebootSequentialAction(ActionBase):
                 self._RaiseEvent(self.Events.PUSHED_SSH_KEYS)
             else:
                 message = "Failed pushing SSH keys to Node"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 return False
         else:
             mylog.info("Not pushing SSH Keys to Nodes")
@@ -163,7 +163,7 @@ class StressRebootSequentialAction(ActionBase):
                     self._RaiseEvent(self.Events.NODE_REBOOTED)
                 else:
                     message = "Node: " + str(node) + " has not been rebooted"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.REBOOT_NODE_FAIL)
                     return False
 
@@ -174,7 +174,7 @@ class StressRebootSequentialAction(ActionBase):
                     self._RaiseEvent(self.Events.FAULTS_NOT_FOUND)
                 else:
                     message = "Faults found on " + mvip
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.FAULTS_FOUND)
                     return False
 
@@ -185,7 +185,7 @@ class StressRebootSequentialAction(ActionBase):
                     self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
                 else:
                     message = "Cluster " + mvip + " failed health check"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
                     return False
 
@@ -197,7 +197,7 @@ class StressRebootSequentialAction(ActionBase):
                         self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                     else:
                         message = "Failed client health check"
-                        fail(message, emailTo)
+                        self.fail(message, emailTo)
                         self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                         return False
 
@@ -213,7 +213,7 @@ class StressRebootSequentialAction(ActionBase):
                         mylog.info("Available drives were added to the cluster")
                     else:
                         message = "Available drives were not added to the cluster"
-                        fail(message, emailTo)
+                        self.fail(message, emailTo)
                         return False
 
                     #check the health of the clients
@@ -224,7 +224,7 @@ class StressRebootSequentialAction(ActionBase):
                             self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                         else:
                             message = "Failed client health check"
-                            fail(message, emailTo)
+                            self.fail(message, emailTo)
                             self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                             return False
 
@@ -241,7 +241,7 @@ class StressRebootSequentialAction(ActionBase):
 
                 else:
                     message = "GC not started"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     return False
 
                 #wait for gc to finish
@@ -250,7 +250,7 @@ class StressRebootSequentialAction(ActionBase):
                     self._RaiseEvent(self.Events.GC_FINISHED)
                 else:
                     message = "GC failed to finish"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.FAILURE)
                     return False
 
