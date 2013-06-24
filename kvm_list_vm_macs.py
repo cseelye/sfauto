@@ -58,7 +58,7 @@ class KvmListVmMacsAction(ActionBase):
 
         mylog.info("Connecting to " + vmhost)
         try:
-            conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+            conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
         except libvirt.libvirtError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
