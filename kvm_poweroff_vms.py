@@ -102,7 +102,7 @@ class KvmPoweroffVmsAction(ActionBase):
             self.RaiseFailureEvent(message="Failed to connect")
             return False
 
-        # Shortcut when only a single VM is specified
+        # Shortcut when a list of VMs is specified
         if vm_names != None:
             self._threads = []
             manager = multiprocessing.Manager()
@@ -192,7 +192,7 @@ class KvmPoweroffVmsAction(ActionBase):
             mylog.passed("All VMs powered on successfully")
             return True
         else:
-            mylog.error("Not all VMs could be powered on")
+            mylog.error("Not all VMs could be powered off")
             return False
 
 
