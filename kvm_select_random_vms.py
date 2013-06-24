@@ -120,7 +120,7 @@ class KvmSelectRandomVmsAction(ActionBase):
         else:
             for x in xrange(0, vm_count):
                 random_index = random.randint(0, len(matched_vms) - 1)
-                random_vms.append(matched_vms.pop(random_index))
+                random_vms.append(matched_vms.pop(random_index).name())
             return random_vms
 
 
