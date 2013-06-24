@@ -18,7 +18,7 @@ When run as a script, the following options/env variables apply:
 
     --ssh_pass          The nodes SSH password
     SFSSH_PASS
-    
+
     --vmhost            The IP address of the hypervisor host
 
     --host_user         The username for the hypervisor
@@ -148,6 +148,7 @@ class KvmEntireNodeFailureAction(ActionBase):
                 mylog.info("Available drives were added to the cluster")
             else:
                 mylog.error("Available drives were not added to the cluster")
+                healthThread.terminate()
                 return False
 
         #wait for syncing to start again
@@ -159,7 +160,7 @@ class KvmEntireNodeFailureAction(ActionBase):
             return False
 
         #make sure cluster is healthy
-        mylog.step("Final health cheack")
+        mylog.step("Final health check")
         if check_cluster_health.Execute(mvip=mvip, username=username, password=password) == False:
             mylog.error("The Cluster is not healthy to begin with")
             healthThread.terminate()

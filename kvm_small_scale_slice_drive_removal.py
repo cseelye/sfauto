@@ -203,7 +203,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.ssh_user, options.ssh_pass, options.nomaster, options.debug):
+        if Execute(options.mvip, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.ssh_user, options.ssh_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

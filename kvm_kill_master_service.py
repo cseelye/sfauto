@@ -125,7 +125,7 @@ class KvmKillMasterServiceAction(ActionBase):
         #loop over iterations
         for i in xrange(0, iterations):
 
-            mylog.iteration("Iteration " + str(i + 1) + " of " + str(iterations))
+            mylog.banner("Iteration " + str(i + 1) + " of " + str(iterations))
 
             #create sfnode
             master_node = libsfnode.SFNode(ip=cluster_master, sshUsername=nodeSshUser, sshPassword=nodeSshPass, clusterUsername=username, clusterPassword=password)

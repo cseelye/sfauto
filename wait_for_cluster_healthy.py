@@ -25,7 +25,7 @@ When run as a script, the following options/env variables apply:
     --fault_whitelist   Ignore these faults if they are present
     SFFAULT_WHITELIST env var
 
-    --ignore_faults     Do ot check for cluster faults
+    --ignore_faults     Do not check for cluster faults
 
     --ignore_cores      Do not check for core files
 """
@@ -57,7 +57,7 @@ class WaitForClusterHealthyAction(ActionBase):
                             },
             args)
 
-    def Execute(self, mvip=sfdefaults.mvip, timeOut=300 ,checkForCores=True, checkForFaults=True, fault_whitelist=None, since=0, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, timeOut=300, checkForCores=True, checkForFaults=True, fault_whitelist=None, since=0, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
         """
         Wait for the cluster to be healthy
         """
@@ -76,6 +76,7 @@ class WaitForClusterHealthyAction(ActionBase):
             if check_cluster_health.Execute(mvip, checkForCores, checkForFaults, fault_whitelist, since, username, password, ssh_user, ssh_pass, debug) == False:
                 time.sleep(15)
             else:
+                mylog.info("Duration: " + str(time.time() - start_time))
                 return True
 
 
