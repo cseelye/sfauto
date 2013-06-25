@@ -959,6 +959,8 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
         result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'GetClusterFullThreshold', {})
         if result:
             info.ClusterFullThreshold = result["fullness"]
+        else:
+            info.ClusterFullThreshold = ""
 
     result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'ListAccounts', {})
     if result is None:
