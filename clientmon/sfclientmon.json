@@ -1,8 +1,8 @@
 {
-    "server" : "172.25.107.4",
+    "server" : "192.168.154.100",
     "database" : "monitor",
     "listenPort" : 58083,
     "username" : "root",
     "password" : "solidfire",
-    "ipFilter" : "172.25.11"   // Only monitor clients whose IP starts with this string
+    "ipFilter" : "192.168.128"   // Only monitor clients whose IP starts with this string
 }

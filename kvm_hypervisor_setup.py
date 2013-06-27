@@ -43,6 +43,7 @@ import kvm_mount_nfs_datastore
 import create_volumes_for_client
 import create_account_for_client
 import login_client
+import logout_client
 import mount_volumes_test
 
 class KvmHypervisorSetupAction(ActionBase):
@@ -61,7 +62,7 @@ class KvmHypervisorSetupAction(ActionBase):
         super(self.__class__, self).__init__(self.__class__.Events)
 
     def ValidateArgs(self, args):
-        libsf.ValidateArgs({"clientIP" : libsf.IsValidIpv4AddressList,
+        libsf.ValidateArgs({"clientIP" : libsf.IsValidIpv4Address,
                             "nfsIP" : libsf.IsValidIpv4Address,
                             "mvip" : libsf.IsValidIpv4Address,
                             "username" : None,
@@ -78,6 +79,15 @@ class KvmHypervisorSetupAction(ActionBase):
 
         if debug:
             mylog.console.setLevel(logging.DEBUG)
+
+        temp = []
+        temp.append(clientIP)
+        clientIP = temp
+
+        mylog.step("Trying to log out of client volumes")
+        if logout_client.Execute(client_ips=clientIP, client_user=clientUser, client_pass=clientPass) == False:
+            mylog.warning("Was unable to logout client prior to setting up new volumes")
+            mylog.warning("Will try to continue")
 
         mylog.step("Creating an account for client")
         if(create_account_for_client.Execute(mvip=mvip, client_ips=clientIP, username=username, password=password, client_user=clientUser, client_pass=clientPass) == False):

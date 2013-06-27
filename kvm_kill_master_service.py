@@ -73,7 +73,6 @@ class KvmKillMasterServiceAction(ActionBase):
         mylog.info("Started VM Health Thread")
         while True:
             if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames, True) == False:
-                mylog.silence = False
                 mylog.error("The VMs are not healthy. Bad News")
             time.sleep(waitTime)
 

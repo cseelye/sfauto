@@ -66,10 +66,9 @@ class KvmSmallScaleSliceDriveRemovalAction(ActionBase):
             args)
 
     def _checkVMHealthThread(self, vmHost, hostUser, hostPass, vmNames, waitTime=30):
-        mylog.info("Started VM Health Thread")
+        mylog.step("Starting Health Monitoring Thread")
         while True:
             if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames, True) == False:
-                mylog.silence = False
                 mylog.error("The VMs are not healthy. Bad News")
             time.sleep(waitTime)
 
@@ -82,7 +81,7 @@ class KvmSmallScaleSliceDriveRemovalAction(ActionBase):
             mylog.error("The Cluster is not healthy to begin with")
             return False
 
-        vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=hostUser, host_pass=hostPass)
+        vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=hostUser, host_pass=hostPass, vm_regex="clone")
         if vmNames == False:
             mylog.error("Failed getting list of VM names")
             return False
@@ -92,7 +91,9 @@ class KvmSmallScaleSliceDriveRemovalAction(ActionBase):
         if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames) == False:
             mylog.error("The VMs are not healthy to begin with")
             return False
+        
         waitTime = 30
+
         healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, vmNames, waitTime))
         healthThread.daemon = True
         healthThread.start()
@@ -133,9 +134,10 @@ class KvmSmallScaleSliceDriveRemovalAction(ActionBase):
 
 
         #remove half the drives from the list
-        for i in xrange(0, len(slice_drive_id_list)/2):
-            random_index = random.randint(0, len(slice_drive_id_list) - 1)
-            slice_drive_id_list.pop(random_index)
+        if len(slice_drive_id_list) > 1:
+            for i in xrange(0, len(slice_drive_id_list)/2):
+                random_index = random.randint(0, len(slice_drive_id_list) - 1)
+                slice_drive_id_list.pop(random_index)
 
         mylog.step("Removing 1 Slice Drive")
         try:

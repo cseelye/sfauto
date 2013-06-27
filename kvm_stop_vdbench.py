@@ -55,8 +55,11 @@ class KvmStopVdbenchAction(ActionBase):
                             "host_user" : None,
                             "host_pass" : None},
             args)
+        if args["connection"] != "ssh":
+            if args["connection"] != "tcp":
+                raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
 
-    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+    def Execute(self, vm_name=None, connection="ssh", vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
         """
         Power on VMs
         """
@@ -70,7 +73,13 @@ class KvmStopVdbenchAction(ActionBase):
 
         mylog.info("Connecting to " + vmhost)
         try:
-            conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
+            if connection == "ssh":
+                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+            elif connection == "tcp":
+                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+            else:
+                mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
+                return False
         except libvirt.libvirtError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
@@ -179,12 +188,13 @@ if __name__ == '__main__':
     parser.add_option("--vm_count", type="string", dest="vm_count", default=None, help="the number of matching VMs to stop vdbench on")
     parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the VM clients [%default]")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the VM clients [%default]")
+    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.client_user, options.client_pass, options.debug):
+        if Execute(options.vm_name, options.connection, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.client_user, options.client_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

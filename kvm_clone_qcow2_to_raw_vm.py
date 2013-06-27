@@ -64,6 +64,9 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
                             "memorySize" : libsf.IsInteger
                             },
             args)
+        if args["connection"] != "ssh":
+            if args["connection"] != "tcp":
+                raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
 
 
 
@@ -108,7 +111,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
         return "/dev/disk/by-path/" + loc
 
 
-    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, qcow2Path="/mnt/nfs/kvm-ubuntu-gold.qcow2", rawPath=None, vmName="kvm-ubuntu-gold-template", cpuCount=1, memorySize=512, osType="linux", debug=False):
+    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection="ssh", qcow2Path="/mnt/nfs/kvm-ubuntu-gold.qcow2", rawPath=None, vmName="kvm-ubuntu-gold-template", cpuCount=1, memorySize=512, osType="linux", debug=False):
 
         self.ValidateArgs(locals())
 
@@ -146,7 +149,13 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
 
         #connect to libvirt hypervisor
         try:
-            conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
+            if connection == "ssh":
+                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
+            elif connection == "tcp":
+                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
+            else:
+                mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
+
         except libvirt.libvirtError as e:
             mylog.error("Unable to connect to libvirt. Message: " + str(e))
             return False
@@ -217,12 +226,13 @@ if __name__ == '__main__':
     parser.add_option("--cpu_count", type="int", dest="cpu_count", default=1, help="The number of virtural CPUs the VM should have")
     parser.add_option("--memory_size", type="int", dest="memory_size", default=512, help="The size of memory in MB for the vm, default 512MB")
     parser.add_option("--os_type", type="string", dest="os_type", default=None, help="The OS type of the VM")
+    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vmhost, options.host_user, options.host_pass, options.qcow2_path, options.raw_path, options.vm_name, options.cpu_count, options.memory_size, options.os_type, options.debug):
+        if Execute(options.vmhost, options.host_user, options.host_pass, options.connection, options.qcow2_path, options.raw_path, options.vm_name, options.cpu_count, options.memory_size, options.os_type, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

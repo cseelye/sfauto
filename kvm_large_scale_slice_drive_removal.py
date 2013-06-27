@@ -1,7 +1,32 @@
 """
-This script will remove half the the BS drives from a single random node
+This script will all the Slice drives from a n number of nodes
 Wait for syncing and make sure the VMs stay healthy the entire time
 Once cluster is healthy again it will add those drives back to the cluster
+
+
+When run as a script, the following options/env variables apply:
+    --mvip              The managementVIP of the cluster
+    SFMVIP env var
+
+    --user              The cluster admin username
+    SFUSER env var
+
+    --pass              The cluster admin password
+    SFPASS env var
+
+    --ssh_user          The nodes SSH username
+    SFSSH_USER env var
+
+    --ssh_pass          The nodes SSH password
+    SFSSH_PASS
+    
+    --vmhost            The IP address of the hypervisor host
+
+    --host_user         The username for the hypervisor
+
+    --host_pass         The password for the hypervisor
+
+    --node_count        The number of nodes to remove all Slice drives from
 
 """
 

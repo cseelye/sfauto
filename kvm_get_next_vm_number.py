@@ -48,8 +48,12 @@ class KvmGetNextVmNumberAction(ActionBase):
                             "host_pass" : None,
                             "vm_prefix" : None},
             args)
+        if args["connection"] != "ssh":
+            if args["connection"] != "tcp":
+                raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
 
-    def Execute(self, vm_prefix, fill=False, vmhost=sfdefaults.vmhost_kvm, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+
+    def Execute(self, vm_prefix, fill=False, vmhost=sfdefaults.vmhost_kvm, connection="ssh", csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         Get the next VM number
         """
@@ -61,7 +65,14 @@ class KvmGetNextVmNumberAction(ActionBase):
 
         mylog.info("Connecting to " + vmhost)
         try:
-            conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
+            if connection == "ssh":
+                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
+            elif connection == "tcp":
+                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
+            else:
+                mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
+                return False
+
         except libvirt.libvirtError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
@@ -154,12 +165,13 @@ if __name__ == '__main__':
     parser.add_option("--fill", action="store_true", dest="fill", default=False, help="find the first gap in the sequence instead of the highest number")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
+    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_prefix, options.fill, options.vmhost, options.csv, options.bash, options.host_user, options.host_pass, options.debug):
+        if Execute(options.vm_prefix, options.fill, options.vmhost, options.connection, options.csv, options.bash, options.host_user, options.host_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

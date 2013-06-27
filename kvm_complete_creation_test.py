@@ -84,10 +84,10 @@ class KvmCompleteCreationTestAction(ActionBase):
             return False
 
         mylog.step("Attempting to make " + str(cloneCount) + " clones of the template VM")
-        for i in xrange(1, cloneCount + 1):
-            updated_clone_name = cloneName + "-" + str(i)
+        for i in xrange(0, cloneCount):
+            updated_clone_name = cloneName + "-" + str(i).zfill(5)
 
-            mylog.step("Cloning VM " + str(i) + " of " + str(cloneCount))
+            mylog.banner("Cloning VM " + str(i + 1) + " of " + str(cloneCount))
             if (kvm_sfclone_vm.Execute(vm_name=sourceName, clone_name=updated_clone_name, mvip=mvip, username=username, password=password, vmhost=vmHost, host_user=hostUser, host_pass=hostPass) == False):
                 mylog.error("There was an error creating clone number: " + i)
                 return False

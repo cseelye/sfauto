@@ -76,11 +76,15 @@ class KvmCheckVmHealthAction(ActionBase):
                             "hostPass" : None},
             args)
 
+        if args["connection"] != "ssh":
+            if args["connection"] != "tcp":
+                raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
+
     #temp - simple ping test
 
     #should connect to clientmon and make sure everything for the given vmname is going alright
 
-    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, vmNames=None, threading=False, vmRegex=None, debug=False):
+    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection="ssh", vmNames=None, threading=False, vmRegex=None, debug=False):
 
         self.ValidateArgs(locals())
         if debug:
@@ -133,7 +137,13 @@ class KvmCheckVmHealthAction(ActionBase):
         if not threading:
             mylog.info("Connecting to " + vmHost)
         try:
-            conn = libvirt.openReadOnly("qemu+ssh://" + vmHost + "/system")
+            if connection == "ssh":
+                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
+            elif connection == "tcp":
+                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
+            else:
+                mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
+                return False
         except libvirt.libvirtError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
@@ -189,12 +199,13 @@ if __name__ == '__main__':
     parser.add_option("--vm_names", action="list", dest="vm_names", default=None, help="the names of the VMs to power on")
     parser.add_option("--threading", action="store_true", dest="threading", default=False, help="set to true to turn off logs")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power off")
+    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vmhost, options.host_user, options.host_pass, options.vm_names, options.threading, options.vm_regex, options.debug):
+        if Execute(options.vmhost, options.host_user, options.host_pass, options.connection, options.vm_names, options.threading, options.vm_regex, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
