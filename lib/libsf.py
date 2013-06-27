@@ -373,7 +373,11 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
 # Custom formatter with different formats for different log levels
 class MultiFormatter(logging.Formatter):
-    banner_width = 120
+    try:
+        rows, columns = os.popen('stty size', 'r').read().split()
+        banner_width = int(columns)
+    except:
+        banner_width = 120
     raw_format = "%(message)s"
     std_format = "%(asctime)s: %(levelname)-7s %(message)s"
     banner_format = "="*banner_width + "\n%(message)s\n" + "="*banner_width
