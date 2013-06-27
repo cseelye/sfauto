@@ -374,6 +374,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
 # Custom formatter with different formats for different log levels
 class MultiFormatter(logging.Formatter):
     try:
+        #try and get the width of the terminal shell
         rows, columns = os.popen('stty size', 'r').read().split()
         banner_width = int(columns)
     except:
@@ -994,6 +995,14 @@ def IsValidIpv4AddressList(addressList):
         if not IsValidIpv4Address(ip):
             return False
     return True
+
+def isValidMACAddress(macAddress):
+    """
+    Checks to make sure something is a valid mac address
+    """
+    if re.match("[0-9a-f]{2}([-:])[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", macAddress.lower()):
+        return True
+    return False
 
 def ParseIntsFromList(integerListString):
     if not integerListString: return []
