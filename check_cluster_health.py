@@ -124,11 +124,12 @@ class CheckClusterHealthAction(ActionBase):
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
-            if current_faults & fault_whitelist == current_faults:
-                mylog.warning("Current cluster faults found: " + ", ".join(current_faults))
-            else:
+            #if current_faults & fault_whitelist == current_faults:
+            if current_faults.intersection(fault_whitelist):
+                mylog.warning("Current cluster faults found: " + ", ".join(str(s) for s in current_faults.intersection(fault_whitelist)))
+            if current_faults.difference(fault_whitelist):
                 healthy = False
-                mylog.error("Current cluster faults found: " + ", ".join(current_faults))
+                mylog.error("Current cluster faults found: " + ", ".join(str(s) for s in current_faults.difference(fault_whitelist)))
 
         if healthy:
             mylog.passed("Cluster is healthy")
