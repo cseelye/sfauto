@@ -80,18 +80,16 @@ class KvmCheckVmHealthAction(ActionBase):
 
     #should connect to clientmon and make sure everything for the given vmname is going alright
 
-    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, vmNames=None, silence=False, debug=False):
+    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, vmNames=None, threading=False, vmRegex=None, debug=False):
 
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        if silence:
-            mylog.silence = True
-
         if vmNames == None:
-            mylog.info("No list of VM names provided. Attempting to find all VMs on VM host")
-            vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=hostUser, host_pass=hostPass, debug=False)
+            if not threading:
+                mylog.info("No list of VM names provided. Attempting to find all VMs on VM host")
+            vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=hostUser, host_pass=hostPass, vm_regex=vmRegex, debug=False)
             if vmNames == False:
                 mylog.error("Unable to get a list of VMs")
                 return False
@@ -101,7 +99,8 @@ class KvmCheckVmHealthAction(ActionBase):
 
         try:
             hypervisor.Connect(vmHost, hostUser, hostPass)
-            mylog.info("The connection to the hypervisor has been established")
+            if not threading:
+                mylog.info("The connection to the hypervisor has been established")
         except libclient.ClientError as e:
             mylog.error("There was an error connecting to the hypervisor. Message: " + str(e))
             #return False
@@ -131,7 +130,8 @@ class KvmCheckVmHealthAction(ActionBase):
                 temp_info = mac_list[x], ip_list[x]
                 mac_ip_list.append(temp_info)
 
-        mylog.info("Connecting to " + vmHost)
+        if not threading:
+            mylog.info("Connecting to " + vmHost)
         try:
             conn = libvirt.openReadOnly("qemu+ssh://" + vmHost + "/system")
         except libvirt.libvirtError as e:
@@ -162,7 +162,8 @@ class KvmCheckVmHealthAction(ActionBase):
         for ip in full_info:
             recode, stdout, stderr = hypervisor.ExecuteCommand("ping -n -i 0.2 -c 3 -W 1 -q " + ip[1])
             if recode == 0:
-                mylog.info("Was able to ping " + ip[2])
+                if not threading:
+                    mylog.info("Was able to ping " + ip[2])
             else:
                 mylog.error("Was not able to ping " + ip[2])
                 return False
@@ -172,6 +173,7 @@ class KvmCheckVmHealthAction(ActionBase):
             mylog.error("Unable to ping " + str(lost_vms) + " VMs")
             return False
 
+        mylog.passed("The VMs are healthy")
         return True
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
@@ -185,13 +187,14 @@ if __name__ == '__main__':
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
     parser.add_option("--vm_names", action="list", dest="vm_names", default=None, help="the names of the VMs to power on")
-    parser.add_option("--silence", action="store_true", dest="debug", default=False, help="set to true to turn off logs")
+    parser.add_option("--threading", action="store_true", dest="threading", default=False, help="set to true to turn off logs")
+    parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power off")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vmhost, options.host_user, options.host_pass, options.vm_names, options.debug):
+        if Execute(options.vmhost, options.host_user, options.host_pass, options.vm_names, options.threading, options.vm_regex, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
