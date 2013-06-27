@@ -62,9 +62,14 @@ gc_timeout = 60                     # How long to wait (min) for GC to finish
 host_user = "root"                  # Hypervisor host username
 host_pass = "password"              # Hypervisor host password
 vmhost_kvm = None                   # KVM hypervisor host
+kvm_qcow2_name = "kvm-ubuntu-gold.qcow2"    # KVM template name
+kvm_nfs_path = "/templates/kvm-templates"   # KVM template path on nfs
 vmhost_xen = None                   # XenServer hypervisor host
 xenapi_parallel_calls_thresh = 2    # Run multiple XenServer API operations in parallel if there are more than this many
 xenapi_parallel_calls_max = 5       # Run at most this many parallel operations with XenServer API
+nfs_ip = "192.168.154.7"            # The IP address of the main NFS datastore
+nfs_mount_point = "/mnt/nfs"        # The mount point for the NFS datastore
+
 # =============================================================================
 # Default Choices
 all_volume_acess_levels = [         # Valid volume access levels
