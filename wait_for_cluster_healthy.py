@@ -76,7 +76,8 @@ class WaitForClusterHealthyAction(ActionBase):
             if check_cluster_health.Execute(mvip, checkForCores, checkForFaults, fault_whitelist, since, username, password, ssh_user, ssh_pass, debug) == False:
                 time.sleep(15)
             else:
-                mylog.info("Duration: " + str(time.time() - start_time))
+
+                mylog.info("Duration to become healthy: " + libsf.SecondsToElapsedStr(time.time() - start_time) + " seconds")
                 return True
 
 
