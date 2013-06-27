@@ -55,6 +55,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 import lib.libclient as libclient
+from lib.action_base import ActionBase
 import kvm_complete_creation_test
 import kvm_hypervisor_setup
 import make_cluster
