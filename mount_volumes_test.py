@@ -60,7 +60,6 @@ class MountVolumesTestAction(ActionBase):
 
         #get the iscsi volumes and the iqn
         retcode, stdout, stderr = client.ExecuteCommand("iscsiadm -m node")
-        print stderr
         if retcode != 0:
             mylog.error("There was an error issuing an iscsiadm command. Make sure open-iscsi is installed and your are logged into a volume")
             return False
@@ -68,7 +67,6 @@ class MountVolumesTestAction(ActionBase):
         #get the iqn for later use
         stdout = stdout.split()
         iqn = stdout[1]
-        print iqn
 
         #use the iqn to find the disk path
         retcode, stdout, stderr = client.ExecuteCommand("ls /dev/disk/by-path/ | grep " + iqn)
@@ -80,7 +78,7 @@ class MountVolumesTestAction(ActionBase):
         stdout = stdout.split("\n")
         stdout.remove("")
         loc = stdout[-1]
-        print len(stdout)
+
         for line in stdout:
             temp = line
             if "part" in temp:
