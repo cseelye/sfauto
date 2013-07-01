@@ -26,7 +26,7 @@ When run as a script, the following options/env variables apply:
 
     --host_pass         The password for the hypervisor
 
-    --iterations        The number of times to kill the master service
+    --iterations        The number of times to kill the master service default is nodes*2
 """
 
 
@@ -46,8 +46,7 @@ import lib.libsfnode as libsfnode
 import get_cluster_master
 import check_cluster_health
 import list_active_nodes
-import kvm_check_vm_health
-import kvm_list_vm_names
+import kvm_check_vm_health_clientmon
 import wait_for_cluster_healthy
 
 
@@ -69,10 +68,10 @@ class KvmKillMasterServiceAction(ActionBase):
             args)
 
 
-    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, vmNames, waitTime=30):
+    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, waitTime=30):
         mylog.info("Started VM Health Thread")
         while True:
-            if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames, True) == False:
+            if kvm_check_vm_health_clientmon.Execute(vmHost=vmHost, hostUser=hostUser, hostPass=hostPass, threading=True) == False:
                 mylog.error("The VMs are not healthy. Bad News")
             time.sleep(waitTime)
 
@@ -84,19 +83,15 @@ class KvmKillMasterServiceAction(ActionBase):
             mylog.error("The Cluster is not healthy to begin with")
             return False
 
-        vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=hostUser, host_pass=hostPass)
-        if vmNames == False:
-            mylog.error("Failed getting list of VM names")
-            return False
 
 
         mylog.step("Checking the VMs health")
-        if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames) == False:
+        if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
             mylog.error("The VMs are not healthy to begin with")
             return False
 
         waitTime = 30
-        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, vmNames, waitTime))
+        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, waitTime))
         healthThread.daemon = True
         healthThread.start()
 
@@ -130,11 +125,12 @@ class KvmKillMasterServiceAction(ActionBase):
             master_node = libsfnode.SFNode(ip=cluster_master, sshUsername=nodeSshUser, sshPassword=nodeSshPass, clusterUsername=username, clusterPassword=password)
             
             #kill master service on that node
+            mylog.info(cluster_master + " Killing the master service")
             master_node.KillMasterService()
 
             #wait for a little bit
-            mylog.step("Waiting for 30 seconds")
-            time.sleep(30)
+            mylog.step("Waiting for 60 seconds")
+            time.sleep(60)
 
             got_new_master = False
 
