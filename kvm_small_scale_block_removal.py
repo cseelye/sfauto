@@ -30,24 +30,19 @@ When run as a script, the following options/env variables apply:
 
 import sys
 from optparse import OptionParser
-from xml.etree import ElementTree
 import logging
 import multiprocessing
-import platform
 import random
 import time
 import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
-from lib.datastore import SharedValues
-import kvm_check_vm_health
+import kvm_check_vm_health_clientmon
 import check_cluster_health
-import kvm_list_vm_names
 import get_random_node
 import wait_syncing
-import remove_drives
-import add_drives
+import add_available_drives
 
 class KvmSmallScaleBlockRemovalAction(ActionBase):
     class Events:
@@ -66,10 +61,10 @@ class KvmSmallScaleBlockRemovalAction(ActionBase):
                             "hostPass" : None},
             args)
 
-    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, vmNames, waitTime=30):
+    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, waitTime=30):
         mylog.info("Started VM Health Thread")
         while True:
-            if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames, True) == False:
+            if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass, True) == False:
                 mylog.silence = False
                 mylog.error("The VMs are not healthy. Bad News")
             time.sleep(waitTime)
@@ -88,19 +83,13 @@ class KvmSmallScaleBlockRemovalAction(ActionBase):
             mylog.error("The Cluster is not healthy to begin with")
             return False
 
-        vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=hostUser, host_pass=hostPass)
-        if vmNames == False:
-            mylog.error("Failed getting list of VM names")
-            return False
-
-
         mylog.step("Checking the VMs health")
-        if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames) == False:
+        if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
             mylog.error("The VMs are not healthy to begin with")
             return False
 
         waitTime = 30
-        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, vmNames, waitTime))
+        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, waitTime))
         healthThread.daemon = True
         healthThread.start()
 
@@ -126,7 +115,7 @@ class KvmSmallScaleBlockRemovalAction(ActionBase):
             if node["mip"] == random_node_ip:
                 random_node_id = node["nodeID"]
 
-        bs_drive_slot_list = []
+        bs_drive_id_list = []
         try:
             result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
         except libsf.SfError as e:
@@ -136,26 +125,27 @@ class KvmSmallScaleBlockRemovalAction(ActionBase):
 
         for drive in result["drives"]:
             if drive["nodeID"] == random_node_id:
-                if drive["type"] == "block":
-                    bs_drive_slot_list.append(drive["slot"])
+                if drive["type"] == "block" and drive["status"] == "active":
+                    bs_drive_id_list.append(drive["driveID"])
 
 
         #remove half the drives from the list
-        for i in xrange(0, len(bs_drive_slot_list)/2):
-            random_index = random.randint(0, len(bs_drive_slot_list) - 1)
-            bs_drive_slot_list.pop(random_index)
-
-        #remove half of them
-        #def Execute(self, mvip=sfdefaults.mvip, node_ips=None, by_node=False, drive_slots=None, username=sfdefaults.username, password=sfdefaults.password, debug=False):
-
-        node_ips = []
-        node_ips.append(random_node_ip)
-
-        if remove_drives.Execute(mvip=mvip, node_ips=node_ips, drive_slots=bs_drive_slot_list, username=username, password=password) == False:
-            mylog.error("There was an error trying to remove half the BS drives")
+        for i in xrange(0, len(bs_drive_id_list)/2):
+            random_index = random.randint(0, len(bs_drive_id_list) - 1)
+            bs_drive_id_list.pop(random_index)
+        
+        mylog.step("Trying to remove block drives")
+        try:
+            libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': bs_drive_id_list})
+            mylog.info("The block drives have been removed.")
+        except libsf.SfError as e:
+            mylog.error("Failed to remove drives: " + str(e))
             healthThread.terminate()
             return False
 
+        #wait for one minute
+        mylog.step("Waiting for 1 minute")
+        time.sleep(60)
 
         #wait for syncing to finish
         mylog.step("Waiting for everything to sync on cluster: " + mvip)
@@ -165,20 +155,20 @@ class KvmSmallScaleBlockRemovalAction(ActionBase):
             return False
 
         #once syncing has finished do a health check on the cluster
-        mylog.step("Health cheack")
+        mylog.step("Health check")
         if check_cluster_health.Execute(mvip=mvip, username=username, password=password) == False:
             mylog.error("The Cluster is not healthy")
             healthThread.terminate()
             return False
 
         #if all is good add the BS drives back to the cluster
-        if add_drives.Execute(mvip=mvip, node_ips=node_ips, drive_slots=bs_drive_slot_list, username=username, password=password) == False:
-            mylog.error("There was an error trying to remove half the BS drives")
+        if add_available_drives.Execute(mvip=mvip, username=username, password=password) == False:
+            mylog.error("There was an error trying to add the block drives back to the cluster")
             healthThread.terminate()
             return False
 
         #make sure cluster is healthy
-        mylog.step("Health cheack")
+        mylog.step("Health check")
         if check_cluster_health.Execute(mvip=mvip, username=username, password=password) == False:
             mylog.error("The Cluster is not healthy")
             healthThread.terminate()

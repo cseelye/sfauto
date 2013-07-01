@@ -32,24 +32,18 @@ When run as a script, the following options/env variables apply:
 
 import sys
 from optparse import OptionParser
-from xml.etree import ElementTree
 import logging
 import multiprocessing
-import platform
 import random
 import time
 import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
-from lib.datastore import SharedValues
-import kvm_check_vm_health
+import kvm_check_vm_health_clientmon
 import check_cluster_health
-import kvm_list_vm_names
-import list_active_nodes
 import wait_syncing
-import remove_drives
-import add_drives
+import add_available_drives
 
 class KvmLargeScaleBlockDriveRemovalAction(ActionBase):
     class Events:
@@ -68,10 +62,10 @@ class KvmLargeScaleBlockDriveRemovalAction(ActionBase):
                             "hostPass" : None},
             args)
 
-    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, vmNames, waitTime=30):
+    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, waitTime=30):
         mylog.info("Started VM Health Thread")
         while True:
-            if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames, True) == False:
+            if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass, True) == False:
                 mylog.error("The VMs are not healthy. Bad News")
             time.sleep(waitTime)
 
@@ -88,19 +82,13 @@ class KvmLargeScaleBlockDriveRemovalAction(ActionBase):
             mylog.error("The Cluster is not healthy to begin with")
             return False
 
-        vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=hostUser, host_pass=hostPass)
-        if vmNames == False:
-            mylog.error("Failed getting list of VM names")
-            return False
-
-
         mylog.step("Checking the VMs health")
-        if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames) == False:
+        if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
             mylog.error("The VMs are not healthy to begin with")
             return False
 
         waitTime = 30
-        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, vmNames, waitTime))
+        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, waitTime))
         healthThread.daemon = True
         healthThread.start()
 
@@ -132,36 +120,45 @@ class KvmLargeScaleBlockDriveRemovalAction(ActionBase):
             healthThread.terminate()
             return False
 
-        #loop over each node
+        bs_drive_id_list = []
+        #loop over each node and get the driveID to remove
         for node in random_node_list:
-
-            bs_drive_slot_list = []
             for drive in result["drives"]:
                 if drive["nodeID"] == node[1]:
-                    if drive["type"] == "block":
-                        bs_drive_slot_list.append(drive["slot"])
+                    if drive["type"] == "block" and drive["status"] == "active":
+                        bs_drive_id_list.append(drive["driveID"])
+
+        #remove the block drives by id in one call
+        mylog.step("Trying to remove block drives")
+        try:
+            libsf.CallApiMethod(mvip, username, password, "RemoveDrives", {'drives': bs_drive_id_list})
+            mylog.info("The block drives have been removed")
+        except libsf.SfError as e:
+            mylog.error("Failed to remove drives: " + str(e))
+            healthThread.terminate()
+            return False
+
+        mylog.step("Waiting for 1 minute")
+        time.sleep(60)
+
+        if wait_syncing.Execute(mvip=mvip, username=username, password=password) == False:
+            mylog.error("Error waiting for cluster to sync")
+            healthThread.terminate()
+            return False
 
 
-            node_ips = []
-            node_ips.append(node[0])
+        #once syncing has finished do a health check on the cluster
+        mylog.step("Health check")
+        if check_cluster_health.Execute(mvip=mvip, username=username, password=password) == False:
+            mylog.error("The Cluster is not healthy")
+            healthThread.terminate()
+            return False
 
-            if remove_drives.Execute(mvip=mvip, node_ips=node_ips, drive_slots=bs_drive_slot_list, username=username, password=password) == False:
-                mylog.error("There was an error trying to remove half the BS drives")
-                healthThread.terminate()
-                return False
-
-            #once syncing has finished do a health check on the cluster
-            mylog.step("Health check")
-            if check_cluster_health.Execute(mvip=mvip, username=username, password=password) == False:
-                mylog.error("The Cluster is not healthy")
-                healthThread.terminate()
-                return False
-
-            #if all is good add the BS drives back to the cluster
-            if add_drives.Execute(mvip=mvip, node_ips=node_ips, drive_slots=bs_drive_slot_list, username=username, password=password) == False:
-                mylog.error("There was an error trying to remove half the BS drives")
-                healthThread.terminate()
-                return False
+        #if all is good add the BS drives back to the cluster
+        if add_available_drives.Execute(mvip=mvip, username=username, password=password) == False:
+            mylog.error("There was an error trying to add the block drives back to the cluster")
+            healthThread.terminate()
+            return False
 
         #make sure cluster is healthy
         mylog.step("Health check")

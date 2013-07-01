@@ -44,9 +44,8 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
-import kvm_check_vm_health
+import kvm_check_vm_health_clientmon
 import check_cluster_health
-import kvm_list_vm_names
 import wait_syncing
 import add_available_drives
 
@@ -69,10 +68,10 @@ class KvmLargeScaleSliceDriveRemovalAction(ActionBase):
 
 
 
-    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, vmNames, waitTime=30):
+    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, waitTime=30):
         mylog.info("Started VM Health Thread")
         while True:
-            if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames, True) == False:
+            if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass, True) == False:
                 mylog.silence = False
                 mylog.error("The VMs are not healthy. Bad News")
             time.sleep(waitTime)
@@ -90,19 +89,13 @@ class KvmLargeScaleSliceDriveRemovalAction(ActionBase):
             mylog.error("The Cluster is not healthy to begin with")
             return False
 
-        vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=hostUser, host_pass=hostPass)
-        if vmNames == False:
-            mylog.error("Failed getting list of VM names")
-            return False
-
-
         mylog.step("Checking the VMs health")
-        if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmNames) == False:
+        if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
             mylog.error("The VMs are not healthy to begin with")
             return False
 
         waitTime = 30
-        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, vmNames, waitTime))
+        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, waitTime))
         healthThread.daemon = True
         healthThread.start()
 
@@ -169,7 +162,7 @@ class KvmLargeScaleSliceDriveRemovalAction(ActionBase):
             healthThread.terminate()
             return False
 
-        #if all is good add the BS drives back to the cluster
+        #if all is good add the slice drives back to the cluster
         if add_available_drives.Execute(mvip=mvip, username=username, password=password) == False:
             mylog.error("There was an error trying to add the slice drives back")
             healthThread.terminate()
@@ -200,17 +193,14 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
-    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes")
-    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes")
     parser.add_option("--node_count", type="int", dest="node_count", default=2, help="The number of nodes to remove all BS drives from")
-    parser.add_option("--nomaster", action="store_true", dest="nomaster", default=False, help="do not select the cluster master")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.ssh_user, options.ssh_pass, options.node_count, options.nomaster, options.debug):
+        if Execute(options.mvip, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.node_count, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
