@@ -2034,3 +2034,38 @@ class SfClient:
 
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
+
+    def IsHealthySilent(self):
+        if self.RemoteOs == OsType.Linux:
+
+            # Check if vdbench is running here
+            return_code, stdout, stderr = self.ExecuteCommand("ps -ef | grep -v grep | grep java | grep vdbench | wc -l")
+            vdbench_count = 0
+            try: vdbench_count = int(stdout.strip())
+            except ValueError: pass
+
+            # See if vdbenchd is in use
+            return_code, stdout, stderr = self.ExecuteCommand("if [ -f /opt/vdbench/last_vdbench_pid ]; then echo 'True'; else echo 'False'; fi")
+            vdbenchd = bool(stdout.strip())
+
+            # See if we have a vdbench last exit status
+            vdbench_exit = -1
+            return_code, stdout, stderr = self.ExecuteCommand("cat /opt/vdbench/last_vdbench_exit")
+            try: vdbench_exit = int(stdout.strip())
+            except ValueError:pass
+
+            # Use vdbench status to determine health
+            healthy = True
+            if vdbench_count > 0:
+                pass
+            elif not vdbenchd and vdbench_count <= 0:
+                healthy = False
+            elif vdbenchd and vdbench_exit == 0:
+                pass
+            else:
+                healthy = False
+
+            return healthy
+
+        else:
+            raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
