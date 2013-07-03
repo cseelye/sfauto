@@ -92,7 +92,7 @@ class CheckClientHealthAction(ActionBase):
         for client_ip in client_ips:
             results[thread_index] = False
             th = multiprocessing.Process(target=self._ClientThread, args=(client_ip, client_user, client_pass, results, thread_index))
-            th.start()
+            #th.start()
             self._threads.append(th)
             thread_index += 1
 
