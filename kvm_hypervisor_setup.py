@@ -73,7 +73,7 @@ class KvmHypervisorSetupAction(ActionBase):
         args)
 
 
-    def Execute(self, mvip, username, password, clientIP, clientUser, clientPass, nfsIP, mountPoint, nfsPath, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, clientIP=None, clientUser=sfdefaults.host_user, clientPass=sfdefaults.host_pass, nfsIP=sfdefaults.nfs_ip, mountPoint=sfdefaults.nfs_mount_point, nfsPath=sfdefaults.kvm_nfs_path, debug=False):
 
         self.ValidateArgs(locals())
 
@@ -139,12 +139,12 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="The IP address of the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster  [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster  [%default]")
-    parser.add_option("-c", "--client_ip", action="list", dest="client_ip", default=None, help="the IP address of the client")
+    parser.add_option("-c", "--client_ip", type="string", dest="client_ip", default=None, help="the IP address of the client")
     parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the client")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the client")
-    parser.add_option("--nfs_ip", type="string", dest="nfs_ip", default=None, help="the IP address of the nfs datastore")
-    parser.add_option("--nfs_path", type="string", dest="nfs_path", default=None, help="the path you want to mount from the nfs datastore")
-    parser.add_option("--mount_point", type="string", dest="mount_point", default=None, help="the location you want to mount the nfs datasore on the client, ex: /mnt/nfs")
+    parser.add_option("--nfs_ip", type="string", dest="nfs_ip", default=sfdefaults.nfs_ip, help="the IP address of the nfs datastore")
+    parser.add_option("--nfs_path", type="string", dest="nfs_path", default=sfdefaults.kvm_nfs_path, help="the path you want to mount from the nfs datastore")
+    parser.add_option("--mount_point", type="string", dest="mount_point", default=sfdefaults.nfs_mount_point, help="the location you want to mount the nfs datasore on the client, ex: /mnt/nfs")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
