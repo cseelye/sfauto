@@ -57,9 +57,9 @@ class KvmPoweroffVmsAction(ActionBase):
         mylog.info("Connecting to " + vm)
         try:
             if connection == "ssh":
-                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
             elif connection == "tcp":
-                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
                 return False

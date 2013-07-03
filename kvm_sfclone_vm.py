@@ -73,9 +73,9 @@ class KvmSfcloneVmAction(ActionBase):
         mylog.info("Connecting to " + vmhost)
         try:
             if connection == "ssh":
-                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmhost + "/system")
             elif connection == "tcp":
-                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
                 return False
