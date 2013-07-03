@@ -27,7 +27,7 @@
     </disk>
     <interface type="bridge">
       <mac />
-      <source bridge="virbr0" />
+      <source bridge="ClientNet" />
       <model type="virtio" />
       <address bus="0x00" domain="0x0000" function="0x0" slot="0x03" type="pci" />
     </interface>
