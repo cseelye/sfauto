@@ -49,6 +49,78 @@ class KvmListVmMacsAction(ActionBase):
             if args["connection"] != "tcp":
                 raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
 
+    def Get(self, vmhost=sfdefaults.vmhost_kvm, connection="ssh", csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+        """
+        List VMs and thier MAC addresses
+        """
+        self.ValidateArgs(locals())
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+        if bash or csv:
+            mylog.silence = True
+
+        mylog.info("Connecting to " + vmhost)
+        try:
+            if connection == "ssh":
+                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+            elif connection == "tcp":
+                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+            else:
+                mylog.error("There was an error connecting to libvirt on " + vmhost + " wrong connection type: " + connection)
+                return False
+
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+        if conn == None:
+            mylog.error("Failed to connect")
+            self.RaiseFailureEvent(message="Failed to connect")
+            return False
+
+        # Get a list of VMs
+        vm_list = []
+        try:
+            vm_ids = conn.listDomainsID()
+            running_vm_list = map(conn.lookupByID, vm_ids)
+            vm_list += running_vm_list
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+        try:
+            vm_ids = conn.listDefinedDomains()
+            stopped_vm_list = map(conn.lookupByName, vm_ids)
+            vm_list += stopped_vm_list
+        except libvirt.libvirtError as e:
+            mylog.error(str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+        vm_list = sorted(vm_list, key=lambda vm: vm.name())
+
+        for vm in vm_list:
+
+            # Find the VM alphabetically first MAC address from the XML config
+            vm_xml = ElementTree.fromstring(vm.XMLDesc(0))
+            mac_list = []
+            for node in vm_xml.findall("devices/interface/mac"):
+                mac_list.append(node.get("address"))
+            mac_list.sort()
+            mac = mac_list[0]
+
+            if csv or bash:
+                separator = ","
+                if bash:
+                    separator = " "
+                sys.stdout.write(vm.name() + separator + mac + "\n")
+                sys.stdout.flush()
+            else:
+                mylog.info("  " + vm.name() + " - " + mac)
+
+        return mac_list
+
+
+
     def Execute(self, vmhost=sfdefaults.vmhost_kvm, connection="ssh", csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         List VMs and thier MAC addresses
@@ -66,7 +138,7 @@ class KvmListVmMacsAction(ActionBase):
             elif connection == "tcp":
                 conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
             else:
-                mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
+                mylog.error("There was an error connecting to libvirt on " + vmhost + " wrong connection type: " + connection)
                 return False
 
         except libvirt.libvirtError as e:
