@@ -60,9 +60,9 @@ class KvmRemoveVmsAction(ActionBase):
         mylog.info("Connecting to " + vm)
         try:
             if connection == "ssh":
-                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
             elif connection == "tcp":
-                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
                 return False
@@ -99,12 +99,13 @@ class KvmRemoveVmsAction(ActionBase):
         mylog.info("Connecting to " + vm)
         try:
             if connection == "ssh":
-                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
             elif connection == "tcp":
-                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
-                return False        except libvirt.libvirtError as e:
+                return False        
+        except libvirt.libvirtError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
@@ -143,9 +144,9 @@ class KvmRemoveVmsAction(ActionBase):
         mylog.info("Connecting to " + vmhost)
         try:
             if connection == "ssh":
-                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmhost + "/system")
             elif connection == "tcp":
-                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
                 return False
