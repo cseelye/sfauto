@@ -100,6 +100,7 @@ class MountVolumesTestAction(ActionBase):
             mylog.error("There was an error partitioning the volume")
             return False
 
+        mylog.info("Path to the volume: /dev/disk/by-path/" + loc + "-part1")
         mylog.step("Formatting the volume ext4")
         retcode, stdout, stderr = client.ExecuteCommand("mkfs.ext4 -E nodiscard /dev/disk/by-path/" + loc + "-part1")
         mylog.debug("Retcode: " + str(retcode))
