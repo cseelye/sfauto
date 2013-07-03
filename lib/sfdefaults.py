@@ -55,6 +55,8 @@ vdbench_run_time = "800h"           # How long to run IO
 vdbench_interval = 10               # How often to report results
 vdbench_threads = 4                 # Queue depth per device
 vdbench_data_vaidation = True       # Use data validation
+nfs_ip = "192.168.154.7"            # The IP address of the main NFS datastore
+nfs_mount_point = "/mnt/nfs"        # The mount point for the NFS datastore
 email_notify = None                 # List of email addresses to notification
 email_from = "testscript@nothing"   # Email address to send notifications from
 smtp_server = "aspmx.l.google.com"  # SMTP server for sending email
@@ -63,16 +65,16 @@ host_user = "root"                  # Hypervisor host username
 host_pass = "password"              # Hypervisor host password
 vmhost_kvm = None                   # KVM hypervisor host
 kvm_qcow2_name = "kvm-ubuntu-gold.qcow2"    # KVM template name
+kvm_qcow2_path = nfs_mount_point + "/" + kvm_qcow2_name     # KVM qcow2 path
 kvm_nfs_path = "/templates/kvm-templates"   # KVM template path on nfs
 kvm_cpu_count = 1                   # KVM cpu count
 kvm_mem_size = 512                  # KVM memory size
 kvm_os = "linux"                    # KVM OS type
 kvm_clone_name = "KVM-clone"        # KVM Clone name
+kvm_network = "ClientNet"           # KVM network bridge
 vmhost_xen = None                   # XenServer hypervisor host
 xenapi_parallel_calls_thresh = 2    # Run multiple XenServer API operations in parallel if there are more than this many
 xenapi_parallel_calls_max = 5       # Run at most this many parallel operations with XenServer API
-nfs_ip = "192.168.154.7"            # The IP address of the main NFS datastore
-nfs_mount_point = "/mnt/nfs"        # The mount point for the NFS datastore
 
 # =============================================================================
 # Default Choices
