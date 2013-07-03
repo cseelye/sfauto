@@ -70,7 +70,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
 
 
 
-    def kvmCreateXML(self, cpuNumber, memorySize, vmName, rawPath):
+    def kvmCreateXML(self, cpuNumber, memorySize, vmName, rawPath, network):
         """
         Grabs template xml file for kvm and addes the given values
         used to create a new VM
@@ -89,6 +89,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
         vm_xml.find("currentMemory").text = str(memorySize)
         vm_xml.find("vcpu").text = str(cpuNumber)
         vm_xml.find("name").text = vmName
+        vm_xml.find("devices/interface/source").set("bridge", network)
         return vm_xml.getroot()
 
     def getIscsiPath(self, hypervisor):
@@ -111,8 +112,9 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
         return "/dev/disk/by-path/" + loc
 
 
-    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection="ssh", qcow2Path="/mnt/nfs/kvm-ubuntu-gold.qcow2", rawPath=None, vmName="kvm-ubuntu-gold-template", cpuCount=1, memorySize=512, osType="linux", debug=False):
+    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection="ssh", qcow2Path=sfdefaults.kvm_qcow2_path, rawPath=None, vmName="kvm-ubuntu-gold", cpuCount=sfdefaults.kvm_cpu_count, memorySize=sfdefaults.kvm_mem_size, osType=sfdefaults.kvm_os, network=sfdefaults.kvm_network, debug=False):
 
+        print qcow2Path
         self.ValidateArgs(locals())
 
         if debug:
@@ -165,7 +167,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
             return False
 
         #create the XML to import the VM
-        vm_xml = self.kvmCreateXML(cpuCount, memorySize, vmName, rawPath)
+        vm_xml = self.kvmCreateXML(cpuCount, memorySize, vmName, rawPath, network)
 
         #import VM
         try:
@@ -195,6 +197,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
             mylog.error("The VM has not powered on successfully")
             return False
 
+
         mylog.step("Now powering off the VM")
 
         try:
@@ -221,18 +224,19 @@ if __name__ == '__main__':
     parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_kvm, help="the management IP of the hypervisor [%default]")
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
-    parser.add_option("--qcow2_path", type="string", dest="qcow2_path", default=None, help="The path to the qcow2 file you want to clone")
+    parser.add_option("--qcow2_path", type="string", dest="qcow2_path", default=sfdefaults.kvm_qcow2_path, help="The path to the qcow2 file you want to clone")
     parser.add_option("--raw_path", type="string", dest="raw_path", default=None, help="The path to the raw volume. EX: /dev/disk/by-path/....")
-    parser.add_option("--cpu_count", type="int", dest="cpu_count", default=1, help="The number of virtural CPUs the VM should have")
-    parser.add_option("--memory_size", type="int", dest="memory_size", default=512, help="The size of memory in MB for the vm, default 512MB")
-    parser.add_option("--os_type", type="string", dest="os_type", default=None, help="The OS type of the VM")
+    parser.add_option("--cpu_count", type="int", dest="cpu_count", default=sfdefaults.kvm_cpu_count, help="The number of virtural CPUs the VM should have")
+    parser.add_option("--memory_size", type="int", dest="memory_size", default=sfdefaults.kvm_mem_size, help="The size of memory in MB for the vm, default 512MB")
+    parser.add_option("--os_type", type="string", dest="os_type", default=sfdefaults.kvm_os, help="The OS type of the VM")
+    parser.add_option("--network", type="string", dest="network", default=sfdefaults.kvm_network, help="The network connection for the VM. Default is ClientNet")
     parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vmhost, options.host_user, options.host_pass, options.connection, options.qcow2_path, options.raw_path, options.vm_name, options.cpu_count, options.memory_size, options.os_type, options.debug):
+        if Execute(options.vmhost, options.host_user, options.host_pass, options.connection, options.qcow2_path, options.raw_path, options.vm_name, options.cpu_count, options.memory_size, options.os_type, options.network, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
