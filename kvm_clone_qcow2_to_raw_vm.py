@@ -186,8 +186,8 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
             mylog.error("There was and error trying to power on the VM. Message: " + str(e))
             return False
 
-        mylog.step("Waiting 1 minute for the VM to boot")
-        time.sleep(60)
+        mylog.step("Waiting 2 minutes for the VM to boot")
+        time.sleep(120)
 
         [state, maxmem, mem, ncpu, cputime] = newvm.info()
         if state == libvirt.VIR_DOMAIN_RUNNING:
