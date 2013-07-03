@@ -59,7 +59,7 @@ from lib.action_base import ActionBase
 import kvm_complete_creation_test
 import kvm_hypervisor_setup
 import make_cluster
-import kvm_check_vm_health
+import kvm_check_vm_health_clientmon
 
 class KvmCompleteClusterSetupAction(ActionBase):
     class Events:
@@ -132,6 +132,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
         osType = "linux"
 
         qcow2Path = nfsMountPoint + "/" + qcow2Name
+        #qcow2Path = "/home/solidfire/kvm-test-gold.qcow2"
         sourceName = "kvm-ubuntu-gold"
 
         mylog.banner("Setting up VMs on hypervisor")
@@ -144,7 +145,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
         mylog.step("Waiting for 2 minutes for all the VMs to boot")
         time.sleep(120)
 
-        if kvm_check_vm_health.Execute(vmHost, hostUser, hostPass, vmRegex="clone") == False:
+        if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
             mylog.error("Not all the VMs are healthy")
             return False
 
