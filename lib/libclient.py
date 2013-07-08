@@ -65,6 +65,8 @@ class SfClient:
         mylog.error(self._log_prefix() + pMessage)
     def _passed(self, pMessage):
         mylog.passed(self._log_prefix() + pMessage)
+    def _step(self, pMessage):
+        mylog.step(self._log_prefix() + pMessage)
 
     def Connect(self, pClientIp, pUsername, pPassword):
         self.IpAddress = str(pClientIp).lower()
@@ -1941,7 +1943,7 @@ class SfClient:
 
     def IsHealthy(self):
         if self.RemoteOs == OsType.Linux:
-            self._info("Checking health")
+            #self._step("Checking health")
 
             # alphabetically first MAC
             return_code, stdout, stderr = self.ExecuteCommand("ifconfig | grep HWaddr | awk '{print $5}' | sed 's/://g' | sort | head -1")
@@ -2003,6 +2005,7 @@ class SfClient:
             try: vdbench_exit = int(stdout.strip())
             except ValueError:pass
 
+            self._step("Checking health")
             self._info("Hostname " + self.Hostname + " MAC " + unique_id)
             self._info("Uptime " + str(uptime))
 
