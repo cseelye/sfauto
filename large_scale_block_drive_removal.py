@@ -40,12 +40,12 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
-import kvm_check_vm_health_clientmon
+import check_vm_health_clientmon
 import check_cluster_health
 import wait_syncing
 import add_available_drives
 
-class KvmLargeScaleBlockDriveRemovalAction(ActionBase):
+class LargeScaleBlockDriveRemovalAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -54,26 +54,29 @@ class KvmLargeScaleBlockDriveRemovalAction(ActionBase):
 
     def __init__(self):
         super(self.__class__, self).__init__(self.__class__.Events)
+        self.Healthy = multiprocessing.Value('b', True)
 
 
     def ValidateArgs(self, args):
-        libsf.ValidateArgs({"vmHost" : libsf.IsValidIpv4Address,
-                            "hostUser" : None,
-                            "hostPass" : None},
+        libsf.ValidateArgs({"clientUser" : None,
+                            "clientPass" : None,
+                            "threadMax" : libsf.IsInteger},
             args)
 
-    def _checkVMHealthThread(self, vmHost, hostUser, hostPass, waitTime=30):
+    def _checkVMHealthThread(self, vmType, clientUser, clientPass, threadMax, waitTime=30):
         mylog.info("Started VM Health Thread")
         while True:
-            if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass, True) == False:
-                mylog.error("The VMs are not healthy. Bad News")
+            if check_vm_health_clientmon.Execute(vmType=vmType, clientUser=clientUser, clientPass=clientPass, noLogs=True, threadMax=threadMax) == False:
+                self.Healthy.value = False
             time.sleep(waitTime)
 
 
 
-    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, nodeSshUser=sfdefaults.ssh_user, nodeSshPass=sfdefaults.ssh_pass, numberOfNodes=2, nomaster=True, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, vmType=None, clientUser=sfdefaults.client_user, clientPass=sfdefaults.client_pass, nodeSshUser=sfdefaults.ssh_user, nodeSshPass=sfdefaults.ssh_pass, numberOfNodes=2, nomaster=True, threadMax=sfdefaults.parallel_max, debug=False):
 
         self.ValidateArgs(locals())
+
+
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
@@ -83,13 +86,12 @@ class KvmLargeScaleBlockDriveRemovalAction(ActionBase):
             return False
 
         mylog.step("Checking the VMs health")
-        if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
+        if check_vm_health_clientmon.Execute(vmType=vmType, clientUser=clientUser, clientPass=clientPass, threadMax=threadMax) == False:
             mylog.error("The VMs are not healthy to begin with")
             return False
 
-        waitTime = 30
-        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmHost, hostUser, hostPass, waitTime))
-        healthThread.daemon = True
+        waitTime = 60
+        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmType, clientUser, clientPass, threadMax, waitTime))
         healthThread.start()
 
 
@@ -166,6 +168,12 @@ class KvmLargeScaleBlockDriveRemovalAction(ActionBase):
             mylog.error("The Cluster is not healthy")
             healthThread.terminate()
             return False
+
+        #a check to report if any of the health threads failed
+        if self.Healthy.value == False:
+            mylog.warning("The VMs were not healthy thoughout the entire test")
+            healthThread.terminate()
+            return False
         #done
         mylog.passed("The cluster passed the test")
         healthThread.terminate()
@@ -180,9 +188,9 @@ if __name__ == '__main__':
 
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
 
-    parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_kvm, help="the management IP of the KVM hypervisor [%default]")
-    parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
-    parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
+    parser.add_option("--vm_type", type="string", dest="vm_type", default=sfdefaults.vmhost_kvm, help="The type of VM to check, ex: KVM")
+    parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the client [%default]")
+    parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the client [%default]")
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
@@ -190,13 +198,14 @@ if __name__ == '__main__':
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes")
     parser.add_option("--node_count", type="int", dest="node_count", default=2, help="The number of nodes to remove all BS drives from")
     parser.add_option("--nomaster", action="store_true", dest="nomaster", default=False, help="do not select the cluster master")
+    parser.add_option("--thread_max", type="int", dest="thread_max", default=sfdefaults.parallel_max, help="The number of threads to use when checking a client's health")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.ssh_user, options.ssh_pass, options.node_count, options.nomaster, options.debug):
+        if Execute(options.mvip, options.username, options.password, options.vm_type, options.client_user, options.client_pass, options.ssh_user, options.ssh_pass, options.node_count, options.nomaster, options.thread_max, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
