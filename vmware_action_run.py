@@ -114,8 +114,6 @@ class VmwareActionRunAction(ActionBase):
             mylog.info("The accepted scripts are:\n" + "\n".join(vmware_perl_files))
             return False
 
-        print os.getcwd()
-
         try:
             script = ChildScript("perl -Ivmware_perl " + action_name + " " + script_args)
             result = script.Run()
