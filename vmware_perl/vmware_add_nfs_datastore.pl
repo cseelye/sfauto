@@ -104,7 +104,7 @@ my $newDatastore;
 eval 
 {
     my $host_nfs_spec = HostNasVolumeSpec->new(
-                                    accessMode => "readOnly",
+                                    accessMode => "readWrite",
                                     localPath => $nfs_local_path,
                                     remoteHost => $nfs_address,
                                     remotePath => $nfs_path);
@@ -130,7 +130,7 @@ if ($@)
 # Send the info back to parent script if requested
 if (defined $result_address)
 {
-    libsf::SendResultToParent(result_address => $result_address, result => $newDatastore);
+    libsf::SendResultToParent(result_address => $result_address, result => 1);
 }
 
 mylog::pass("The new NFS datastore has been added");
