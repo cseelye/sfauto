@@ -68,7 +68,7 @@ class CreateVolumesAction(ActionBase):
                             },
                     args)
 
-    def Execute(self, volume_size, volume_count, volume_prefix=None, volume_start=1, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=None, account_id=0, wait=0, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, volume_size, volume_count, volume_name_in=None, volume_prefix=None, volume_start=1, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=None, account_id=0, wait=0, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Create volumes
         """
@@ -110,6 +110,8 @@ class CreateVolumesAction(ActionBase):
         created = 0
         for vol_num in range(volume_start, volume_start + volume_count):
             volume_name = volume_prefix + "%05d" % vol_num
+            if volume_name_in and volume_count == 1:
+                volume_name = volume_name_in
             params = {}
             params["name"] = volume_name
             params["accountID"] = account_id
@@ -151,6 +153,7 @@ if __name__ == '__main__':
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
     parser.add_option("--volume_prefix", type="string", dest="volume_prefix", default=None, help="the prefix for the volume (volume name will be volume prefix + %05d)")
+    parser.add_option("--volume_name", type="string", dest="volume_name", default=None, help="the name of the volume if only creating one volume")
     parser.add_option("--volume_count", type="int", dest="volume_count", default=None, help="the number of volumes to create")
     parser.add_option("--volume_size", type="int", dest="volume_size", default=None, help="the volume size in GB")
     parser.add_option("--volume_start", type="int", dest="volume_start", default=1, help="the volume number to start from")
@@ -166,7 +169,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.volume_size, options.volume_count, options.volume_prefix, options.volume_start, options.enable_512, options.min_iops, options.max_iops, options.burst_iops, options.account_name, options.account_id, options.wait, options.mvip, options.username, options.password, options.debug):
+        if Execute(options.volume_size, options.volume_count, options.volume_name, options.volume_prefix, options.volume_start, options.enable_512, options.min_iops, options.max_iops, options.burst_iops, options.account_name, options.account_id, options.wait, options.mvip, options.username, options.password, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
