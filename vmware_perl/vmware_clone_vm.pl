@@ -49,6 +49,16 @@ my %opts = (
         help => "Clone to a thin provisioned VMDK instead of thick provisioned",
         required => 0,
     },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
+    },
+    template => {
+        type => "",
+        help => "Make clone a template",
+        required => 0,
+    },
     debug => {
         type => "",
         help => "Display more verbose messages",
@@ -72,7 +82,9 @@ my $dest_datastore_name = Opts::get_option('datastore');
 my $dest_host_name = Opts::get_option('vmhost');
 my $dest_folder_name = Opts::get_option('folder');
 my $enable_debug = Opts::get_option('debug');
+my $template = Opts::get_option('template');
 my $thin_prov = Opts::get_option('thin');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 # Turn on debug events if requested
@@ -162,12 +174,24 @@ else
                                 transform => VirtualMachineRelocateTransformation->new('flat'),
     );
 }
-my $clone_spec = VirtualMachineCloneSpec->new(
+my $clone_spec;
+if($template)
+{
+
+    $clone_spec = VirtualMachineCloneSpec->new(
+                                powerOn => 0,
+                                template => 1,
+                                location => $relocate_spec
+    );
+}
+else
+{
+    $clone_spec = VirtualMachineCloneSpec->new(
                             powerOn => 0,
                             template => 0,
                             location => $relocate_spec
-);
-
+    );
+}
 mylog::info("Starting clone...");
 eval
 {
@@ -189,5 +213,15 @@ if ($@)
     exit 1;
 }
 
+<<<<<<< HEAD
 mylog::pass("Successfully cloned $source_vm_name to $clone_name");
+=======
+mylog::pass("Sucessfully cloned $source_vm_name to $clone_name");
+
+# Send the info back to parent script if requested
+if (defined $result_address)
+{
+    libsf::SendResultToParent(result_address => $result_address, result => 1);
+}
+>>>>>>> ec1c333... vmware_clone_vm.pl: added result address option for ZMQ server, added option for cloning as a template
 exit 0;
