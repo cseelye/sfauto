@@ -25,6 +25,11 @@ my %opts = (
         help => "The hostname/IP of the host to create datastores on",
         required => 1,
     },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
+    },
     debug => {
         type => "",
         help => "Display more verbose messages",
@@ -44,6 +49,7 @@ my $vsphere_server = Opts::get_option("mgmt_server");
 Opts::set_option("server", $vsphere_server);
 my $host_name = Opts::get_option('vmhost');
 my $enable_debug = Opts::get_option('debug');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 # Turn on debug events if requested
@@ -116,6 +122,7 @@ for my $disk (@{$storage_manager->storageDeviceInfo->scsiLun})
 }
 
 # Find the disks without datastores and create them
+my @return_disk_list;
 eval
 {
     mylog::debug("Getting a list of available disks");
@@ -137,6 +144,7 @@ eval
         $datastore_name = pop(@pieces) . "." . $datastore_name;
 
         mylog::info("Creating datastore $datastore_name on disk $canonical_name...");
+        push (@return_disk_list, $datastore_name);
         $create_option->spec->vmfs->volumeName($datastore_name);
         my $newDatastore = $datastore_manager->CreateVmfsDatastore(spec => $create_option->spec);
     }
@@ -150,5 +158,14 @@ if ($@)
 
 
 
+<<<<<<< HEAD
 mylog::pass("Successfully created datastores on $host_name");
+=======
+mylog::pass("Sucessfully created datastores on $host_name");
+# Send the info back to parent script if requested
+if (defined $result_address)
+{
+    libsf::SendResultToParent(result_address => $result_address, result => \@return_disk_list);
+}
+>>>>>>> 9e226db... vmware_create_datastores.pl: added option for result address for ZMQ server, returns list of datastore names
 exit 0;
