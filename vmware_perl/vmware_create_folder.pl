@@ -2,6 +2,7 @@
 use strict;
 use VMware::VIRuntime;
 use libsf;
+use Data::Dumper;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -30,6 +31,11 @@ my %opts = (
         required => 0,
         default => "vm"
     },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
+    },
     debug => {
         type => "",
         help => "Display more verbose messages",
@@ -50,6 +56,7 @@ Opts::set_option("server", $vsphere_server);
 my $folder_name = Opts::get_option('folder');
 my $parent_name = Opts::get_option('parent');
 my $enable_debug = Opts::get_option('debug');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 # Turn on debug events if requested
@@ -75,11 +82,11 @@ if ($@)
 eval
 {
     # Find the source VM
-    mylog::info("Searching for parent folder");
+    mylog::info("Searching for parent folder '$parent_name'");
     my $parent = Vim::find_entity_view(view_type => 'Folder', filter => {'name' => qr/^$parent_name$/i});
     if (!$parent)
     {
-        mylog::error("Could not find folder '$parent'");
+        mylog::error("Could not find folder '$parent_name'");
         exit 1;
     }
 
@@ -113,4 +120,9 @@ if ($@)
 }
 
 mylog::pass("Created folder $folder_name");
+# Send the info back to parent script if requested
+if (defined $result_address)
+{
+    libsf::SendResultToParent(result_address => $result_address, result => $folder_name);
+}
 exit 0;
