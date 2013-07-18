@@ -6,7 +6,7 @@ use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_user");
+Opts::set_option("username", "script_usr");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server
@@ -185,7 +185,7 @@ foreach my $vm_mo (@vm_list)
             {
                 foreach my $ip (@{$net->ipAddress})
                 {
-                    if ($ip =~ /^172/)
+                    if ($ip =~ /^192/)
                     {
                         $vm_ip = $ip;
                         last;
@@ -201,7 +201,7 @@ foreach my $vm_mo (@vm_list)
         # Skip if we couldn't find an IP - either the VM doesn't have one, it's not fully booted, VMware Tools not running, etc.
         if (!$vm_ip)
         {
-            mylog::warn("$vm_name is powered on but has no 172 IP address");
+            mylog::warn("$vm_name is powered on but has no 192 IP address");
             next;
         }
         $vms{$vm_name} = $vm_ip;
@@ -234,7 +234,7 @@ else
     foreach my $vm_name (sort keys %vms)
     {
         my $vm_ip = $vms{$vm_name};
-        mylog::info("  $vm_name - $vm_ip");
+        mylog::info("  $vm_ip - $vm_name");
     }
 }
 # Send the info back to parent script if requested

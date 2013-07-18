@@ -6,7 +6,7 @@ use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_user");
+Opts::set_option("username", "script_usr");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server

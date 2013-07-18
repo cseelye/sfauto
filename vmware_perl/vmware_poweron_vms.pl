@@ -6,7 +6,7 @@ use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_user");
+Opts::set_option("username", "script_usr");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server
@@ -60,6 +60,11 @@ my %opts = (
         help => "The number of matching virtual machines to power on",
         required => 0,
     },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
+    },
     debug => {
         type => "",
         help => "Display more verbose messages",
@@ -85,6 +90,7 @@ my $recurse = Opts::get_option('recurse');
 my $vm_name = Opts::get_option('vm_name');
 my $vm_regex = Opts::get_option('vm_regex');
 my $vm_count = Opts::get_option('vm_count');
+my $result_address = Opts::get_option('result_address');
 my $enable_debug = Opts::get_option('debug');
 Opts::validate();
 
@@ -145,11 +151,23 @@ foreach my $vm_mor (@vm_list)
 if ($error > 0)
 {
     mylog::error("Failed to power on all VMs");
+    # Send the info back to parent script if requested
+    if (defined $result_address)
+    {
+        libsf::SendResultToParent(result_address => $result_address, result => 0);
+    }
     exit 1;
 }
 elsif (scalar(@vm_list) > 1)
 {
     mylog::pass("Successfully powered on all VMs");
 }
+
+# Send the info back to parent script if requested
+if (defined $result_address)
+{
+    libsf::SendResultToParent(result_address => $result_address, result => 1);
+}
+
 exit 0;
 

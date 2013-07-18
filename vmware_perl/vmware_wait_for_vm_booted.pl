@@ -5,7 +5,7 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_user");
+Opts::set_option("username", "script_usr");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server
@@ -23,6 +23,11 @@ my %opts = (
         type => "=s",
         help => "The name of the virtual machine to wait for",
         required => 1,
+    },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
     },
     debug => {
         type => "",
@@ -43,6 +48,7 @@ my $vsphere_server = Opts::get_option("mgmt_server");
 Opts::set_option("server", $vsphere_server);
 my $vm_name = Opts::get_option('vm_name');
 my $enable_debug = Opts::get_option('debug');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 # Turn on debug events if requested
@@ -135,5 +141,10 @@ if ($@)
 }
 
 mylog::pass("$vm_name is fully booted and healthy");
+# Send the info back to parent script if requested
+if (defined $result_address)
+{
+    libsf::SendResultToParent(result_address => $result_address, result => 1);
+}
 exit 0;
 

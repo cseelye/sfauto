@@ -5,7 +5,7 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_user");
+Opts::set_option("username", "script_usr");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server
@@ -34,7 +34,12 @@ my %opts = (
         type => "=s",
         help => "The SSH password for the ESX host",
         required => 0,
-        default => "password",
+        default => "solidfire",
+    },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
     },
     debug => {
         type => "",
@@ -58,6 +63,7 @@ my $vm_name = Opts::get_option('vm_name');
 my $enable_debug = Opts::get_option('debug');
 my $ssh_user = Opts::get_option('host_user');
 my $ssh_pass = Opts::get_option('host_pass');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 # Turn on debug events if requested

@@ -6,7 +6,7 @@ use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_user");
+Opts::set_option("username", "script_usr");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server
@@ -60,6 +60,11 @@ my %opts = (
         help => "The number of matching virtual machines to power off",
         required => 0,
     },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
+    },
     debug => {
         type => "",
         help => "Display more verbose messages",
@@ -86,6 +91,7 @@ my $vm_name = Opts::get_option('vm_name');
 my $vm_regex = Opts::get_option('vm_regex');
 my $vm_count = Opts::get_option('vm_count');
 my $enable_debug = Opts::get_option('debug');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 # Turn on debug events if requested
@@ -149,6 +155,11 @@ if ($error > 0)
 }
 elsif (scalar(@vm_list) > 1)
 {
+    # Send the info back to parent script if requested
+    if (defined $result_address)
+    {
+        libsf::SendResultToParent(result_address => $result_address, result => 1);
+    }
     mylog::pass("Successfully powered off all VMs");
 }
 exit 0;

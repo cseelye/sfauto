@@ -5,7 +5,7 @@ use libsf;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_user");
+Opts::set_option("username", "script_usr");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server
@@ -23,6 +23,11 @@ my %opts = (
         type => "=s",
         help => "The name of the datastore to unmount",
         required => 1,
+    },
+    result_address => {
+        type => "=s",
+        help => "Address of a ZMQ server listening for results (when run as a child process)",
+        required => 0,
     },
     debug => {
         type => "",
@@ -43,6 +48,7 @@ my $vsphere_server = Opts::get_option("mgmt_server");
 Opts::set_option("server", $vsphere_server);
 my $datastore_name = Opts::get_option('datastore');
 my $enable_debug = Opts::get_option('debug');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 # Turn on debug events if requested
@@ -124,5 +130,9 @@ if ($@)
     mylog::error(ref($fault->name) . ": " . $fault->fault_string);
     exit 1;
 }
-
+# Send the info back to parent script if requested
+if (defined $result_address)
+{
+    libsf::SendResultToParent(result_address => $result_address, result => 1);
+}
 exit 0;
