@@ -37,7 +37,6 @@ try:
     import ssh
 except ImportError:
     import paramiko as ssh
-import zmq
 import shlex
 
 class SfError(Exception):
@@ -135,6 +134,8 @@ class ChildScript(object):
     """
 
     def __init__(self, command, timeout=600):
+        import zmq
+
         self.cmd = command
         self.timeout = timeout
         self.run_listener = True
