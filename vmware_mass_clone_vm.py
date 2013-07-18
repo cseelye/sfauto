@@ -77,6 +77,21 @@ class VmwareMassCloneVmAction(ActionBase):
         script_args = "--mgmt_server=" + mgmtServer + " --vmhost=" + vmHost
         if debug:
             script_args += " --debug"
+        script = ChildScript("perl -Ivmware_perl vmware_perl/" + action_name + " " + script_args, timeout=1200)
+        result = script.Run()
+        if script.returncode != 0:
+            return False
+        return result
+
+    def GetVmSize(self, mgmtServer, vmName, debug):
+        """  
+        Calls the perl script to clone a source vm onto a datastore
+        """
+
+        action_name = "vmware_get_vm_disk_size.pl"
+        script_args = "--mgmt_server=" + mgmtServer + " --vm_name=" + vmName + " --memory"
+        if debug:
+            script_args += " --debug"
         script = ChildScript("perl -Ivmware_perl vmware_perl/" + action_name + " " + script_args)
         result = script.Run()
         if script.returncode != 0:
@@ -152,12 +167,22 @@ class VmwareMassCloneVmAction(ActionBase):
                 return False
 
 
-        
+        volumeSize = self.GetVmSize(mgmtServer, sourceName, debug)
+        if volumeSize == False:
+            mylog.warning("Could not get volume size of " + sourceName + ". Defaulting to 65 GB")
+            volumeSize = 65
+        else:
+            volumeSize = int(volumeSize)
+            volumeSize /= 1024
+            volumeSize /= 1024
+            volumeSize *= 2
+        if volumeSize < 65:
+            volumeSize = 65
 
         #create volumes
         mylog.step("Creating volumes with prefix: " + cloneName)
         cloneName += "-"
-        if create_volumes.Execute(mvip=mvip, username=username, password=password, volume_size=65, volume_count=vmCount, volume_prefix=cloneName, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=accountName) == False:
+        if create_volumes.Execute(mvip=mvip, username=username, password=password, volume_size=volumeSize, volume_count=vmCount, volume_prefix=cloneName, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=accountName) == False:
             mylog.error("Unable to create volumes with prefix " + cloneName + " on " + mvip)
             return False
 
