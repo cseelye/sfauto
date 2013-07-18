@@ -75,6 +75,13 @@ kvm_network = "ClientNet"           # KVM network bridge
 vmhost_xen = None                   # XenServer hypervisor host
 xenapi_parallel_calls_thresh = 2    # Run multiple XenServer API operations in parallel if there are more than this many
 xenapi_parallel_calls_max = 5       # Run at most this many parallel operations with XenServer API
+esx_vm_count = 40                   # Number of VMs to make
+esx_nfs_path = "/templates/esx50-templates"         # Path of ESX images on NFS Datastore
+esx_nfs_local_path = "ESX-Templates-NFS"            # Name of the NFS Datastore
+esx_template_path = "ubuntu-template-vdbench.vmtx"  # Path to the template VM image on NFS Datastore
+esx_parent_folder = "Test-VMs"                      # Parent folder for test VMS
+esx_mgmt_server = "192.168.144.20"                  # Mgmt Server for ESXi
+esx_vmhost = "192.168.135.50"                       # VM host for ESXi
 
 # =============================================================================
 # Default Choices
