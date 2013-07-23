@@ -53,7 +53,7 @@ import power_off_node
 import power_on_node
 import get_node_ipmi_ip
 
-class StressNodeFailSequentialAction(ActionBase):
+class StressNodefailSequentialAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -195,7 +195,7 @@ class StressNodeFailSequentialAction(ActionBase):
                     return False
 
                 #wait for the services to be decommissioned and synced out of the cluster
-                log.step("Waiting for 10 minutes")
+                mylog.step("Waiting for 10 minutes")
                 time.sleep(600)
 
                 #wait for faults to clear
