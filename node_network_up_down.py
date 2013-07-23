@@ -112,8 +112,8 @@ if __name__ == '__main__':
     # Parse command line arguments
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
     parser.add_option("--node_ip", type="string", dest="nodeIP", default=None, help="the IP address of the node")
-    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the node")
-    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the node")
+    parser.add_option("-u", "--username", type="string", dest="username", default=sfdefaults.username, help="the admin account for the node")
+    parser.add_option("-p", "--password", type="string", dest="password", default=sfdefaults.password, help="the admin password for the node")
     parser.add_option("--interface", type="string", dest="interface", default=None, help="Which network interface to take up or down, use: '10g' or '1g'")
     parser.add_option("--action", type="string", dest="action", default=None, help="Take the network interface up or down, use: 'up' or 'down'")
     parser.add_option("--debug", action="store_true", default=False, dest="debug", help="display more verbose messages")
