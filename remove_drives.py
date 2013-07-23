@@ -34,6 +34,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
+import wait_syncing
 
 class RemoveDrivesAction(ActionBase):
     class Events:
@@ -54,7 +55,7 @@ class RemoveDrivesAction(ActionBase):
                             "username" : None,
                             "password" : None,
                             "node_ips" : lambda x: True if not x else libsf.IsValidIpv4AddressList(x),
-                            "drive_slots" : lambda x: True if not x else libsf.IsIntegerList(x)
+                            #"drive_slots" : lambda x: True if not x else libsf.IsIntegerList(x)
                             },
             args)
 
@@ -62,13 +63,18 @@ class RemoveDrivesAction(ActionBase):
         """
         Remove drives from the cluster and wait for syncing
         """
-        if drive_slots == None:
-            drive_slots = []
-        if node_ips == None:
-            node_ips = []
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
+
+        if drive_slots == None and node_ips == None:
+            mylog.error("You need specify drive_slots or node_ips")
+            return False
+
+        # if drive_slots == None:
+        #     drive_slots = []
+        if node_ips == None:
+            node_ips = []
 
         mylog.info("Getting a list of nodes/drives")
         nodeip2nodeid = dict()
@@ -100,13 +106,21 @@ class RemoveDrivesAction(ActionBase):
                     self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
                 for do in drive_list["drives"]:
-                    if (do["status"] == "active" and str(node_id) == str(do["nodeID"])) and int(do["slot"]) in drive_slots:
-                        drives2remove.append(int(do["driveID"]))
-                        mylog.info("  Removing driveID " + str(do["driveID"]) + " from slot " + str(do["slot"]))
-                if len(drives2remove) != len(drive_slots):
-                    mylog.error("Could not find the correct list of drives to remove (check that specified drives are active)")
-                    self.RaiseFailureEvent(message="Could not find the correct list of drives to remove (check that specified drives are active)")
-                    return False
+                    print len(drive_slots)
+                    if drive_slots == None:
+                        if do["status"] == "active" and str(node_id) == str(do["nodeID"]):
+                            drives2remove.append(int(do["driveID"]))
+                            mylog.info("  Removing driveID " + str(do["driveID"]) + " from slot " + str(do["slot"]))
+                    else:
+                        if (do["status"] == "active" and str(node_id) == str(do["nodeID"])) and int(do["slot"]) in drive_slots:
+                            drives2remove.append(int(do["driveID"]))
+                            mylog.info("  Removing driveID " + str(do["driveID"]) + " from slot " + str(do["slot"]))
+                if drive_slots != None:
+
+                    if len(drives2remove) != len(drive_slots):
+                        mylog.error("Could not find the correct list of drives to remove (check that specified drives are active)")
+                        self.RaiseFailureEvent(message="Could not find the correct list of drives to remove (check that specified drives are active)")
+                        return False
 
                 # Remove the drives
                 self._RaiseEvent(self.Events.BEFORE_REMOVE)
@@ -152,14 +166,19 @@ class RemoveDrivesAction(ActionBase):
                     self.RaiseFailureEvent(message=str(e), exception=e)
                     return False
                 for do in drives_obj["drives"]:
-                    if (do["status"] == "active" and str(node_id) == str(do["nodeID"])) and int(do["slot"]) in drive_slots:
-                        drives2remove.append(int(do["driveID"]))
-                        mylog.info("  Removing driveID " + str(do["driveID"]) + " from slot " + str(do["slot"]))
-
-            if len(drives2remove) != len(drive_slots) * len(node_ips):
-                mylog.error("Could not find the correct list of drives to remove (check that specified drives are active)")
-                self.RaiseFailureEvent(message="Could not find the correct list of drives to remove (check that specified drives are active)")
-                return False
+                    if drive_slots != None:
+                        if (do["status"] == "active" and str(node_id) == str(do["nodeID"])) and int(do["slot"]) in drive_slots:
+                            drives2remove.append(int(do["driveID"]))
+                            mylog.info("  Removing driveID " + str(do["driveID"]) + " from slot " + str(do["slot"]))
+                    else:
+                        if (do["status"] == "active" and str(node_id) == str(do["nodeID"])):
+                            drives2remove.append(int(do["driveID"]))
+                            mylog.info("  Removing driveID " + str(do["driveID"]) + " from slot " + str(do["slot"]))
+            if drive_slots != None:
+                if len(drives2remove) != len(drive_slots) * len(node_ips):
+                    mylog.error("Could not find the correct list of drives to remove (check that specified drives are active)")
+                    self.RaiseFailureEvent(message="Could not find the correct list of drives to remove (check that specified drives are active)")
+                    return False
 
             # Remove the drives
             self._RaiseEvent(self.Events.BEFORE_REMOVE)
@@ -171,19 +190,10 @@ class RemoveDrivesAction(ActionBase):
 
             self._RaiseEvent(self.Events.BEFORE_SYNC)
             mylog.info("Waiting for syncing")
-            time.sleep(60)
-            try:
-                # Wait for bin syncing
-                while libsf.ClusterIsBinSyncing(mvip, username, password):
-                    time.sleep(30)
-                # Wait for slice syncing
-                while libsf.ClusterIsSliceSyncing(mvip, username, password):
-                    time.sleep(30)
-            except libsf.SfError as e:
-                mylog.error("Failed to wait for syncing - " + str(e))
-                self.RaiseFailureEvent(message=str(e), exception=e)
+            time.sleep(30)
+            if wait_syncing.Execute(mvip=mvip, username=username, password=password) == False:
+                mylog.error("Waiting for syncing to complete timed out")
                 return False
-            self._RaiseEvent(self.Events.AFTER_SYNC)
 
         mylog.passed("Finished removing drives")
         self._RaiseEvent(self.Events.AFTER_REMOVE)
