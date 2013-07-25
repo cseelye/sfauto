@@ -10,7 +10,16 @@ import time
 import libsfvolgroup
 import libsfaccount
 import libsfnode
+import libsfclusterpair
 import sfdefaults
+
+class StartClusterPairInfo(object):
+    def __init__(self, jsonResult=None):
+        self.ID = 0
+        self.key = ""
+        if jsonResult:
+            self.key = jsonResult["key"]
+            self.ID = jsonResult["clusterPairID"]
 
 class ClusterVersion(object):
     """
@@ -91,7 +100,6 @@ class ClusterVersion(object):
             return self.CompareTwoVersions(versionOne, versionTwo)
 
 #end ClusterVersion Class
-
 
 class ClusterTestInfo(object):
     """
@@ -879,3 +887,91 @@ class SFCluster(object):
         result = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterCapacity", {})
         return result["clusterCapacity"]["usedSpace"]
 
+
+    def StartClusterPairing(self):
+        """
+        Start a cluster pair
+
+        Returns:
+            A StartClusterPairInfo object
+        """
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "StartClusterPairing", {}, ApiVersion=6.0)
+        return StartClusterPairInfo(jsonResult=result)
+
+    def CompleteClusterPairing(self, pairingKey):
+        """
+        Complete a cluster pair
+        """
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "CompleteClusterPairing", {"key" : pairingKey}, ApiVersion=6.0)
+        return True
+
+    def RemoveClusterPairing(self, clusterPairID):
+        """
+        Delete a cluster pair
+        """
+        libsf.CallApiMethod(self.mvip, self.username, self.password, "RemoveClusterPair", {"clusterPairID" : clusterPairID}, ApiVersion=6.0)
+
+    def FindClusterPairID(self, clusterPairUUID=None, remoteClusterName=None):
+        """
+        Get the ID of a cluster pair with a given UUID or cluster name
+
+        Args:
+            clusterPairUUID: the UUID of the cluster pair to find
+            remoteClusterName: the name of paired cluster to find
+
+        Returns:
+            An integer containing the cluster pair ID
+        """
+        pair = self.FindClusterPair(clusterPairUUID, remoteClusterName)
+        return pair.ID
+
+    def FindClusterPair(self, clusterPairID=0, clusterPairUUID=None, remoteClusterMVIP=None, remoteClusterName=None):
+        """
+        Find the cluster pair with the given ID, UUID or cluster name
+
+        Args:
+            clusterPairID: the ID of the cluster pair to find
+            clusterPairUUID: the UUID of the cluster pair to find
+            remoteClusterName: the name of paired cluster to find
+
+        Returns:
+            An SFClusterPair object
+        """
+        if clusterPairID <=0 and not clusterPairUUID and not remoteClusterMVIP and not remoteClusterName:
+            raise libsf.SfArgumentError("Please specify either clusterPairID, clusterPairUUID, remoteClusterMVIP or remoteClusterName")
+
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListClusterPairs", {}, ApiVersion=6.0)
+
+        if clusterPairID > 0:
+            for pair in result["clusterPairs"]:
+                if pair["clusterPairID"] == clusterPairID:
+                    return libsfclusterpair.SFClusterPair(pair, self.mvip, self.username, self.password)
+                raise libsf.SfUnknownObjectError("Could not find pair on " + self.mvip + " with ID " + str(clusterPairID))
+        elif clusterPairUUID:
+            for pair in result["clusterPairs"]:
+                if pair["clusterPairUUID"] == clusterPairUUID:
+                    return libsfclusterpair.SFClusterPair(pair, self.mvip, self.username, self.password)
+                raise libsf.SfUnknownObjectError("Could not find pair on " + self.mvip + " with UUID " + str(clusterPairUUID))
+        elif remoteClusterMVIP:
+            for pair in result["clusterPairs"]:
+                if pair["mvip"] == remoteClusterMVIP:
+                    return libsfclusterpair.SFClusterPair(pair, self.mvip, self.username, self.password)
+            raise libsf.SfUnknownObjectError("Could not find pair on " + self.mvip + " with remote cluster MVIP " + str(remoteClusterMVIP))
+        elif remoteClusterName:
+            for pair in result["clusterPairs"]:
+                if pair["clusterName"] == remoteClusterName:
+                    return libsfclusterpair.SFClusterPair(pair, self.mvip, self.username, self.password)
+            raise libsf.SfUnknownObjectError("Could not find pair on " + self.mvip + " with cluster name " + str(remoteClusterName))
+
+    def ListClusterPairs(self):
+        """
+        Get the list of all cluster pairs in this cluster
+
+        Returns:
+            An array of SFClsuterPair objects
+        """
+        all_pairs = []
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListClusterPairs", {}, ApiVersion=6.0)
+        for pair_json in result["clusterPairs"]:
+            all_pairs.append(libsfclusterpair.SFClusterPair(pair_json, self.mvip, self.username, self.password))
+        return all_pairs
