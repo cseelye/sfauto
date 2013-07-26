@@ -23,7 +23,6 @@ import re
 import os, subprocess
 import commands
 import inspect
-import curses
 import threading
 import string
 import traceback
@@ -321,21 +320,20 @@ class ColorizingStreamHandler(logging.StreamHandler):
         }
 
         def output_colorized(self, message):
-            parts = self.ansi_esc.split(message)
-            write = self.stream.write
-            h = None
-            fd = getattr(self.stream, 'fileno', None)
-            if fd is not None:
-                fd = fd()
+            import win32console
+            fn = getattr(self.stream, 'fileno', None)
+            if fn is not None:
+                fd = fn()
                 if fd in (1, 2): # stdout or stderr
-                    h = ctypes.windll.kernel32.GetStdHandle(-10 - fd)
+                    c = win32console.GetStdHandle(-10 - fd)
+            parts = self.ansi_esc.split(message)
             while parts:
                 text = parts.pop(0)
                 if text:
-                    write(text)
+                    self.stream.write(text)
                 if parts:
                     params = parts.pop(0)
-                    if h is not None:
+                    if c is not None:
                         params = [int(p) for p in params.split(';')]
                         color = 0
                         for p in params:
@@ -348,8 +346,9 @@ class ColorizingStreamHandler(logging.StreamHandler):
                             elif p == 0: # reset to default color
                                 color = 0x07
                             else:
-                                pass # error condition ignored
-                        ctypes.windll.kernel32.SetConsoleTextAttribute(h, color)
+                                pass # unknown color command - ignore it
+                        
+                        c.SetConsoleTextAttribute(color)
 
     def colorize(self, message, record):
         if record.levelno in self.level_map:
@@ -1236,6 +1235,7 @@ def HumanizeDecimal(pNumber, pPrecision=1, pSuffix=None):
     return format_str % (converted, suffix[suffix_index])
 
 def CreateCenteredWindow(stdscr, windowHeight, windowWidth):
+    import curses
     term_height, term_width = stdscr.getmaxyx()
     hpad = (term_height - windowHeight) / 2
     wpad = (term_width - windowWidth) / 2
