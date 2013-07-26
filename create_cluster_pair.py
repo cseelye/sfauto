@@ -46,7 +46,10 @@ class CreateClusterPairAction(ActionBase):
         libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
                             "mvip2" : libsf.IsValidIpv4Address,
                             "username" : None,
-                            "password" : None},
+                            "password" : None,
+                            "username2" : None,
+                            "password2" : None,
+                            },
             args)
 
     def Execute(self, mvip=sfdefaults.mvip, mvip2=None, strict=False, username=sfdefaults.username, password=sfdefaults.password, username2=sfdefaults.username, password2=sfdefaults.password, debug=False):
