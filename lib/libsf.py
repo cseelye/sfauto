@@ -623,23 +623,26 @@ class ColorTerm:
             YellowFore = 11
 
 class LocalTimezone(datetime.tzinfo):
-    STDOFFSET = datetime.timedelta(seconds = -time.timezone)
-    if time.daylight:
-        DSTOFFSET = datetime.timedelta(seconds = -time.altzone)
-    else:
-        DSTOFFSET = LocalTimezone.STDOFFSET
 
-    DSTDIFF = DSTOFFSET - STDOFFSET
+    def __init__(self):
+
+        self.STDOFFSET = datetime.timedelta(seconds = -time.timezone)
+        if time.daylight:
+            self.DSTOFFSET = datetime.timedelta(seconds = -time.altzone)
+        else:
+            self.DSTOFFSET = self.STDOFFSET
+
+        self.DSTDIFF = self.DSTOFFSET - self.STDOFFSET
 
     def utcoffset(self, dt):
         if self._isdst(dt):
-            return LocalTimezone.DSTOFFSET
+            return self.DSTOFFSET
         else:
-            return LocalTimezone.STDOFFSET
+            return self.STDOFFSET
 
     def dst(self, dt):
         if self._isdst(dt):
-            return LocalTimezone.DSTDIFF
+            return self.DSTDIFF
         else:
             return datetime.timedelta(0)
 
