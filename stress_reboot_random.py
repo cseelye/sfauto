@@ -112,7 +112,7 @@ class StressRebootRandomAction(ActionBase):
         node_list = get_active_nodes.Get(mvip=mvip, username=username, password=password)
         if(node_list == False):
             message = "Failied getting active nodes on " + mvip
-            fail(message,emailTo)
+            self.fail(message,emailTo)
             self._RaiseEvent(self.Events.NODES_NOT_FOUND)
             return False
 
@@ -130,7 +130,7 @@ class StressRebootRandomAction(ActionBase):
                 self._RaiseEvent(self.Events.PUSHED_SSH_KEYS)
             else:
                 message = "Failed pushing SSH keys to nodes"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 return False
         else:
             mylog.info("Not pushing SSH Keys to Nodes")
@@ -173,7 +173,7 @@ class StressRebootRandomAction(ActionBase):
                 self._RaiseEvent(self.Events.NODE_REBOOTED)
             else:
                 message = "Node: " + str(node) + " has not been rebooted"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 self._RaiseEvent(self.Events.REBOOT_NODE_FAIL)
                 return False
 
@@ -184,7 +184,7 @@ class StressRebootRandomAction(ActionBase):
                 self._RaiseEvent(self.Events.FAULTS_NOT_FOUND)
             else:
                 message = "Faults found on " + mvip
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 self._RaiseEvent(self.Events.FAULTS_FOUND)
                 return False
 
@@ -195,7 +195,7 @@ class StressRebootRandomAction(ActionBase):
                 self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
             else:
                 message = "Cluster " + mvip + " failed health check"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
                 return False
 
@@ -207,23 +207,25 @@ class StressRebootRandomAction(ActionBase):
                     self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                 else:
                     message = "Failed client health check"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                     return False
 
             #check to see if there are available drives because the node took too long to reboot
             mylog.step("Look for available drives")
-            if(count_available_drives.Execute(expected=0, compare="gt", mvip=mvip) != True):
-
+            available_drives = count_available_drives.Get(mvip=mvip, username=username, password=password)
+            if available_drives == False:
+                mylog.error("Could not get a count of available drives")
+            if available_drives > 0:
                 #notify the user about this but continue the test
-                send_email.Execute(emailTo=emailTo, emailSubject="There are available drives to add to the cluster: " + mvip)
+                send_email.Execute(emailTo=emailTo, emailSubject=mvip + ": There are available drives to add to the cluster")
 
                 #add the drives back to the culster and wait for sync
                 if(add_available_drives.Execute(mvip=mvip, username=username, password=password) == True):
                     mylog.info("Available drives were added to the cluster")
                 else:
                     message = "Available drives were not added to the cluster"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     return False
 
                 #check the health of the clients
@@ -234,7 +236,7 @@ class StressRebootRandomAction(ActionBase):
                         self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                     else:
                         message = "Failed client health check"
-                        fail(message, emailTo)
+                        self.fail(message, emailTo)
                         self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                         return False
 
@@ -253,7 +255,7 @@ class StressRebootRandomAction(ActionBase):
 
             else:
                 message = "GC not started"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 return False
 
             #wait for gc to finish
@@ -262,7 +264,7 @@ class StressRebootRandomAction(ActionBase):
                 self._RaiseEvent(self.Events.GC_FINISHED)
             else:
                 message = "GC failed to finish"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 self._RaiseEvent(self.Events.FAILURE)
                 return False
 
