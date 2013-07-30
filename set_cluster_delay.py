@@ -88,35 +88,36 @@ class SetClusterDelayAction(ActionBase):
 
         for node in cluster1_nodelist:
             ssh = libsf.ConnectSsh(node["mip"], ssh_user, ssh_pass)
+            # If we are on the carbon pairing/slice/etc branch, switch to carbon-dev
+            stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "cp /etc/apt/sources.list /tmp/sources.list")
+            stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sed -i 's/carbon\S*-updates/carbon-updates/' /etc/apt/sources.list")
+            # Make sure the package is installed
+            stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sfapt update")
+            stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sfapt -y install netemul")
+            # Restore the original sources.list
+            stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "cp /tmp/sources.list /etc/apt/sources.list")
+
             # Delete the existing filters, queues, etc on Bond1G
             stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "tc qdisc del root dev Bond1G")
-            mylog.debug(stdout.readlines())
             # Delete the existing filters, queues, etc on Bond10G
             stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "tc qdisc del root dev Bond10G")
-            mylog.debug(stdout.readlines())
 
             for dev_name in ["Bond1G", "Bond10G"]:
                 mylog.info("Configuring " + dev_name + " on " + node["mip"])
                 # Create the root queue
                 stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "tc qdisc add dev " + dev_name + " root handle 1: prio")
-                mylog.debug(stdout.readlines())
                 # Create the netem delay queue
                 command = "tc qdisc add dev " + dev_name + " parent 1:3 handle 30: netem delay " + str(delay) + "ms"
                 if vary:
                     command += " " + str(vary) + "ms"
                 stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
-                mylog.debug(stdout.readlines())
                 # Add the mIP and cIP of cluster2's nodes
                 for remote_node in cluster2_nodelist:
                     stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "tc filter add dev " + dev_name + " parent 1:0 prio 3 u32 match ip dst " + remote_node["mip"] + " flowid 1:3")
-                    mylog.debug(stdout.readlines())
                     stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "tc filter add dev " + dev_name + " parent 1:0 prio 3 u32 match ip dst " + remote_node["cip"] + " flowid 1:3")
-                    mylog.debug(stdout.readlines())
                 # Add cluster2's mVIP and sVIP
                 stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "tc filter add dev " + dev_name + " parent 1:0 prio 3 u32 match ip dst " + cluster2.mvip + " flowid 1:3")
-                mylog.debug(stdout.readlines())
                 stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "tc filter add dev " + dev_name + " parent 1:0 prio 3 u32 match ip dst " + cluster2_svip+ " flowid 1:3")
-                mylog.debug(stdout.readlines())
 
         mylog.passed("Successfully configured delay of " + str(delay) + " between cluster " + mvip + " and cluster " + mvip2)
         return True
