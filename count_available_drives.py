@@ -45,6 +45,29 @@ class CountAvailableDrivesAction(ActionBase):
                             "expected" : libsf.IsInteger},
             args)
 
+    def Get(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+        """
+        Count available drives
+        """
+        if debug:
+            mylog.console.setLevel(logging.DEBUG)
+
+        mylog.info("Searching for available drives...")
+        available_count = 0
+        try:
+            result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
+        except libsf.SfError as e:
+            mylog.error("Failed to get drive list: " + str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
+        for drive in result["drives"]:
+            if drive["status"] == "available":
+                available_count += 1
+
+        mylog.info("Found " + str(available_count) + " drives")
+        return available_count
+
+
     def Execute(self, expected, compare, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Count available drives
