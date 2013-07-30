@@ -57,7 +57,7 @@ class SetNodeClusterAction(ActionBase):
             self._RaiseEvent(self.Events.BEFORE_SET_CLUSTER_NAME, clusterName=clusterName, nodeIP=node_ip)
             mylog.info("Setting cluster to '" + clusterName + "' on node " + str(node_ip))
 
-            node = libsfnode.SFNode(node_ip)
+            node = libsfnode.SFNode(ip=node_ip, clusterUsername=username, clusterPassword=password)
             try:
                 node.SetClusterName(clusterName)
             except libsf.SfError as e:
