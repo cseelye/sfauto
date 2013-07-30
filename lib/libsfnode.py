@@ -162,7 +162,7 @@ class SFNode(object):
         stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
         lines = stdout.readlines()
         return int(lines[0])
-
+#nodeIP, username, password, onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch
     def SetNetworkInfo(self, onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch):
         """
         Set the network info on this node
@@ -174,7 +174,7 @@ class SFNode(object):
         status = manager.dict()
         status["success"] = False
         status["message"] = None
-        th = multiprocessing.Process(target=self._SetNetworkInfoThread, args=(self.ipAddress, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, status))
+        th = multiprocessing.Process(target=self._SetNetworkInfoThread, args=(onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, status))
         th.daemon = True
         th.start()
         while True:
