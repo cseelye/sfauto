@@ -35,7 +35,8 @@ from lib.libsf import mylog
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
 import lib.libsfnode as libsfnode
-
+import lib.sfdefaults as sfdefaults
+import time
 
 class SetNodeIpAction(ActionBase):
     class Events:
@@ -56,7 +57,7 @@ class SetNodeIpAction(ActionBase):
                             "dnsIP" : libsf.IsValidIpv4Address},
             args)
 
-    def Execute(self, nodeIP, onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch, debug):
+    def Execute(self, nodeIP, username, password, onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch, debug=False):
         """
         Set the network info of an available node
         """
@@ -65,23 +66,28 @@ class SetNodeIpAction(ActionBase):
             mylog.console.setLevel(logging.DEBUG)
 
         mylog.info("Setting the following network config on " + nodeIP)
-        mylog.info("  1G IP     : " + onegIP)
-        mylog.info("  1G mask   : " + onegNetmask)
-        mylog.info("  1G gw     : " + onegGateway)
-        mylog.info("  10G IP    : " + tengIP)
-        mylog.info("  10G mask  : " + tengNetmask)
-        mylog.info("  DNS server: " + dnsIP)
-        mylog.info("  DNS search: " + dnsSearch)
+        mylog.info("  1G IP     : " + str(onegIP))
+        mylog.info("  1G mask   : " + str(onegNetmask))
+        mylog.info("  1G gw     : " + str(onegGateway))
+        mylog.info("  10G IP    : " + str(tengIP))
+        mylog.info("  10G mask  : " + str(tengNetmask))
+        mylog.info("  DNS server: " + str(dnsIP))
+        mylog.info("  DNS search: " + str(dnsSearch))
         mylog.info("This may take up to 90 seconds")
         self._RaiseEvent(self.Events.BEFORE_SET_NETINFO, nodeIP=nodeIP)
 
-        node = libsfnode.SFNode(nodeIP)
+        node = libsfnode.SFNode(ip=nodeIP, clusterUsername=username, clusterPassword=password)
+        start = time.time()
         try:
             node.SetNetworkInfo(onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch)
         except libsf.SfApiError as e:
             mylog.error(str(e))
             self._RaiseEvent(self.Events.SET_NETINFO_FAILED, nodeIP=nodeIP)
             return False
+
+        # The network config API doesn't like to get new requests too soon after changing the IP
+        if time.time() - start < 70:
+            time.sleep(70 - (time.time() - start))
 
         mylog.passed("Successfully set network info")
         self._RaiseEvent(self.Events.AFTER_SET_NETINFO, nodeIP=nodeIP)
@@ -96,6 +102,8 @@ if __name__ == '__main__':
 
     parser = OptionParser(description="Set the network information of a node")
     parser.add_option("-n", "--node_ip", type="string", dest="node_ip", default=None, help="the current IP address of the node")
+    parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="The username for the node")
+    parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="The password for the node")
     parser.add_option("--oneg_ip", type="string", dest="oneg_ip", default=None, help="the new 1G IP address for the node")
     parser.add_option("--oneg_netmask", type="string", dest="oneg_netmask", default=None, help="the new 1G netmask for the node")
     parser.add_option("--oneg_gateway", type="string", dest="oneg_gateway", default=None, help="the new 1G gateway for the node")
@@ -108,7 +116,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.node_ip, options.oneg_ip, options.oneg_netmask, options.oneg_gateway, options.teng_ip, options.teng_netmask, options.dns_ip, options.dns_search, options.debug):
+        if Execute(options.node_ip, options.username, options.password, options.oneg_ip, options.oneg_netmask, options.oneg_gateway, options.teng_ip, options.teng_netmask, options.dns_ip, options.dns_search, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
