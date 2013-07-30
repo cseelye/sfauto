@@ -261,7 +261,6 @@ class SFCluster(object):
             gc_list.append(gc_objects[gen])
         return gc_list
 
-
     def IsGCInProgress(self):
         """
         Checks to see if GC is currently in running
@@ -287,8 +286,6 @@ class SFCluster(object):
                 break
 
         return gc_in_progress
-
-
 
     def StartGC(self, force=False):
         """
@@ -887,7 +884,6 @@ class SFCluster(object):
         result = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterCapacity", {})
         return result["clusterCapacity"]["usedSpace"]
 
-
     def StartClusterPairing(self):
         """
         Start a cluster pair
@@ -975,3 +971,13 @@ class SFCluster(object):
         for pair_json in result["clusterPairs"]:
             all_pairs.append(libsfclusterpair.SFClusterPair(pair_json, self.mvip, self.username, self.password))
         return all_pairs
+
+    def GetClusterInfo(self):
+        """
+        Get the basic info about this cluster
+
+        Returns:
+            A cluster info dict
+        """
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterInfo", {})
+        return result["clusterInfo"]
