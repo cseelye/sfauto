@@ -59,7 +59,7 @@ class CountAvailableDrivesAction(ActionBase):
         except libsf.SfError as e:
             mylog.error("Failed to get drive list: " + str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
-            return False
+            return -1
         for drive in result["drives"]:
             if drive["status"] == "available":
                 available_count += 1
