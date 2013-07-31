@@ -121,7 +121,7 @@ class StressVolumeRebalanceAction(ActionBase):
         node_list = get_active_nodes.Get(mvip=mvip, username=username, password=password)
         if(node_list == False):
             message = "Failied getting active nodes on " + mvip
-            fail(message,emailTo)
+            self.fail(message,emailTo)
             self._RaiseEvent(self.Events.NODES_NOT_FOUND)
             return False
 
@@ -131,7 +131,7 @@ class StressVolumeRebalanceAction(ActionBase):
                 self._RaiseEvent(self.Events.PUSHED_SSH_KEYS)
             else:
                 message = "Failed pushing SSH keys to nodes"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 return False
         else:
             mylog.info("Not pushing SSH Keys to Nodes")
@@ -140,7 +140,7 @@ class StressVolumeRebalanceAction(ActionBase):
             mylog.info("New account Created on " + mvip)
         else:
             message = "Failed creating new account on " + mvip
-            fail(message, emailTo)
+            self.fail(message, emailTo)
             return False
 
         #iteration_count only used to display the current iteration
@@ -162,7 +162,7 @@ class StressVolumeRebalanceAction(ActionBase):
             slice_list = list_slice_services.Get(mvip=mvip)
             if(slice_list == False):
                 message = "Failied getting slice services " + mvip
-                fail(message,emailTo)
+                self.fail(message,emailTo)
                 #self._RaiseEvent(self.Events.NODES_NOT_FOUND)
                 return False
 
@@ -178,7 +178,7 @@ class StressVolumeRebalanceAction(ActionBase):
                 mylog.info(str(volume_count) + " volumes created")
             else:
                 message = "Failed creating volumes"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 return False
 
             #wait 30 minutes
@@ -192,7 +192,7 @@ class StressVolumeRebalanceAction(ActionBase):
                 self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
             else:
                 message = "Cluster " + mvip + " failed health check"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
                 return False
 
@@ -203,7 +203,7 @@ class StressVolumeRebalanceAction(ActionBase):
                     self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                 else:
                     message = "Failed client health check"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                     return False
 
@@ -213,7 +213,7 @@ class StressVolumeRebalanceAction(ActionBase):
                 mylog.info("The Volumes that were created have been deleted")
             else:
                 message = "Failed to delete newly created volumes"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 return False
 
             #wait 30 minutes
@@ -227,7 +227,7 @@ class StressVolumeRebalanceAction(ActionBase):
                 self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
             else:
                 message = "Cluster " + mvip + " failed health check"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
                 return False
 
@@ -238,7 +238,7 @@ class StressVolumeRebalanceAction(ActionBase):
                     self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                 else:
                     message = "Failed client health check"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                     return False
 

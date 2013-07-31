@@ -43,7 +43,6 @@ import reboot_node
 import wait_for_no_faults
 import check_client_health
 import check_cluster_health
-import count_available_drives
 import send_email
 import add_available_drives
 import start_gc
@@ -114,7 +113,7 @@ class StressNodefailSequentialAction(ActionBase):
         node_list = get_active_nodes.Get(mvip=mvip, username=username, password=password)
         if(node_list == False):
             message = "Failied getting active nodes on " + mvip
-            fail(message,emailTo)
+            self.fail(message,emailTo)
             self._RaiseEvent(self.Events.NODES_NOT_FOUND)
             return False
 
@@ -124,7 +123,7 @@ class StressNodefailSequentialAction(ActionBase):
                 self._RaiseEvent(self.Events.PUSHED_SSH_KEYS)
             else:
                 message = "Failed pushing SSH keys to nodes"
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 return False
         else:
             mylog.info("Not pushing SSH Keys to Nodes")
@@ -136,7 +135,7 @@ class StressNodefailSequentialAction(ActionBase):
             temp_drac = get_node_ipmi_ip.Get(node_ip=node)
             if(temp_drac == False):
                 message = "Error getting IPMI IP for " + str(node)
-                fail(message, emailTo)
+                self.fail(message, emailTo)
                 return False
             else:
                 drac_list.append(temp_drac)
@@ -149,7 +148,7 @@ class StressNodefailSequentialAction(ActionBase):
             self._RaiseEvent(self.Events.FAULTS_NOT_FOUND)
         else:
             message = "Faults found on " + mvip
-            fail(message, emailTo)
+            self.fail(message, emailTo)
             self._RaiseEvent(self.Events.FAULTS_FOUND)
             return False
 
@@ -191,7 +190,7 @@ class StressNodefailSequentialAction(ActionBase):
                     mylog.info("Node: " + str(node) + " powered off")
                 else:
                     message = "No: " + str(node) + " powered off failed"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     return False
 
                 #wait for the services to be decommissioned and synced out of the cluster
@@ -204,7 +203,7 @@ class StressNodefailSequentialAction(ActionBase):
                     self._RaiseEvent(self.Events.FAULTS_NOT_FOUND)
                 else:
                     message = "Faults found on " + mvip
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.FAULTS_FOUND)
                     return False
 
@@ -217,7 +216,7 @@ class StressNodefailSequentialAction(ActionBase):
                         self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                     else:
                         message = "Failed client health check"
-                        fail(message, emailTo)
+                        self.fail(message, emailTo)
                         self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                         return False
 
@@ -227,7 +226,7 @@ class StressNodefailSequentialAction(ActionBase):
                     mylog.info("Node: " + str(node) + " is back online")
                 else:
                     message = "Node: " + str(node) + " is not back online"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     return False
 
                 #wait for the node to be fully up and drives available
@@ -236,7 +235,7 @@ class StressNodefailSequentialAction(ActionBase):
                     mylog.info("All drives are available")
                 else:
                     message = "All drives are not available"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     return False
 
                 #make sure the cluster is healthy
@@ -246,7 +245,7 @@ class StressNodefailSequentialAction(ActionBase):
                     self._RaiseEvent(self.Events.CLUSTER_HEALTHY)
                 else:
                     message = "Cluster " + mvip + " failed health check"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
                     return False
 
@@ -257,7 +256,7 @@ class StressNodefailSequentialAction(ActionBase):
                         self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                     else:
                         message = "Failed client health check"
-                        fail(message, emailTo)
+                        self.fail(message, emailTo)
                         self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                         return False
 
@@ -267,7 +266,7 @@ class StressNodefailSequentialAction(ActionBase):
                     mylog.info("Available drives were added to the cluster")
                 else:
                     message = "Avaialbe drives were not added to the cluster"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     return False
 
                     #check the health of the clients
@@ -277,7 +276,7 @@ class StressNodefailSequentialAction(ActionBase):
                             self._RaiseEvent(self.Events.CLIENT_HEALTHY)
                         else:
                             message = "Failed client health check"
-                            fail(message, emailTo)
+                            self.fail(message, emailTo)
                             self._RaiseEvent(self.Events.CLIENT_NOT_HEALTHY)
                             return False
 
@@ -294,7 +293,7 @@ class StressNodefailSequentialAction(ActionBase):
                     mylog.info("GC started")
                 else:
                     message = "GC not started"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     return False
 
                 #wait for gc to finish
@@ -303,7 +302,7 @@ class StressNodefailSequentialAction(ActionBase):
                     self._RaiseEvent(self.Events.GC_FINISHED)
                 else:
                     message = "GC failed to finish"
-                    fail(message, emailTo)
+                    self.fail(message, emailTo)
                     self._RaiseEvent(self.Events.FAILURE)
                     return False
 

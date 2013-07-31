@@ -214,7 +214,7 @@ class StressRebootRandomAction(ActionBase):
             #check to see if there are available drives because the node took too long to reboot
             mylog.step("Look for available drives")
             available_drives = count_available_drives.Get(mvip=mvip, username=username, password=password)
-            if available_drives == False:
+            if available_drives == -1:
                 mylog.error("Could not get a count of available drives")
             if available_drives > 0:
                 #notify the user about this but continue the test
