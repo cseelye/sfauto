@@ -158,9 +158,10 @@ if __name__ == '__main__':
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
+
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.node_ip, options.username, options.password, options.debug):
+        if Execute(options.mvip, options.node_ip, options.remove_drives, options.username, options.password, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
