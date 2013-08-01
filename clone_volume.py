@@ -95,16 +95,32 @@ class CloneVolumeAction(ActionBase):
             return False
 
         # Find the destination account
+        # if account_id > 0:
+        #     account_name = None
+        # if account_name or account_id > 0:
+        #     mylog.info("Searching for destination account")
+        #     try:
+        #         libsf.FindAccount(mvip, username, password, AccountName=account_name, AccountId=account_id)
+
+        #     except libsf.SfError as e:
+        #         mylog.error(str(e))
+        #         self.RaiseFailureEvent(message=str(e), exception=e)
+        #         return False
+
+
+        # Find the destination account
         if account_id > 0:
             account_name = None
         if account_name or account_id > 0:
             mylog.info("Searching for destination account")
-            try:
-                libsf.FindAccount(mvip, username, password, AccountName=account_name, AccountId=account_id)
-            except libsf.SfError as e:
-                mylog.error(str(e))
-                self.RaiseFailureEvent(message=str(e), exception=e)
-                return False
+        try:
+            account_list = libsf.CallApiMethod(mvip, username, password, "ListAccounts", {})
+        except libsf.SfError as e:
+            mylog.error("Could not get a list of accounts on " + mvip)
+
+        for account in account_list["accounts"]:
+            if account["username"] == account_name:
+                account_id = account["accountID"]
 
         class CloneJob:
             def __init__(self):
