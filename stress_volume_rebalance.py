@@ -58,6 +58,7 @@ import create_account
 import list_slice_services
 import create_volumes
 import delete_volumes
+import clusterbscheck
 
 
 class StressVolumeRebalanceAction(ActionBase):
@@ -105,7 +106,7 @@ class StressVolumeRebalanceAction(ActionBase):
                     args)
 
 
-    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, clientIPs=None, clientUser=sfdefaults.client_user, clientPass=sfdefaults.client_pass, emailTo=None, addSSH=False, debug=False, iteration=1, volumeSize=4000, minIOPS=10000, maxIOPS=100000, burstIOPS=100000, waitTime=300):
+    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, clientIPs=None, clientUser=sfdefaults.client_user, clientPass=sfdefaults.client_pass, emailTo=None, addSSH=False, bsCheck=True, debug=False, iteration=1, volumeSize=4000, minIOPS=10000, maxIOPS=100000, burstIOPS=100000, waitTime=300):
 
 
         self.ValidateArgs(locals())
@@ -195,6 +196,12 @@ class StressVolumeRebalanceAction(ActionBase):
                 self.fail(message, emailTo)
                 self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
                 return False
+
+            if bsCheck:
+                mylog.step("Performing a Cluster BS Check")
+                if clusterbscheck.Execute(mvip=mvip, username=username, password=password) == False:
+                    mylog.error("Cluster BS Check Failed")
+                    return False
 
             #Check the health of the clients
             if(check_client == True):
@@ -287,11 +294,12 @@ if __name__ == '__main__':
     parser.add_option("--max_iops", type="int", dest="maxIOPS", default=100000, help="The max iops for the new volume")
     parser.add_option("--burst_iops", type="int", dest="burstIOPS", default=100000, help="The burst iops for the new volume")
     parser.add_option("--wait_time", type="int", dest="waitTime", default=300, help="Wait time between each iteration")
+    parser.add_option("--bs_check", action="store_true", dest="bs_check", default=False, help="Do a cluster BS check")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.username, options.password, options.clientIPs, options.clientUser, options.clientPass, options.waitTime, options.emailTo, options.addSSH, options.debug, options.iteration, options.volumeSize, options.minIOPS, options.maxIOPS, options.burstIOPS, options.waitTime):
+        if Execute(options.mvip, options.username, options.password, options.clientIPs, options.clientUser, options.clientPass, options.waitTime, options.emailTo, options.addSSH, options.bs_check, options.debug, options.iteration, options.volumeSize, options.minIOPS, options.maxIOPS, options.burstIOPS, options.waitTime):
             sys.exit(0)
         else:
             sys.exit(1)

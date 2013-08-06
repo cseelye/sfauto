@@ -51,6 +51,7 @@ import get_node_drive_count
 import power_off_node
 import power_on_node
 import get_node_ipmi_ip
+import clusterbscheck
 
 class StressNodefailSequentialAction(ActionBase):
     class Events:
@@ -95,7 +96,7 @@ class StressNodefailSequentialAction(ActionBase):
             args)
 
 
-    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, clientIPs=None, clientUser=sfdefaults.client_user, clientPass=sfdefaults.client_pass, waitTime=300, emailTo=None, addSSH=False, debug=False, iteration=1):
+    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, clientIPs=None, clientUser=sfdefaults.client_user, clientPass=sfdefaults.client_pass, waitTime=300, emailTo=None, addSSH=False, bsCheck=True, debug=False, iteration=1):
 
 
         self.ValidateArgs(locals())
@@ -249,6 +250,12 @@ class StressNodefailSequentialAction(ActionBase):
                     self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
                     return False
 
+                if bsCheck:
+                    mylog.step("Performing a Cluster BS Check")
+                    if clusterbscheck.Execute(mvip=mvip, username=username, password=password) == False:
+                        mylog.error("Cluster BS Check Failed")
+                        return False
+
                 #Check the health of the clients
                 if(check_client == True):
                     if(check_client_health.Execute(client_ips=clientIPs, client_user=clientUser, client_pass=clientPass) == True):
@@ -340,12 +347,13 @@ if __name__ == '__main__':
     parser.add_option("--client_user", type="string", dest="clientUser", default=sfdefaults.client_user, help="the username for the clients [%default]")
     parser.add_option("--client_pass", type="string", dest="clientPass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
+    parser.add_option("--bs_check", action="store_true", dest="bs_check", default=False, help="Do a cluster BS check")
     parser.add_option("--iteration", type="int", dest="iteration", default=1, help="how many iterations to loop over the nodes, 0=forever")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.username, options.password, options.clientIPs, options.clientUser, options.clientPass, options.waitTime, options.emailTo, options.addSSH, options.debug, options.iteration):
+        if Execute(options.mvip, options.username, options.password, options.clientIPs, options.clientUser, options.clientPass, options.waitTime, options.emailTo, options.addSSH, options.bs_check, options.debug, options.iteration):
             sys.exit(0)
         else:
             sys.exit(1)
