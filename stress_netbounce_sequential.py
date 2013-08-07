@@ -302,11 +302,11 @@ class StressNetbounceSequentialAction(ActionBase):
         time_per_iteration = libsf.SecondsToElapsedStr(time_per_iteration)
         time_per_node = libsf.SecondsToElapsedStr(time_per_node)
 
-        emailBody = ("Number of Nodes:       " + str(num_of_nodes) + 
-                   "\nIteration Count:       " + str(iteration_count) + 
-                   "\nTime Per Iteration:    " + time_per_iteration + 
-                   "\nTime Per Node:         " + time_per_node +
-                   "\nTotal Time:            " + delta_time)
+        emailBody = ("Number of Nodes:------ " + str(num_of_nodes) + 
+                   "\nIteration Count:------ " + str(iteration_count) + 
+                   "\nTime Per Iteration:--- " + time_per_iteration + 
+                   "\nTime Per Node:-------- " + time_per_node +
+                   "\nTotal Time:----------- " + delta_time)
 
         send_email.Execute(emailTo=emailTo, emailSubject=mvip + ": Finished Stress Netbounce Sequential in " + delta_time, emailBody=emailBody)
 

@@ -290,7 +290,31 @@ class StressRebootRandomAction(ActionBase):
         end_time = time.time()
         delta_time = libsf.SecondsToElapsedStr(end_time - start_time)
 
-        send_email.Execute(emailTo=emailTo, emailSubject="Finished Stress Reboot Random on: " + mvip +" in " + delta_time)
+        #calc stats
+        iteration_count -= 1
+        num_of_nodes = len(node_list)
+        time_per_iteration = (end_time - start_time) / iteration_count
+        time_per_node = time_per_iteration / num_of_nodes
+
+        time_per_iteration = libsf.SecondsToElapsedStr(time_per_iteration)
+        time_per_node = libsf.SecondsToElapsedStr(time_per_node)
+
+        emailBody = ("Number of Nodes:------ " + str(num_of_nodes) + 
+                   "\nIteration Count:------ " + str(iteration_count) + 
+                   "\nTime Per Iteration:--- " + time_per_iteration + 
+                   "\nTime Per Node:-------- " + time_per_node +
+                   "\nTotal Time:----------- " + delta_time)
+
+        send_email.Execute(emailTo=emailTo, emailSubject=mvip + ": Finished Stress Reboot Random in " + delta_time, emailBody=emailBody)
+
+        mylog.info("\tNumber of Nodes:     " + str(num_of_nodes))
+        mylog.info("\tIteration Count:     " + str(iteration_count))
+        mylog.info("\tTime Per Iteration:  " + time_per_iteration)
+        mylog.info("\tTime Per Node:       " + time_per_node)
+        mylog.info("\tTotal Time:          " + delta_time)
+
+        mylog.passed("The Stress Reboot Random Test has passed")
+
 
         return True
 
