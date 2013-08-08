@@ -98,9 +98,9 @@ class StressVolumeRebalanceAction(ActionBase):
         libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
                             "username" : None,
                             "password" : None,
-                            "min_iops" : libsf.IsInteger,
-                            "max_iops" : libsf.IsInteger,
-                            "burst_iops" : libsf.IsInteger,
+                            "minIOPS" : libsf.IsInteger,
+                            "maxIOPS" : libsf.IsInteger,
+                            "burstIOPS" : libsf.IsInteger,
                             "iteration" : libsf.IsInteger,
                             },
                     args)
