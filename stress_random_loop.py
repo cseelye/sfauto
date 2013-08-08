@@ -63,6 +63,9 @@ class StressRandomLoopAction(ActionBase):
 
         if iterationCount == 0:
             mylog.warning("Looping Forever")
+            count = 10
+        else:
+            count = iterationCount
 
         stress_test = ["stress_netbounce_sequential", "stress_nodefail_sequential", "stress_reboot_master", "stress_reboot_random", "stress_reboot_sequential", "stress_volume_rebalance"]
 
@@ -71,7 +74,7 @@ class StressRandomLoopAction(ActionBase):
             mylog.error("Could not get the list of active nodes")
             return False
         start_time = time.time()
-        for i in xrange(0, iterationCount):
+        for i in xrange(0, count):
             random_index = random.randint(0, len(stress_test) - 1)
             random_iteration = random.randint(1,10)
 
@@ -117,7 +120,7 @@ class StressRandomLoopAction(ActionBase):
 
             #if loopfoever then increase iterationCount by 1 each time so we never end the for loop
             if iterationCount == 0:
-                iterationCount += 1
+                count += 1
 
         end_time = time.time()
         delta_time = libsf.SecondsToElapsedStr(end_time - start_time)

@@ -200,7 +200,8 @@ class StressVolumeRebalanceAction(ActionBase):
             if bsCheck:
                 mylog.step("Performing a Cluster BS Check")
                 if clusterbscheck.Execute(mvip=mvip, username=username, password=password) == False:
-                    mylog.error("Cluster BS Check Failed")
+                    message = mvip + ": FAILED Cluster BS Check"
+                    self.fail(message, emailTo)
                     return False
 
             #Check the health of the clients
@@ -237,6 +238,13 @@ class StressVolumeRebalanceAction(ActionBase):
                 self.fail(message, emailTo)
                 self._RaiseEvent(self.Events.CLUSTER_NOT_HEALTHY)
                 return False
+
+            if bsCheck:
+                mylog.step("Performing a Cluster BS Check")
+                if clusterbscheck.Execute(mvip=mvip, username=username, password=password) == False:
+                    message = mvip + ": FAILED Cluster BS Check"
+                    self.fail(message, emailTo)
+                    return False
 
             #make sure clients are healthy
             if(check_client == True):
