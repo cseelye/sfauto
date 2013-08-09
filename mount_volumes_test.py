@@ -89,8 +89,12 @@ class MountVolumesTestAction(ActionBase):
         #need to find a better way of doing this - hack
         #requires the file /home/solidfire/fdisk_input.txt - contents are n \n p \n 1 \n \n \n w
         #Creates a (n)ew partition, makes it (p)rimary, (1) partition,() start at the start,() end at the end, (w)rite
+
+        inputTest = " n \n p \n 1 \n \n \n w "
+        retcode, stdout, stderr = client.ExecuteCommand("echo -e '" + inputTest + "' > /tmp/fdisk_input.txt")
+
         mylog.step("Partitioning the volume")
-        retcode, stdout, stderr = client.ExecuteCommand("cat /home/solidfire/fdisk_input.txt | fdisk /dev/disk/by-path/" + loc)
+        retcode, stdout, stderr = client.ExecuteCommand("cat /tmp/fdisk_input.txt | fdisk /dev/disk/by-path/" + loc)
         mylog.debug("Retcode: " + str(retcode))
         mylog.debug("Standard Output: " + str(stdout))
         mylog.debug("Standard Error: " + str(stderr))
