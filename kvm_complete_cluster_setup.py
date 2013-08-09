@@ -43,6 +43,8 @@ This script will to a complete kvm setup
     --nfs_path          The path on the nfs datastore you want to mount
 
     --mount_point       The location on the client where you want to mount the nfs datastore
+
+    --skip_cluster      Skips making a cluster, mvip still needed but not node_ips, cluster_name, node_count
 """
 
 
@@ -59,7 +61,7 @@ from lib.action_base import ActionBase
 import kvm_complete_creation_test
 import kvm_hypervisor_setup
 import make_cluster
-import kvm_check_vm_health_clientmon
+import check_vm_health_clientmon
 
 class KvmCompleteClusterSetupAction(ActionBase):
     class Events:
@@ -71,7 +73,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
     def __init__(self):
         super(self.__class__, self).__init__(self.__class__.Events)
 
-    def ValidateArgs(self, args):
+    def ValidateArgsCluster(self, args):
         libsf.ValidateArgs({"vmHost" : libsf.IsValidIpv4Address,
                             "mvip" : libsf.IsValidIpv4Address,
                             "svip" : libsf.IsValidIpv4Address,
@@ -81,22 +83,47 @@ class KvmCompleteClusterSetupAction(ActionBase):
                             "username" : None,
                             "password" : None,
                             "cloneCount" : libsf.IsInteger,
-                            "nodeCount" : libsf.IsInteger},
+                            "nodeCount" : libsf.IsInteger,
+                            "clusterName" : None,
+                            "cloneName" : None,
+                            "qcow2Name" : None,
+                            "nfsMountPoint" : None,
+                            "nfsPath" : None,
+                            "nfsIp" : libsf.IsValidIpv4Address},
+            args)
+
+    def ValidateArgsRegular(self, args):
+        libsf.ValidateArgs({"vmHost" : libsf.IsValidIpv4Address,
+                            "mvip" : libsf.IsValidIpv4Address,
+                            "hostUser" : None,
+                            "hostPass" : None,
+                            "username" : None,
+                            "password" : None,
+                            "cloneCount" : libsf.IsInteger,
+                            "cloneName" : None,
+                            "qcow2Name" : None,
+                            "nfsMountPoint" : None,
+                            "nfsPath" : None,
+                            "nfsIp" : libsf.IsValidIpv4Address},
             args)
 
 
-    def Execute(self, nodeIPs, nodeCount, mvip, svip, clusterName, username, password, vmHost, hostUser, hostPass, nfsIP, nfsPath, nfsMountPoint, qcow2Name, cloneCount, cloneName, debug=False):
+    def Execute(self, nodeIPs, nodeCount, mvip, svip, clusterName, username, password, vmHost, hostUser, hostPass, nfsIP, nfsPath, nfsMountPoint, qcow2Name, cloneCount, cloneName, skipCluster=False, debug=False):
 
-        self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        mylog.banner("Making Cluster")
-        start_time = time.time()
-        if make_cluster.Execute(clusterName, mvip, svip, nodeIPs, nodeCount, username, password) == False:
-            mylog.error("There was an error trying to make the cluster")
-            return False
-        mylog.time("It took " + libsf.SecondsToElapsedStr(time.time() - start_time) + " to make the cluster")
+        if skipCluster == False
+            self.ValidateArgsCluster(locals())
+
+            mylog.banner("Making Cluster")
+            start_time = time.time()
+            if make_cluster.Execute(clusterName=clusterName, mvip=mvip, svip=svip, nodeIPs=nodeIPs, nodeCount=nodeCount, username=username, password=password) == False:
+                mylog.error("There was an error trying to make the cluster")
+                return False
+            mylog.time("It took " + libsf.SecondsToElapsedStr(time.time() - start_time) + " to make the cluster")
+        else:
+            self.ValidateArgsRegular(locals())
 
         mylog.banner("Setting up KVM Hypervisor")
         start_time = time.time()
@@ -107,7 +134,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
 
         try:
             hypervisor = libclient.SfClient()
-            hypervisor.Connect(vmHost, hostUser, hostUser)
+            hypervisor.Connect(vmHost, hostUser, hostPass)
         except libclient.ClientError as e:
             mylog.error(str(e))
             return False
@@ -145,7 +172,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
         mylog.step("Waiting for 2 minutes for all the VMs to boot")
         time.sleep(120)
 
-        if kvm_check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
+        if check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
             mylog.error("Not all the VMs are healthy")
             return False
 
@@ -169,6 +196,7 @@ if __name__ == '__main__':
     parser.add_option("--node_ips", action="list", dest="node_ips", default=None, help="the IP addresses of the nodes")
     parser.add_option("--cluster_name", type="string", dest="cluster_name", default=None, help="The name of the cluster")
     parser.add_option("--node_count", type="int", dest="node_count", default=3, help="How many nodes to be in the cluster, min = 3")
+    parser.add_option("--skip_cluster", action="store_true", dest="skip_cluster", default=False, help="Skips making a cluster. svip, node_ips, node_count, and cluster_name are not needed")
     #vmhost info
     parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_kvm, help="the management IP of the KVM hypervisor [%default]")
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
@@ -191,7 +219,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.node_ips, options.node_count, options.mvip, options.svip, options.cluster_name, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.nfs_ip, options.nfs_path, options.mount_point, options.qcow2_name, options.clone_count, options.clone_name, options.debug):
+        if Execute(options.node_ips, options.node_count, options.mvip, options.svip, options.cluster_name, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.nfs_ip, options.nfs_path, options.mount_point, options.qcow2_name, options.clone_count, options.clone_name, options.skip_cluster, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
