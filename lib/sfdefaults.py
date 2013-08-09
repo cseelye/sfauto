@@ -72,6 +72,7 @@ kvm_mem_size = 512                  # KVM memory size
 kvm_os = "linux"                    # KVM OS type
 kvm_clone_name = "KVM-clone"        # KVM Clone name
 kvm_network = "ClientNet"           # KVM network bridge
+kvm_connection = "tcp"              # KVM connection type
 vmhost_xen = None                   # XenServer hypervisor host
 xenapi_parallel_calls_thresh = 2    # Run multiple XenServer API operations in parallel if there are more than this many
 xenapi_parallel_calls_max = 5       # Run at most this many parallel operations with XenServer API
