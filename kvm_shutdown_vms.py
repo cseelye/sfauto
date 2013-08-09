@@ -58,9 +58,9 @@ class KvmShutdownVmsAction(ActionBase):
         mylog.info("Connecting to " + vm)
         try:
             if connection == "ssh":
-                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
             elif connection == "tcp":
-                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
                 return False
@@ -92,7 +92,7 @@ class KvmShutdownVmsAction(ActionBase):
         conn.close()
 
 
-    def Execute(self, vm_names=None, connection="ssh", vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, thread_max=1, debug=False):
+    def Execute(self, vm_names=None, connection=sfdefaults.kvm_connection, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, thread_max=1, debug=False):
         """
         Shutdown VMs
         """
@@ -230,7 +230,7 @@ if __name__ == '__main__':
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to shutdown")
     parser.add_option("--vm_count", type="string", dest="vm_count", default=None, help="the number of matching VMs to shutdown")
     parser.add_option("--thread_max", type="int", dest="thread_max", default=1, help="the number of threads to use")
-    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
+    parser.add_option("--connection", type="string", dest="connection", default=sfdefaults.kvm_connection, help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 

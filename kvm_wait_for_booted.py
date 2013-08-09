@@ -142,7 +142,7 @@ class KvmWaitForBootedAction(ActionBase):
         return False
 
 
-    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection="ssh", vmNames=None, debug=False):
+    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection=sfdefaults.kvm_connection, vmNames=None, debug=False):
 
         self.ValidateArgs(locals())
         if debug:
@@ -222,7 +222,7 @@ if __name__ == '__main__':
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
     parser.add_option("--vm_names", action="list", dest="vm_names", default=None, help="the names of the VMs to power on")
-    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
+    parser.add_option("--connection", type="string", dest="connection", default=sfdefaults.kvm_connection, help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 

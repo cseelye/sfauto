@@ -50,7 +50,7 @@ class KvmListVmInfoAction(ActionBase):
                 raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
 
 
-    def Execute(self, vmhost=sfdefaults.vmhost_kvm, connection="ssh", csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def Execute(self, vmhost=sfdefaults.vmhost_kvm, connection=sfdefaults.kvm_connection, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         List VM info
         """
@@ -153,7 +153,7 @@ if __name__ == '__main__':
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
-    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
+    parser.add_option("--connection", type="string", dest="connection", default=sfdefaults.kvm_connection, help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 

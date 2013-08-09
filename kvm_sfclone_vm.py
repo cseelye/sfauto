@@ -62,7 +62,7 @@ class KvmSfcloneVmAction(ActionBase):
             if args["connection"] != "tcp":
                 raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
 
-    def Execute(self, vm_name, connection="ssh", clone_name=None, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def Execute(self, vm_name, connection=sfdefaults.kvm_connection, clone_name=None, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, vmhost=sfdefaults.vmhost_kvm, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         Clone a VM
         """
@@ -303,7 +303,7 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
-    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
+    parser.add_option("--connection", type="string", dest="connection", default=sfdefaults.kvm_connection, help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 

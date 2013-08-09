@@ -53,7 +53,7 @@ class KvmGetNextVmNumberAction(ActionBase):
                 raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
 
 
-    def Execute(self, vm_prefix, fill=False, vmhost=sfdefaults.vmhost_kvm, connection="ssh", csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def Execute(self, vm_prefix, fill=False, vmhost=sfdefaults.vmhost_kvm, connection=sfdefaults.kvm_connection, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         Get the next VM number
         """
@@ -66,9 +66,9 @@ class KvmGetNextVmNumberAction(ActionBase):
         mylog.info("Connecting to " + vmhost)
         try:
             if connection == "ssh":
-                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmhost + "/system")
             elif connection == "tcp":
-                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
                 return False
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     parser.add_option("--fill", action="store_true", dest="fill", default=False, help="find the first gap in the sequence instead of the highest number")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
-    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
+    parser.add_option("--connection", type="string", dest="connection", default=sfdefaults.kvm_connection, help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 

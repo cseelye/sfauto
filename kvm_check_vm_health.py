@@ -84,7 +84,7 @@ class KvmCheckVmHealthAction(ActionBase):
 
     #should connect to clientmon and make sure everything for the given vmname is going alright
 
-    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection="ssh", vmNames=None, threading=False, vmRegex=None, debug=False):
+    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection=sfdefaults.kvm_connection, vmNames=None, threading=False, vmRegex=None, debug=False):
 
         self.ValidateArgs(locals())
         if debug:
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     parser.add_option("--vm_names", action="list", dest="vm_names", default=None, help="the names of the VMs to power on")
     parser.add_option("--threading", action="store_true", dest="threading", default=False, help="set to true to turn off logs")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power off")
-    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
+    parser.add_option("--connection", type="string", dest="connection", default=sfdefaults.kvm_connection, help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 

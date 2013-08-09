@@ -30,6 +30,7 @@ import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
 
+
 class KvmCountVmsAction(ActionBase):
     class Events:
         """
@@ -44,14 +45,15 @@ class KvmCountVmsAction(ActionBase):
         libsf.ValidateArgs({"vmhost" : libsf.IsValidIpv4Address,
                             "host_user" : None,
                             "host_pass" : None,
-                            "vm_prefix" : None},
+                            #"vm_prefix" : None
+                            },
             args)
         if args["connection"] != "ssh":
             if args["connection"] != "tcp":
                 raise libsf.SfArgumentError("Connection type needs to be ssh or tcp")
 
 
-    def Execute(self, vm_prefix, vmhost=sfdefaults.vmhost_kvm, connection="ssh", csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def Execute(self, vm_prefix, vmhost=sfdefaults.vmhost_kvm, connection=sfdefaults.kvm_connection, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         Count the VMs that match the prefix
         """
@@ -64,12 +66,19 @@ class KvmCountVmsAction(ActionBase):
         mylog.info("Connecting to " + vmhost)
         try:
             if connection == "ssh":
-                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmhost + "/system")
             elif connection == "tcp":
-                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmhost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
                 return False
+
+        # temp = libsf.SfLibvirt()
+        # try:
+        #     conn = temp.Connect(vmhost)
+        # except libsf.SfLibvirtError as e:
+        #     mylog.error("Could not connect to " + vmhost + " Message: " + str(e))
+        #     return False
 
         except libvirt.libvirtError as e:
             mylog.error(str(e))
@@ -91,10 +100,14 @@ class KvmCountVmsAction(ActionBase):
         except libvirt.libvirtError as e:
             mylog.error(str(e))
             return False
-        for vm in stopped_vm_list:
-            m = re.search("^" + vm_prefix + r"0*(\d+)$", vm.name())
-            if m:
-                matching_vms += 1
+        if vm_prefix is None:
+            matching_vms += len(stopped_vm_list)
+        else:
+            for vm in stopped_vm_list:
+                #m = re.search("^" + vm_prefix + r"0*(\d+)$", vm.name())
+                m = re.search(vm_prefix, vm.name())
+                if m:
+                    matching_vms += 1
 
         # Get a list of running VMs
         try:
@@ -105,10 +118,14 @@ class KvmCountVmsAction(ActionBase):
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
-        for vm in running_vm_list:
-            m = re.search("^" + vm_prefix + r"0*(\d+)$", vm.name())
-            if m:
-                matching_vms += 1
+        if vm_prefix is None:
+            matching_vms += len(running_vm_list)
+        else:
+            for vm in running_vm_list:
+                #m = re.search("^" + vm_prefix + r"0*(\d+)$", vm.name())
+                m = re.search(vm_prefix, vm.name())
+                if m:
+                    matching_vms += 1
 
         # Show the number of VMs found
         if bash or csv:
@@ -116,7 +133,11 @@ class KvmCountVmsAction(ActionBase):
             sys.stdout.write("\n")
             sys.stdout.flush()
         else:
-            mylog.info("There are " + str(matching_vms) + " VMs with prefix " + vm_prefix)
+            if vm_prefix is None:
+                mylog.passed("There are " + str(matching_vms) + " VMs")
+            else:
+
+                mylog.passed("There are " + str(matching_vms) + " VMs with prefix " + vm_prefix)
         return True
 
 # Instantate the class and add its attributes to the module
@@ -133,7 +154,7 @@ if __name__ == '__main__':
     parser.add_option("--vm_prefix", type="string", dest="vm_prefix", default=None, help="the prefix of the VM names to match")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
-    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
+    parser.add_option("--connection", type="string", dest="connection", default=sfdefaults.kvm_connection, help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 

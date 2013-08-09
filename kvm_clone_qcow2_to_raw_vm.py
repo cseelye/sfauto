@@ -112,7 +112,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
         return "/dev/disk/by-path/" + loc
 
 
-    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection="ssh", qcow2Path=sfdefaults.kvm_qcow2_path, rawPath=None, vmName="kvm-ubuntu-gold", cpuCount=sfdefaults.kvm_cpu_count, memorySize=sfdefaults.kvm_mem_size, osType=sfdefaults.kvm_os, network=sfdefaults.kvm_network, debug=False):
+    def Execute(self, vmHost=None, hostUser=sfdefaults.host_user, hostPass=sfdefaults.host_pass, connection=sfdefaults.kvm_connection, qcow2Path=sfdefaults.kvm_qcow2_path, rawPath=None, vmName="kvm-ubuntu-gold", cpuCount=sfdefaults.kvm_cpu_count, memorySize=sfdefaults.kvm_mem_size, osType=sfdefaults.kvm_os, network=sfdefaults.kvm_network, debug=False):
 
         print qcow2Path
         self.ValidateArgs(locals())
@@ -230,7 +230,7 @@ if __name__ == '__main__':
     parser.add_option("--memory_size", type="int", dest="memory_size", default=sfdefaults.kvm_mem_size, help="The size of memory in MB for the vm, default 512MB")
     parser.add_option("--os_type", type="string", dest="os_type", default=sfdefaults.kvm_os, help="The OS type of the VM")
     parser.add_option("--network", type="string", dest="network", default=sfdefaults.kvm_network, help="The network connection for the VM. Default is ClientNet")
-    parser.add_option("--connection", type="string", dest="connection", default="ssh", help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
+    parser.add_option("--connection", type="string", dest="connection", default=sfdefaults.kvm_connection, help="How to connect to vibvirt on vmhost. Options are: ssh or tcp")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
