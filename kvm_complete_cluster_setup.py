@@ -113,7 +113,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        if skipCluster == False
+        if skipCluster == False:
             self.ValidateArgsCluster(locals())
 
             mylog.banner("Making Cluster")
@@ -201,17 +201,17 @@ if __name__ == '__main__':
     parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_kvm, help="the management IP of the KVM hypervisor [%default]")
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
-    parser.add_option("--nfs_ip", type="string", dest="nfs_ip", default=sfdefaults.nfs_ip, help="the IP address of the nfs datastore")
-    parser.add_option("--nfs_path", type="string", dest="nfs_path", default=sfdefaults.kvm_nfs_path, help="the path you want to mount from the nfs datastore")
-    parser.add_option("--mount_point", type="string", dest="mount_point", default=sfdefaults.nfs_mount_point, help="the location you want to mount the nfs datasore on the client, ex: /mnt/nfs")
+    parser.add_option("--nfs_ip", type="string", dest="nfs_ip", default=sfdefaults.nfs_ip, help="the IP address of the nfs datastore [%default]")
+    parser.add_option("--nfs_path", type="string", dest="nfs_path", default=sfdefaults.kvm_nfs_path, help="the path you want to mount from the nfs datastore [%default]")
+    parser.add_option("--mount_point", type="string", dest="mount_point", default=sfdefaults.nfs_mount_point, help="the location you want to mount the nfs datasore on the client, ex: /mnt/nfs [%default]")
     #vm info
-    parser.add_option("--qcow2_name", type="string", dest="qcow2_name", default=sfdefaults.kvm_qcow2_name, help="name of the qcow2 image")
-    parser.add_option("--cpu_count", type="int", dest="cpu_count", default=sfdefaults.kvm_cpu_count, help="The number of virtural CPUs the VM should have")
-    parser.add_option("--memory_size", type="int", dest="memory_size", default=sfdefaults.kvm_mem_size, help="The size of memory in MB for the vm, default 512MB")
-    parser.add_option("--os_type", type="string", dest="os_type", default=sfdefaults.kvm_os, help="The OS type of the VM")
+    parser.add_option("--qcow2_name", type="string", dest="qcow2_name", default=sfdefaults.kvm_qcow2_name, help="name of the qcow2 image [%default]")
+    parser.add_option("--cpu_count", type="int", dest="cpu_count", default=sfdefaults.kvm_cpu_count, help="The number of virtural CPUs the VM should have [%default]")
+    parser.add_option("--memory_size", type="int", dest="memory_size", default=sfdefaults.kvm_mem_size, help="The size of memory in MB for the vm, [%default]")
+    parser.add_option("--os_type", type="string", dest="os_type", default=sfdefaults.kvm_os, help="The OS type of the VM [%default]")
     #vm cloning info
     parser.add_option("--template_name", type="string", dest="source_name", default=None, help="the name of the VM to import and then clone from")
-    parser.add_option("--clone_name", type="string", dest="clone_name", default=sfdefaults.kvm_clone_name, help="the name of the cloned VMs")
+    parser.add_option("--clone_name", type="string", dest="clone_name", default=sfdefaults.kvm_clone_name, help="the name of the cloned VMs [%default]")
     parser.add_option("--vm_count", type="int", dest="clone_count", default=None, help="the number of VMs to make")
     #debug
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
