@@ -141,6 +141,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
 
         # convert qcow2 to raw - nfs to iscsi
         # use provided path
+        start_convert_time = time.time()
         mylog.step("Converting the qcow2 image to a raw image on volume")
         retcode, stdout, stderr = hypervisor.ExecuteCommand("qemu-img convert -O raw " + qcow2Path + " " + rawPath)
         if retcode == 0:
@@ -148,6 +149,9 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
         else:
             mylog.error("There was an error converting the qcow2 image to a raw image. Error message: " + stderr)
             return False
+        end_convert_time = time.time()
+        delta_time = libsf.SecondsToElapsedStr(end_convert_time - start_convert_time)
+        mylog.info("It took " + delta_time + " to convert the qcow2 image to raw")
 
         #connect to libvirt hypervisor
         try:
