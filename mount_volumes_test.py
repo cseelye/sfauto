@@ -24,7 +24,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
-
+import time
 
 class MountVolumesTestAction(ActionBase):
     class Events:
@@ -103,9 +103,10 @@ class MountVolumesTestAction(ActionBase):
         else:
             mylog.error("There was an error partitioning the volume")
             return False
-
+        time. sleep(30)
         mylog.info("Path to the volume: /dev/disk/by-path/" + loc + "-part1")
         mylog.step("Formatting the volume ext4")
+        mylog.info(loc + "-part1")
         retcode, stdout, stderr = client.ExecuteCommand("mkfs.ext4 -E nodiscard /dev/disk/by-path/" + loc + "-part1")
         mylog.debug("Retcode: " + str(retcode))
         mylog.debug("Standard Output: " + str(stdout))
