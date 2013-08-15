@@ -89,7 +89,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
                             "qcow2Name" : None,
                             "nfsMountPoint" : None,
                             "nfsPath" : None,
-                            "nfsIp" : libsf.IsValidIpv4Address},
+                            "nfsIP" : libsf.IsValidIpv4Address},
             args)
 
     def ValidateArgsRegular(self, args):
@@ -104,7 +104,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
                             "qcow2Name" : None,
                             "nfsMountPoint" : None,
                             "nfsPath" : None,
-                            "nfsIp" : libsf.IsValidIpv4Address},
+                            "nfsIP" : libsf.IsValidIpv4Address},
             args)
 
 
@@ -172,7 +172,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
         mylog.step("Waiting for 2 minutes for all the VMs to boot")
         time.sleep(120)
 
-        if check_vm_health_clientmon.Execute(vmHost, hostUser, hostPass) == False:
+        if check_vm_health_clientmon.Execute(vmType="KVM") == False:
             mylog.error("Not all the VMs are healthy")
             return False
 
