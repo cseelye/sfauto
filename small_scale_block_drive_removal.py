@@ -43,6 +43,8 @@ import check_cluster_health
 import get_random_node
 import wait_syncing
 import add_available_drives
+import clusterbscheck
+
 
 class SmallScaleBlockDriveRemovalAction(ActionBase):
     class Events:
@@ -71,7 +73,7 @@ class SmallScaleBlockDriveRemovalAction(ActionBase):
 
 
 
-    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, vmType=None, clientUser=sfdefaults.client_user, clientPass=sfdefaults.client_pass, nodeSshUser=sfdefaults.ssh_user, nodeSshPass=sfdefaults.ssh_pass, nomaster=True, threadMax=sfdefaults.parallel_max, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, vmType=None, clientUser=sfdefaults.client_user, clientPass=sfdefaults.client_pass, nodeSshUser=sfdefaults.ssh_user, nodeSshPass=sfdefaults.ssh_pass, nomaster=True, threadMax=sfdefaults.parallel_max, bsCheck=True, skipVM=False, debug=False):
 
         self.ValidateArgs(locals())
         if debug:
@@ -83,21 +85,28 @@ class SmallScaleBlockDriveRemovalAction(ActionBase):
             mylog.error("The Cluster is not healthy to begin with")
             return False
 
-        mylog.step("Checking the VMs health")
-        if check_vm_health_clientmon.Execute(vmType=vmType, clientUser=clientUser, clientPass=clientPass, threadMax=threadMax) == False:
-            mylog.error("The VMs are not healthy to begin with")
+        mylog.step("Preforming a Cluster BS Check")
+        if clusterbscheck.Execute(mvip=mvip, username=username, password=password) == False:
+            mylog.error("Cluster BS Check Failed")
             return False
 
-        waitTime = 60
-        healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmType, clientUser, clientPass, threadMax, waitTime))
-        healthThread.start()
+        if skipVM == False:
+            mylog.step("Checking the VMs health")
+            if check_vm_health_clientmon.Execute(vmType=vmType, clientUser=clientUser, clientPass=clientPass, threadMax=threadMax) == False:
+                mylog.error("The VMs are not healthy to begin with")
+                return False
+
+            waitTime = 60
+            healthThread = multiprocessing.Process(target=self._checkVMHealthThread, args=(vmType, clientUser, clientPass, threadMax, waitTime))
+            healthThread.start()
 
 
         #get a random node
         random_node_ip = get_random_node.Get(mvip=mvip, username=username, password=password, nomaster=nomaster)
         if random_node_ip == False:
             mylog.error("There was an error getting a random node")
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
 
         #get a list of block service drives
@@ -106,7 +115,8 @@ class SmallScaleBlockDriveRemovalAction(ActionBase):
             node_list = libsf.CallApiMethod(mvip, username, password, "ListActiveNodes", {})
         except libsf.SfError as e:
             mylog.error("Unable to get a list of active nodes. Message: " + str(e))
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
 
         random_node_id = None
@@ -119,7 +129,8 @@ class SmallScaleBlockDriveRemovalAction(ActionBase):
             result = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
         except libsf.SfError as e:
             mylog.error("Unable to get list of drives. Message: " + str(e))
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
 
         for drive in result["drives"]:
@@ -139,7 +150,8 @@ class SmallScaleBlockDriveRemovalAction(ActionBase):
             mylog.info("The block drives have been removed.")
         except libsf.SfError as e:
             mylog.error("Failed to remove drives: " + str(e))
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
 
         #wait for one minute
@@ -150,37 +162,51 @@ class SmallScaleBlockDriveRemovalAction(ActionBase):
         mylog.step("Waiting for everything to sync on cluster: " + mvip)
         if wait_syncing.Execute(mvip=mvip, username=username, password=password) == False:
             mylog.error("Timed out waiting for syncing")
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
 
         #once syncing has finished do a health check on the cluster
         mylog.step("Health check")
         if check_cluster_health.Execute(mvip=mvip, username=username, password=password) == False:
             mylog.error("The Cluster is not healthy")
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
+
+        mylog.step("Preforming a Cluster BS Check")
+        if clusterbscheck.Execute(mvip=mvip, username=username, password=password) == False:
+            mylog.error("Cluster BS Check Failed")
+            if skipVM == False:
+                healthThread.terminate()    
+            return False
+
 
         #if all is good add the BS drives back to the cluster
         if add_available_drives.Execute(mvip=mvip, username=username, password=password) == False:
             mylog.error("There was an error trying to add the block drives back to the cluster")
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
 
         #make sure cluster is healthy
         mylog.step("Health check")
         if check_cluster_health.Execute(mvip=mvip, username=username, password=password) == False:
             mylog.error("The Cluster is not healthy")
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
 
         #a check to report if any of the health threads failed
         if self.Healthy.value == False:
             mylog.warning("The VMs were not healthy thoughout the entire test")
-            healthThread.terminate()
+            if skipVM == False:
+                healthThread.terminate()
             return False
 
         #done
-        healthThread.terminate()
+        if skipVM == False:
+            healthThread.terminate()
         return True
 
 # Instantate the class and add its attributes to the module
@@ -202,13 +228,15 @@ if __name__ == '__main__':
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes")
     parser.add_option("--nomaster", action="store_true", dest="nomaster", default=False, help="do not select the cluster master")
     parser.add_option("--thread_max", type="int", dest="thread_max", default=sfdefaults.parallel_max, help="The number of threads to use when checking a client's health")
+    parser.add_option("--skip_vms", action="store_true", dest="skip_vms", default=False, help="Skip checking the health of the VMs. ClientMonitor")
+    parser.add_option("--bs_check", action="store_true", dest="bs_check", default=False, help="Do a BS check when checking the cluster health")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.username, options.password, options.vm_type, options.client_user, options.client_pass, options.ssh_user, options.ssh_pass, options.nomaster, options.thread_max, options.debug):
+        if Execute(options.mvip, options.username, options.password, options.vm_type, options.client_user, options.client_pass, options.ssh_user, options.ssh_pass, options.nomaster, options.thread_max, options.bs_check, options.skip_vms, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
