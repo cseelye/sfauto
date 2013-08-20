@@ -82,7 +82,7 @@ class GetVolumeIqnAction(ActionBase):
         Show the IQN of a volume
         """
         del self
-        volume_iqn = Get(**locals())
+        volume_iqn = Get(mvip, volume_name, csv, bash, username, password, debug)
         if volume_iqn is False:
             return False
 
@@ -111,7 +111,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.csv, options.bash, options.username, options.password, options.debug):
+        if Execute(options.mvip, options.volume_name, options.csv, options.bash, options.username, options.password, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
