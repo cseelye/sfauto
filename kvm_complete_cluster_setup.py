@@ -62,6 +62,10 @@ import kvm_complete_creation_test
 import kvm_hypervisor_setup
 import make_cluster
 import check_vm_health_clientmon
+import get_volume_iqn
+import create_volumes
+import login_client
+import mount_volumes_test
 
 class KvmCompleteClusterSetupAction(ActionBase):
     class Events:
@@ -108,10 +112,14 @@ class KvmCompleteClusterSetupAction(ActionBase):
             args)
 
 
-    def Execute(self, nodeIPs, nodeCount, mvip, svip, clusterName, username, password, vmHost, hostUser, hostPass, nfsIP, nfsPath, nfsMountPoint, qcow2Name, cloneCount, cloneName, skipCluster=False, debug=False):
+    def Execute(self, nodeIPs, nodeCount, mvip, svip, clusterName, username, password, vmHost, hostUser, hostPass, nfsIP, nfsPath, nfsMountPoint, qcow2Name, cloneCount, cloneName, sourceName, skipCluster=False, debug=False):
 
         if debug:
             mylog.console.setLevel(logging.DEBUG)
+
+        if "_" in cloneName:
+            mylog.error("Please rename the clone_name. No '_' permitted")
+            return False
 
         if skipCluster == False:
             self.ValidateArgsCluster(locals())
@@ -135,12 +143,47 @@ class KvmCompleteClusterSetupAction(ActionBase):
         try:
             hypervisor = libclient.SfClient()
             hypervisor.Connect(vmHost, hostUser, hostPass)
+            hypervisor_hostname = hypervisor.Hostname
         except libclient.ClientError as e:
             mylog.error(str(e))
             return False
 
+        if "clone" in cloneName:
+            template_name = cloneName.replace("clone", "template")
+        else:
+            template_name = cloneName + "-template"
+
+        mylog.step("Creating 1 volume for client")
+        if(create_volumes.Execute(volume_size=65, volume_count=1, volume_name_in=template_name, mvip=mvip, enable_512=False, username=username, password=password, min_iops=100, max_iops=100000, burst_iops=100000, account_name=hypervisor_hostname) == False):
+            mylog.error("Failed trying to create 1st volume")
+            self._RaiseEvent(self.Events.FAILURE)
+            return False
+
+        time.sleep(30)
+
+        mylog.step("Logging in client")
+        client_ips = [vmHost]
+        if(login_client.Execute(mvip=mvip, client_ips=client_ips, username=username, password=password, client_user=hostUser, client_pass=hostPass) == False):
+            mylog.error("Failed trying to log client in")
+            self._RaiseEvent(self.Events.FAILURE)
+            return False
+
+
+        iqn = get_volume_iqn.Get(mvip=mvip, volume_name=template_name, username=username, password=password)
+        if iqn == False:
+            mylog.error("Could not get IQN for the template volume " + template_name)
+            return False
+
+
+        mylog.step("Mounting 1 volume on client")
+        if(mount_volumes_test.Execute(clientIP=vmHost, clientUser=hostUser, clientPass=hostPass, iqn=iqn) == False):
+            mylog.error("Failed trying to mount volumes on client")
+            self._RaiseEvent(self.Events.FAILURE)
+            return False
+
+
         #get the path to the raw volume 
-        retcode, stdout, stderr = hypervisor.ExecuteCommand("ls /dev/disk/by-path/ | grep ip")
+        retcode, stdout, stderr = hypervisor.ExecuteCommand("ls /dev/disk/by-path/ | grep " + iqn)
         if retcode != 0:
             mylog.error("Could not find the path to the iscsi volume")
             return False
@@ -159,8 +202,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
         osType = "linux"
 
         qcow2Path = nfsMountPoint + "/" + qcow2Name
-        #qcow2Path = "/home/solidfire/kvm-test-gold.qcow2"
-        sourceName = "kvm-ubuntu-gold"
+        #sourceName = "kvm-ubuntu-gold"
 
         mylog.banner("Setting up VMs on hypervisor")
         start_time = time.time()
@@ -201,17 +243,17 @@ if __name__ == '__main__':
     parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_kvm, help="the management IP of the KVM hypervisor [%default]")
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
-    parser.add_option("--nfs_ip", type="string", dest="nfs_ip", default=sfdefaults.nfs_ip, help="the IP address of the nfs datastore [%default]")
-    parser.add_option("--nfs_path", type="string", dest="nfs_path", default=sfdefaults.kvm_nfs_path, help="the path you want to mount from the nfs datastore [%default]")
-    parser.add_option("--mount_point", type="string", dest="mount_point", default=sfdefaults.nfs_mount_point, help="the location you want to mount the nfs datasore on the client, ex: /mnt/nfs [%default]")
+    parser.add_option("--nfs_ip", type="string", dest="nfs_ip", default=sfdefaults.nfs_ip, help="the IP address of the nfs datastore")
+    parser.add_option("--nfs_path", type="string", dest="nfs_path", default=sfdefaults.kvm_nfs_path, help="the path you want to mount from the nfs datastore")
+    parser.add_option("--mount_point", type="string", dest="mount_point", default=sfdefaults.nfs_mount_point, help="the location you want to mount the nfs datasore on the client, ex: /mnt/nfs")
     #vm info
-    parser.add_option("--qcow2_name", type="string", dest="qcow2_name", default=sfdefaults.kvm_qcow2_name, help="name of the qcow2 image [%default]")
-    parser.add_option("--cpu_count", type="int", dest="cpu_count", default=sfdefaults.kvm_cpu_count, help="The number of virtural CPUs the VM should have [%default]")
-    parser.add_option("--memory_size", type="int", dest="memory_size", default=sfdefaults.kvm_mem_size, help="The size of memory in MB for the vm, [%default]")
-    parser.add_option("--os_type", type="string", dest="os_type", default=sfdefaults.kvm_os, help="The OS type of the VM [%default]")
+    parser.add_option("--qcow2_name", type="string", dest="qcow2_name", default=sfdefaults.kvm_qcow2_name, help="name of the qcow2 image")
+    parser.add_option("--cpu_count", type="int", dest="cpu_count", default=sfdefaults.kvm_cpu_count, help="The number of virtural CPUs the VM should have")
+    parser.add_option("--memory_size", type="int", dest="memory_size", default=sfdefaults.kvm_mem_size, help="The size of memory in MB for the vm, default 512MB")
+    parser.add_option("--os_type", type="string", dest="os_type", default=sfdefaults.kvm_os, help="The OS type of the VM")
     #vm cloning info
     parser.add_option("--template_name", type="string", dest="source_name", default=None, help="the name of the VM to import and then clone from")
-    parser.add_option("--clone_name", type="string", dest="clone_name", default=sfdefaults.kvm_clone_name, help="the name of the cloned VMs [%default]")
+    parser.add_option("--clone_name", type="string", dest="clone_name", default=sfdefaults.kvm_clone_name, help="the name of the cloned VMs")
     parser.add_option("--vm_count", type="int", dest="clone_count", default=None, help="the number of VMs to make")
     #debug
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -219,7 +261,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.node_ips, options.node_count, options.mvip, options.svip, options.cluster_name, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.nfs_ip, options.nfs_path, options.mount_point, options.qcow2_name, options.clone_count, options.clone_name, options.skip_cluster, options.debug):
+        if Execute(options.node_ips, options.node_count, options.mvip, options.svip, options.cluster_name, options.username, options.password, options.vmhost, options.host_user, options.host_pass, options.nfs_ip, options.nfs_path, options.mount_point, options.qcow2_name, options.clone_count, options.clone_name, options.source_name, options.skip_cluster, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
