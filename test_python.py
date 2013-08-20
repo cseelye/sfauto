@@ -37,7 +37,9 @@ modules = [
     "syslog",
     "threading",
     "time",
-    "urllib2"
+    "urllib2",
+    "libvirt",
+    "mysqldb"
 ]
 failed = False
 for mod in modules:
