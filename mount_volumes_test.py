@@ -24,7 +24,7 @@ from lib.libclient import ClientError, SfClient
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
-import time
+
 
 class MountVolumesTestAction(ActionBase):
     class Events:
@@ -38,11 +38,11 @@ class MountVolumesTestAction(ActionBase):
 
     def ValidateArgs(self, args):
         libsf.ValidateArgs({"clientIP" : libsf.IsValidIpv4Address,
-                        },
+                            "iqn" : None},
         args)
 
 
-    def Execute(self, clientIP, clientUser, clientPass, debug=False):
+    def Execute(self, clientIP, clientUser, clientPass, iqn=None, debug=False):
 
         self.ValidateArgs(locals())
         if debug:
@@ -65,8 +65,8 @@ class MountVolumesTestAction(ActionBase):
             return False
 
         #get the iqn for later use
-        stdout = stdout.split()
-        iqn = stdout[1]
+        # stdout = stdout.split()
+        # iqn = stdout[1]
 
         #use the iqn to find the disk path
         retcode, stdout, stderr = client.ExecuteCommand("ls /dev/disk/by-path/ | grep " + iqn)
@@ -103,10 +103,9 @@ class MountVolumesTestAction(ActionBase):
         else:
             mylog.error("There was an error partitioning the volume")
             return False
-        time. sleep(30)
+
         mylog.info("Path to the volume: /dev/disk/by-path/" + loc + "-part1")
         mylog.step("Formatting the volume ext4")
-        mylog.info(loc + "-part1")
         retcode, stdout, stderr = client.ExecuteCommand("mkfs.ext4 -E nodiscard /dev/disk/by-path/" + loc + "-part1")
         mylog.debug("Retcode: " + str(retcode))
         mylog.debug("Standard Output: " + str(stdout))
