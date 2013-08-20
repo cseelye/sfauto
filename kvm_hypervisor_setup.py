@@ -96,26 +96,26 @@ class KvmHypervisorSetupAction(ActionBase):
             return False
         self._RaiseEvent(self.Events.CREATED_ACCOUNT)
 
-        mylog.step("Creating 1 volume for client")
-        if(create_volumes_for_client.Execute(volume_size=65, volume_count=1, mvip=mvip, client_ips=clientIP, enable_512=False, username=username, password=password, client_user=clientUser, client_pass=clientPass) == False):
-            mylog.error("Failed trying to create 1st volume")
-            self._RaiseEvent(self.Events.FAILURE)
-            return False
-        self._RaiseEvent(self.Events.CREATED_VOLUME_FOR_ACCOUNT)
+        # mylog.step("Creating 1 volume for client")
+        # if(create_volumes_for_client.Execute(volume_size=65, volume_count=1, mvip=mvip, client_ips=clientIP, enable_512=False, username=username, password=password, client_user=clientUser, client_pass=clientPass) == False):
+        #     mylog.error("Failed trying to create 1st volume")
+        #     self._RaiseEvent(self.Events.FAILURE)
+        #     return False
+        # self._RaiseEvent(self.Events.CREATED_VOLUME_FOR_ACCOUNT)
 
-        mylog.step("Logging in client")
-        if(login_client.Execute(mvip=mvip, client_ips=clientIP, username=username, password=password, client_user=clientUser, client_pass=clientPass) == False):
-            mylog.error("Failed trying to log client in")
-            self._RaiseEvent(self.Events.FAILURE)
-            return False
-        self._RaiseEvent(self.Events.LOGGED_IN_CLIENT)
+        # mylog.step("Logging in client")
+        # if(login_client.Execute(mvip=mvip, client_ips=clientIP, username=username, password=password, client_user=clientUser, client_pass=clientPass) == False):
+        #     mylog.error("Failed trying to log client in")
+        #     self._RaiseEvent(self.Events.FAILURE)
+        #     return False
+        # self._RaiseEvent(self.Events.LOGGED_IN_CLIENT)
 
-        mylog.step("Mounting 1 volume on client")
-        if(mount_volumes_test.Execute(clientIP=clientIP[0], clientUser=clientUser, clientPass=clientPass) == False):
-            mylog.error("Failed trying to mount volumes on client")
-            self._RaiseEvent(self.Events.FAILURE)
-            return False
-        self._RaiseEvent(self.Events.MOUNTED_VOLUME)
+        # mylog.step("Mounting 1 volume on client")
+        # if(mount_volumes_test.Execute(clientIP=clientIP[0], clientUser=clientUser, clientPass=clientPass) == False):
+        #     mylog.error("Failed trying to mount volumes on client")
+        #     self._RaiseEvent(self.Events.FAILURE)
+        #     return False
+        # self._RaiseEvent(self.Events.MOUNTED_VOLUME)
 
         mylog.step("Mounting the nfs datastore")
         if(kvm_mount_nfs_datastore.Execute(clientIP=clientIP[0], clientUsername=clientUser, clientPassword=clientPass, nfsIP=nfsIP, nfsPath=nfsPath, mountPoint=mountPoint) == False):
