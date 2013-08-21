@@ -11,6 +11,7 @@ import datetime
 import calendar
 import json
 import urllib2
+import cookielib
 import BaseHTTPServer
 import httplib
 import random
@@ -351,7 +352,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
                                 color = 0x07
                             else:
                                 pass # unknown color command - ignore it
-                        
+
                         c.SetConsoleTextAttribute(color)
 
     def colorize(self, message, record):
@@ -727,12 +728,20 @@ def CallNodeApiMethod(NodeIp, Username, Password, MethodName, MethodParams, Exit
     rpc_url = 'https://' + NodeIp + ':442/json-rpc/' + ("%1.1f" % ApiVersion)
     return __CallApiMethodCommon(NodeIp, rpc_url, Username, Password, MethodName, MethodParams, ExitOnError, ApiVersion)
 
-def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams, ExitOnError=False, ApiVersion=5.0):
-    password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
-    if Username:
-        password_mgr.add_password(None, Url, Username, Password)
-    handler = urllib2.HTTPBasicAuthHandler(password_mgr)
-    opener = urllib2.build_opener(handler)
+cookie_jar = None
+def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams, ExitOnError=False, ApiVersion=5.0, UseCookies=False):
+    if UseCookies:
+        global cookie_jar
+        if not cookie_jar:
+            cookie_jar = cookielib.CookieJar()
+        opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookie_jar))
+    else:
+        password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+        if Username:
+            password_mgr.add_password(None, Url, Username, Password)
+        handler = urllib2.HTTPBasicAuthHandler(password_mgr)
+        opener = urllib2.build_opener(handler)
+
     urllib2.install_opener(opener)
 
     api_call = json.dumps( { 'method': MethodName, 'params': MethodParams, 'id': random.randint(100, 1000) } )
@@ -752,7 +761,10 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
         http_retry = 5
         while True:
             api_resp = None
-            mylog.debug("Calling API on " + Url + ": " + api_call + " as " + Username + " : " + Password)
+            if Username:
+                mylog.debug("Calling API on " + Url + ": " + api_call + " as " + str(Username) + " : " + str(Password))
+            else:
+                mylog.debug("Calling API on " + Url + ": " + api_call)
             try:
                 api_resp = urllib2.urlopen(Url, api_call)
                 break
@@ -812,10 +824,11 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
         #print "---------------------------------------------------------------------"
 
         # Make sure the response is the expected length
-        expected_len = int(api_resp.headers['content-length'])
-        actual_len = len(response_str)
-        if (expected_len != actual_len):
-            mylog.warning("API response: expected " + str(expected_len) + " bytes (content-length) but received " + str(actual_len) + " bytes")
+        if 'content-length' in api_resp.headers:
+            expected_len = int(api_resp.headers['content-length'])
+            actual_len = len(response_str)
+            if (expected_len != actual_len):
+                mylog.warning("API response: expected " + str(expected_len) + " bytes (content-length) but received " + str(actual_len) + " bytes")
 
         # Try to parse the response into JSON
         try:
@@ -855,9 +868,9 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
             raise SfApiError(response_obj["error"]["name"], response_obj['error']['message'])
 
 # Function for calling solidfire API methods
-def CallApiMethod(Mvip, Username, Password, MethodName, MethodParams, ExitOnError=False, ApiVersion=1.0):
+def CallApiMethod(Mvip, Username, Password, MethodName, MethodParams, ExitOnError=False, ApiVersion=5.0, UseCookies=False):
     rpc_url = 'https://' + Mvip + '/json-rpc/' + ("%1.1f" % ApiVersion)
-    return __CallApiMethodCommon(Mvip, rpc_url, Username, Password, MethodName, MethodParams, ExitOnError, ApiVersion)
+    return __CallApiMethodCommon(Mvip, rpc_url, Username, Password, MethodName, MethodParams, ExitOnError, ApiVersion, UseCookies)
 
 def ConnectSsh(pClientIp, pUsername, pPassword):
     client = ssh.SSHClient()
