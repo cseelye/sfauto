@@ -38,10 +38,6 @@ try:
 except ImportError:
     import paramiko as ssh
 import shlex
-try:
-    import zmq
-except ImportError:
-    print "WARNING\t ZMQ module not installed. Will not be able to run VMware scripts"
 
 class SfError(Exception):
     """
@@ -138,7 +134,10 @@ class ChildScript(object):
     """
 
     def __init__(self, command, timeout=600):
-        import zmq
+        try:
+            import zmq
+        except ImportError:
+            raise SfError("You must install the 0MQ module to run this script")
 
         self.cmd = command
         self.timeout = timeout
