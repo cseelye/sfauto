@@ -167,7 +167,7 @@ class RemoveDrivesAction(ActionBase):
                     return False
                 for do in drives_obj["drives"]:
                     if drive_slots != None:
-                        if (do["status"] == "active" and str(node_id) == str(do["nodeID"])) and int(do["slot"]) in drive_slots:
+                        if (do["status"] == "active" and str(node_id) == str(do["nodeID"])) and str(do["slot"]) in drive_slots:
                             drives2remove.append(int(do["driveID"]))
                             mylog.info("  Removing driveID " + str(do["driveID"]) + " from slot " + str(do["slot"]))
                     else:

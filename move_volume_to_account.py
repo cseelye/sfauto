@@ -84,7 +84,7 @@ class MoveVolumeToAccountAction(ActionBase):
                             "username" : None,
                             "password" : None},
                     args)
-        if not args.dest_account and args.dest_account_id <= 0:
+        if not args["dest_account"] and args["dest_account_id"] <= 0:
             raise libsf.SfArgumentError("Please specify a destination account")
 
     def Execute(self, mvip, volume_name=None, volume_id=0, volume_prefix=None, volume_regex=None, volume_count=0, source_account=None, source_account_id=0, dest_account=None, dest_account_id=0, test=False, username=sfdefaults.username, password=sfdefaults.password, parallel_thresh=sfdefaults.parallel_calls_thresh, parallel_max=sfdefaults.parallel_calls_max, debug=False):
