@@ -34,6 +34,7 @@ import datetime
 import calendar
 import logging
 import lib.sfdefaults as sfdefaults
+import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
 
@@ -148,18 +149,6 @@ class ClusterbscheckAction(ActionBase):
         self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
-
-        mylog.info("Checking cluster version on " + mvip)
-
-        try:
-            result = libsf.CallApiMethod(mvip, username, password, "GetClusterVersionInfo", {})
-        except libsf.SfError as e:
-            mylog.error("Failed to get cluster version: " + str(e))
-            return False
-
-        if not result["clusterVersion"].startswith("5"):
-            mylog.error("This script only works with Boron and later")
-            sys.exit(1)
 
         mylog.info("Getting a list of nodes in the cluster")
         node_ip_list = []
