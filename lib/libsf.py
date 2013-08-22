@@ -476,6 +476,14 @@ class mylog:
     sftestlog.addHandler(console)
 
     @staticmethod
+    def showDebug():
+        mylog.console.setLevel(logging.DEBUG)
+
+    @staticmethod
+    def hideDebug():
+        mylog.console.setLevel(logging.INFO)
+
+    @staticmethod
     def debug(message):
         if mylog.silence: return
         lines = SplitMessage(message)
