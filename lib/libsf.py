@@ -1520,6 +1520,20 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
                 count += 1
                 if VolumeCount > 0 and count >= VolumeCount: break
 
+    # Search for all volumes
+    else:
+        for volume in all_volumes["volumes"]:
+            vol_id = int(volume["volumeID"])
+            vol_name = volume["name"]
+            if vol_name in found_volumes.keys():
+                mylog.warning("Duplicate volume name " + vol_name)
+                continue
+            else:
+                found_volumes[vol_name] = vol_id
+                count += 1
+                if VolumeCount > 0 and count >= VolumeCount: break
+
+
     return found_volumes
 
 def Which(pExeName):
