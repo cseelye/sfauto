@@ -819,8 +819,8 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
                     exit(1)
                 raise SfApiError(last_error_code, last_error_mess)
 
-            mylog.info("Waiting 60 seconds before trying API again...")
-            time.sleep(60)
+            mylog.info("Waiting 30 seconds before trying API again...")
+            time.sleep(30)
 
         # At this point we got a good HTTP response code from the URL
 
@@ -862,7 +862,8 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
         last_error_mess = response_obj["error"]["message"]
 
         # See if it is an error we should retry
-        if response_obj["error"]["name"] == "xDBConnectionLoss" and (MethodName.startswith("List") or MethodName.startswith("Get")):
+        #if response_obj["error"]["name"] == "xDBConnectionLoss" and (MethodName.startswith("List") or MethodName.startswith("Get")):
+        if response_obj["error"]["name"] == "xDBConnectionLoss":
             mylog.warning("Retrying because of xDBConnectionLoss")
             retry -= 1
             continue # go back to the beginning and try to get a better response from the cluster
