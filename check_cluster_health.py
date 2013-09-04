@@ -59,7 +59,7 @@ class CheckClusterHealthAction(ActionBase):
                             },
             args)
 
-    def Execute(self, mvip=sfdefaults.mvip, checkForCores=True, checkForFaults=True, fault_whitelist=None, since=0, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, ignoreCoreFiles=False, ignoreFaults=False, fault_whitelist=None, since=0, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
         """
         Check the health of the cluster
         """
@@ -82,8 +82,10 @@ class CheckClusterHealthAction(ActionBase):
         healthy = True
 
         # Check for core files
+        mylog.info("Checking for core files on nodes")
+        found_cores = []
         for node_ip in node_ips:
-            mylog.info("Checking for core files on " + node_ip)
+            #mylog.info("Checking for core files on " + node_ip)
             node = libsfnode.SFNode(node_ip, ssh_user, ssh_pass)
             try:
                 core_list = node.GetCoreFileList(since)
@@ -91,12 +93,13 @@ class CheckClusterHealthAction(ActionBase):
                 mylog.error("Failed to check for core files: " + str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
-            if (len(core_list) > 0):
-                if checkForCores:
+            if len(core_list) > 0:
+                found_cores.append(node_ip)
+                if not ignoreCoreFiles:
                     healthy = False
                     mylog.error("Found " + str(len(core_list)) + " core files on " + node_ip + ": " + ",".join(core_list))
-                else:
-                    mylog.warning("Found " + str(len(core_list)) + " core files on " + node_ip + ": " + ",".join(core_list))
+        if ignoreCoreFiles and found_cores:
+            mylog.warning("Core files present on " + ",".join(found_cores))
 
         # Check for xUnknownBlockID
         mylog.info("Checking for errors in cluster event log")
@@ -110,26 +113,30 @@ class CheckClusterHealthAction(ActionBase):
             return False
 
         # Check current cluster faults
-        if checkForFaults:
-            mylog.info("Checking for unresolved cluster faults")
+        mylog.info("Checking for unresolved cluster faults")
 
-            fault_whitelist = set(fault_whitelist)
-            if len(fault_whitelist) > 0:
-                mylog.info("If these faults are present, they will be ignored: " + ", ".join(fault_whitelist))
+        fault_whitelist = set(fault_whitelist)
+        # if len(fault_whitelist) > 0:
+            # mylog.info("If these faults are present, they will be ignored: " + ", ".join(fault_whitelist))
 
-            try:
-                current_faults = cluster.GetCurrentFaultSet()
-            except libsf.SfError as e:
-                mylog.error("Failed to get list of faults: " + str(e))
-                self.RaiseFailureEvent(message=str(e), exception=e)
-                return False
+        try:
+            current_faults = cluster.GetCurrentFaultSet()
+        except libsf.SfError as e:
+            mylog.error("Failed to get list of faults: " + str(e))
+            self.RaiseFailureEvent(message=str(e), exception=e)
+            return False
 
-            #if current_faults & fault_whitelist == current_faults:
-            if current_faults.intersection(fault_whitelist):
-                mylog.warning("Current cluster faults found: " + ", ".join(str(s) for s in current_faults.intersection(fault_whitelist)))
-            if current_faults.difference(fault_whitelist):
+        if current_faults.intersection(fault_whitelist):
+            mylog.info("Current whitelisted cluster faults found: " + ", ".join(str(s) for s in current_faults.intersection(fault_whitelist)))
+
+        if current_faults.difference(fault_whitelist):
+            found_faults = True
+            if ignoreFaults:
+                mylog.warning("Current cluster faults found: " + ", ".join(str(s) for s in current_faults.difference(fault_whitelist)))
+            else:
                 healthy = False
                 mylog.error("Current cluster faults found: " + ", ".join(str(s) for s in current_faults.difference(fault_whitelist)))
+
 
         if healthy:
             mylog.passed("Cluster is healthy")
@@ -153,14 +160,14 @@ if __name__ == '__main__':
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes")
     parser.add_option("--since", type="int", dest="since", default=0, help="timestamp of when to check health from")
     parser.add_option("--fault_whitelist", action="list", dest="fault_whitelist", default=None, help="ignore these faults and do not wait for them to clear")
-    parser.add_option("--ignore_cores", action="store_false", dest="checkForCores", default=True, help="ignore core files on nodes")
-    parser.add_option("--ignore_faults", action="store_false", dest="checkForFaults", default=True, help="ignore cluster faults")
+    parser.add_option("--ignore_cores", action="store_true", dest="ignoreCoreFiles", default=False, help="ignore core files on nodes")
+    parser.add_option("--ignore_faults", action="store_true", dest="ignoreFaults", default=False, help="ignore cluster faults")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.checkForCores, options.checkForFaults, options.fault_whitelist, options.since, options.username, options.password, options.ssh_user, options.ssh_pass, options.debug):
+        if Execute(options.mvip, options.ignoreCoreFiles, options.ignoreFaults, options.fault_whitelist, options.since, options.username, options.password, options.ssh_user, options.ssh_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
