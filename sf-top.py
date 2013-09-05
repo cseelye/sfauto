@@ -12,7 +12,7 @@ Display size can be changed with --columns and --compact
 """
 
 # cover a couple different ways of doing this
-__version__ = '2.2'
+__version__ = '2.3'
 VERSION = __version__
 version = __version__
 
@@ -38,6 +38,7 @@ import copy
 import inspect
 import BaseHTTPServer
 import lib.sfdefaults as sfdefaults
+import lib.libsf as libsf
 
 missing_modules = []
 try:
@@ -189,6 +190,7 @@ class ClusterInfo:
         self.SliceSyncing = "No"
         self.BinSyncing = "No"
         self.ClusterFaults = []
+        self.WhitelistClusterFaults = []
         self.NewEvents = []
         self.OldEvents = []
         self.LastGcStart = 0
@@ -807,7 +809,7 @@ def TimestampToStr(pTimestamp, pFormatString = "%Y-%m-%d %H:%M:%S", pTimeZone = 
     display_time = datetime.datetime.fromtimestamp(pTimestamp, pTimeZone)
     return display_time.strftime(pFormatString)
 
-def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterInfo=None):
+def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterInfo=None, faultWhitelist=None):
 
     info = ClusterInfo()
 
@@ -851,7 +853,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
         if pNodesInfo[n1] == None: continue
         if "debug" in pNodesInfo[n1].SfVersion.lower():
             debug = True
-        for n2 in node_ips:
+        for n2 in pNodesInfo.keys():
             if pNodesInfo[n2] == None: continue
             if pNodesInfo[n1].SfVersion != pNodesInfo[n2].SfVersion:
                 same = False
@@ -976,9 +978,14 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     if result is None:
         log.debug("Failed to get cluster faults")
     else:
+        current_faults = set()
         for fault in result["faults"]:
-            if fault['code'] not in info.ClusterFaults:
-                info.ClusterFaults.append(fault['code'])
+            if fault['code'] not in current_faults:
+                current_faults.add(fault['code'])
+        if faultWhitelist:
+            info.WhitelistClusterFaults = list(current_faults.intersection(set(faultWhitelist)))
+            current_faults = list(current_faults.difference(set(faultWhitelist)))
+        info.ClusterFaults = current_faults
 
     # Check for slice syncing
     sync_html = HttpRequest(log, "https://" + pMvip + "/reports/slicesyncing", pApiUser, pApiPass)
@@ -1704,7 +1711,7 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         count += 1
 
         ss = pClusterInfo.SliceServices[sliceid]
-        log.debug("slice " + str(ss.ServiceId) + " ss load = " + str(ss.SSLoad))
+        #log.debug("slice " + str(ss.ServiceId) + " ss load = " + str(ss.SSLoad))
         screen.gotoXY(pStartX + x_offset, pStartY + current_line)
         screen.set_color(ConsoleColors.WhiteFore)
         sys.stdout.write(" slice%-3s" % str(ss.ServiceId))
@@ -1732,11 +1739,13 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
             screen.set_color(ConsoleColors.WhiteFore)
         sys.stdout.write("%9s" % HumanizeBytes(ss.SecCacheBytes, 1))
 
-        if ss.PreviousSecCacheBytes >= 0:
-            if ss.PreviousSecCacheBytes < ss.SecCacheBytes > 0:
-                sys.stdout.write(u'\u25b2') # up triangle
-            elif ss.PreviousSecCacheBytes > ss.SecCacheBytes < 0:
-                sys.stdout.write(u'\u25bC') # down triangle
+        # Draw an up or down arrow as appropriate on non-windows
+        if platform.system().lower() != 'windows':
+            if ss.PreviousSecCacheBytes >= 0:
+                if ss.PreviousSecCacheBytes < ss.SecCacheBytes > 0:
+                    sys.stdout.write(u'\u25b2') # up triangle
+                elif ss.PreviousSecCacheBytes > ss.SecCacheBytes < 0:
+                    sys.stdout.write(u'\u25bC') # down triangle
 
     # software version warnings
     if (not pClusterInfo.SameSoftwareVersions):
@@ -1793,6 +1802,16 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         screen.reset()
 
     # cluster faults
+    if len(pClusterInfo.WhitelistClusterFaults) > 0:
+        current_line += 1
+        screen.gotoXY(pStartX + 1, pStartY + current_line)
+        screen.set_color(ConsoleColors.WhiteFore)
+        print " Whitelisted Faults:",
+        screen.reset()
+        for fault in pClusterInfo.WhitelistClusterFaults:
+            print " " + fault,
+        print " "
+
     if (len(pClusterInfo.ClusterFaults) > 0):
         current_line += 1
         screen.gotoXY(pStartX + 1, pStartY + current_line)
@@ -1994,12 +2013,12 @@ def GatherNodeInfoThread(log, pNodeResults, pInterval, pNodeIpList, pNodeUser, p
         log.debug("KeyboardInterrupt")
     log.debug("exiting")
 
-def ClusterInfoThread(log, pClusterResults, pNodeResults, pInterval, pMvip, pApiUser, pApiPass):
+def ClusterInfoThread(log, pClusterResults, pNodeResults, pInterval, pMvip, pApiUser, pApiPass, faultWhitelist):
     try:
         previous_cluster_info = None
         while True:
             try:
-                cluster_info = GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodeResults, previous_cluster_info)
+                cluster_info = GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodeResults, previous_cluster_info, faultWhitelist)
                 if cluster_info: log.debug("got cluster info")
                 else: log.debug("no cluster info")
 
@@ -2065,7 +2084,7 @@ def Abort():
 if __name__ == '__main__':
 
     # Parse command line arguments
-    parser = OptionParser(version="%prog Version " + __version__, description="sf-top v" + __version__ + " - Monitor a SolidFire cluster, including cluster stats, resource utilization, etc.")
+    parser = OptionParser(option_class=libsf.ListOption, version="%prog Version " + __version__, description="sf-top v" + __version__ + " - Monitor a SolidFire cluster, including cluster stats, resource utilization, etc.")
 
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the MVIP of the cluster")
     parser.add_option("-n", "--node_ips", type="string", dest="node_ips", default=sfdefaults.node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
@@ -2081,6 +2100,7 @@ if __name__ == '__main__':
     parser.add_option("--noclusterinfo", action="store_false", dest="clusterinfo", default=True, help="do not gather/show cluster information (node info only)")
     parser.add_option("--export", action="store_true", dest="export", default=False, help="save the results in a file as well as print to the screen")
     parser.add_option("--output_dir", type="string", dest="output_dir", default="sf-top-out", help="the directory to save exported data")
+    parser.add_option("--fault_whitelist", action="list", dest="fault_whitelist", default=None, help="ignore these faults when displaying cluster faults")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="write detailed debug info to a log file")
 
     (options, args) = parser.parse_args()
@@ -2101,6 +2121,9 @@ if __name__ == '__main__':
         cluster_interval = interval
     if compact:
         showclusterinfo = False
+    fault_whitelist = options.fault_whitelist
+    if fault_whitelist == None:
+        fault_whitelist = sfdefaults.fault_whitelist
 
     log = DebugLog()
     log.Enable = options.debug
@@ -2227,7 +2250,7 @@ if __name__ == '__main__':
             # Start the cluster info thread if we haven't already
             if showclusterinfo and mvip and "ClusterInfoThread" not in all_threads:
                 cluster_results[mvip] = None
-                cluster_info_thread = multiprocessing.Process(target=ClusterInfoThread, name="ClusterInfoThread", args=(log, cluster_results, node_results, cluster_interval, mvip, api_user, api_pass))
+                cluster_info_thread = multiprocessing.Process(target=ClusterInfoThread, name="ClusterInfoThread", args=(log, cluster_results, node_results, cluster_interval, mvip, api_user, api_pass, fault_whitelist))
                 cluster_info_thread.start()
                 log.debug("started ClusterInfoThread process " + str(cluster_info_thread.pid))
                 all_threads["ClusterInfoThread"] = cluster_info_thread
