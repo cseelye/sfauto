@@ -57,7 +57,7 @@ class WaitForClusterHealthyAction(ActionBase):
                             },
             args)
 
-    def Execute(self, mvip=sfdefaults.mvip, timeOut=300, checkForCores=True, checkForFaults=True, fault_whitelist=None, since=0, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, interval=60, timeout=3600, ignoreCores=False, ignoreFaults=False, fault_whitelist=None, since=0, username=sfdefaults.username, password=sfdefaults.password, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
         """
         Wait for the cluster to be healthy
         """
@@ -70,13 +70,14 @@ class WaitForClusterHealthyAction(ActionBase):
         start_time = time.time()
         healthy = False
         while not healthy:
-            if time.time() - start_time > timeOut:
+            if time.time() - start_time > timeout:
                 mylog.error("Timed out waiting for cluster to become healthy")
                 return False
-            if check_cluster_health.Execute(mvip, checkForCores, checkForFaults, fault_whitelist, since, username, password, ssh_user, ssh_pass, debug) == False:
-                time.sleep(15)
+            
+            if check_cluster_health.Execute(mvip, ignoreCores, ignoreFaults, fault_whitelist, since, username, password, ssh_user, ssh_pass, debug) == False:
+                mylog.info("Waiting " + str(interval) + " seconds before checking again")
+                time.sleep(interval)
             else:
-
                 mylog.info("Duration to become healthy: " + libsf.SecondsToElapsedStr(time.time() - start_time) + " seconds")
                 return True
 
@@ -96,15 +97,16 @@ if __name__ == '__main__':
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes")
     parser.add_option("--since", type="int", dest="since", default=0, help="timestamp of when to check health from")
     parser.add_option("--fault_whitelist", action="list", dest="fault_whitelist", default=None, help="ignore these faults and do not wait for them to clear")
-    parser.add_option("--ignore_cores", action="store_false", dest="checkForCores", default=True, help="ignore core files on nodes")
-    parser.add_option("--ignore_faults", action="store_false", dest="checkForFaults", default=True, help="ignore cluster faults")
-    parser.add_option("--time_out", type="int", dest="time_out", default=300, help="The timeout in seconds to wait for a cluster to become healthy")
+    parser.add_option("--ignore_cores", action="store_true", dest="ignoreCores", default=False, help="ignore core files on nodes")
+    parser.add_option("--ignore_faults", action="store_true", dest="ignoreFaults", default=False, help="ignore cluster faults")
+    parser.add_option("--interval", type="int", dest="interval", default=60, help="how often in seconds to check cluster health")
+    parser.add_option("--timeout", type="int", dest="timeout", default=3600, help="the timeout in seconds to wait for a cluster to become healthy")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.time_out, options.checkForCores, options.checkForFaults, options.fault_whitelist, options.since, options.username, options.password, options.ssh_user, options.ssh_pass, options.debug):
+        if Execute(options.mvip, options.interval, options.timeout, options.ignoreCores, options.ignoreFaults, options.fault_whitelist, options.since, options.username, options.password, options.ssh_user, options.ssh_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
