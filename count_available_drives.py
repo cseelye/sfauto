@@ -68,7 +68,7 @@ class CountAvailableDrivesAction(ActionBase):
         return available_count
 
 
-    def Execute(self, expected, compare, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, expected, compare="eq", mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Count available drives
         """
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster")
     parser.add_option("--expected", type="string", dest="expected", default=0, help="the expected number of drives")
-    parser.add_option("--compare", type="choice", dest="compare", choices=['lt', 'le', 'gt', 'ge', 'eq'], default=None, help="the comparison operator to use")
+    parser.add_option("--compare", type="choice", dest="compare", choices=['lt', 'le', 'gt', 'ge', 'eq'], default="eq", help="the comparison operator to use")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
