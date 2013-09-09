@@ -191,6 +191,9 @@ class ClusterInfo:
         self.BinSyncing = "No"
         self.ClusterFaults = []
         self.WhitelistClusterFaults = []
+        self.ClusterFaultsWarn = []
+        self.ClusterFaultsError = []
+        self.ClusterFaultsCrit = []
         self.NewEvents = []
         self.OldEvents = []
         self.LastGcStart = 0
@@ -980,12 +983,19 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     else:
         current_faults = set()
         for fault in result["faults"]:
-            if fault['code'] not in current_faults:
-                current_faults.add(fault['code'])
-        if faultWhitelist:
-            info.WhitelistClusterFaults = list(current_faults.intersection(set(faultWhitelist)))
-            current_faults = list(current_faults.difference(set(faultWhitelist)))
-        info.ClusterFaults = current_faults
+            if fault["code"] in faultWhitelist:
+                if fault["code"] not in info.WhitelistClusterFaults:
+                    info.WhitelistClusterFaults.append(fault["code"])
+                continue
+            if fault["severity"] == "warning" and fault["code"] not in info.ClusterFaultsWarn:
+                info.ClusterFaultsWarn.append(fault["code"])
+                continue
+            if fault["severity"] == "error" and fault["code"] not in info.ClusterFaultsError:
+                info.ClusterFaultsError.append(fault["code"])
+                continue
+            if fault["severity"] == "critical" and fault["code"] not in info.ClusterFaultsCrit:
+                info.ClusterFaultsCrit.append(fault["code"])
+                continue
 
     # Check for slice syncing
     sync_html = HttpRequest(log, "https://" + pMvip + "/reports/slicesyncing", pApiUser, pApiPass)
@@ -1041,38 +1051,6 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
                     info.NewEvents.append("FOUND_DATA_ON_FAKE_READ_EVENT")
                 elif ('FOUND DATA ON FAKE READ EVENT' not in info.OldEvents):
                     info.OldEvents.append("FOUND_DATA_ON_FAKE_READ_EVENT")
-
-        # Look for GC info
-        #blocks_discarded = 0
-        #gc_generation = 0
-        #gc_complete_count = 0
-        #gc_start_time = 0
-        #gc_end_time = 0
-        #for i in range(len(event_list['events'])):
-            #event = event_list['events'][i]
-            #if ("GCStarted" in event["message"]):
-                #details = event["details"]
-                #m = re.search(r'GC generation:(\d+)', details)
-                #if (m):
-                    #if (int(m.group(1)) == gc_generation):
-                        #gc_start_time = ParseTimestamp(event['timeOfReport'])
-                        #break
-
-            #if ("GCCompleted" in event["message"]):
-                #details = event["details"]
-                #pieces = details.split()
-                #if (gc_generation <= 0): gc_generation = int(pieces[0])
-                #if (int(pieces[0]) == gc_generation):
-                    #gc_complete_count += 1
-                    #blocks_discarded += int(pieces[1])
-                    #end_time = ParseTimestamp(event['timeOfReport'])
-                    #if (end_time > gc_end_time):
-                        #gc_end_time = end_time
-        #info.LastGcStart = gc_start_time
-        #if (gc_complete_count >= info.BSCount):
-            #info.LastGcEnd = gc_end_time
-            #info.LastGcDiscarded = blocks_discarded * 4096
-
 
         gc_objects = dict()
         gc_info = GCInfo()
@@ -1812,15 +1790,24 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
             print " " + fault,
         print " "
 
-    if (len(pClusterInfo.ClusterFaults) > 0):
-        current_line += 1
-        screen.gotoXY(pStartX + 1, pStartY + current_line)
-        screen.set_color(ConsoleColors.RedFore)
-        print " Cluster Faults:",
-        for fault in pClusterInfo.ClusterFaults:
-            print " " + fault,
-        print " "
-        screen.reset()
+        if len(pClusterInfo.ClusterFaultsWarn) + len(pClusterInfo.ClusterFaultsError) + len(pClusterInfo.ClusterFaultsCrit) > 0:
+            current_line += 1
+            screen.gotoXY(pStartX + 1, pStartY + current_line)
+            screen.set_color(ConsoleColors.WhiteFore)
+            print " Cluster Faults:",
+
+            screen.set_color(ConsoleColors.YellowFore)
+            screen.set_color(ConsoleColors.RedBack)
+            for fault in pClusterInfo.ClusterFaultsCrit:
+                print " " + fault,
+
+            screen.set_color(ConsoleColors.RedFore)
+            for fault in pClusterInfo.ClusterFaultsError:
+                print " " + fault,
+
+            screen.set_color(ConsoleColors.YellowFore)
+            for fault in pClusterInfo.ClusterFaultsWarn:
+                print " " + fault,
 
     # 'bad' events
     if (len(pClusterInfo.OldEvents) > 0):
