@@ -83,7 +83,12 @@ esx_template_path = "ubuntu-template-vdbench.vmtx"  # Path to the template VM im
 esx_parent_folder = "Test-VMs"                      # Parent folder for test VMS
 esx_mgmt_server = "192.168.144.20"                  # Mgmt Server for ESXi
 esx_vmhost = "192.168.135.50"                       # VM host for ESXi
-
+qmetry_soap_url = "http://solidfire.qmetry.com/qmetryapp/WEB-INF/ws/service.php?wsdl"
+qmetry_username = "autouser"
+qmetry_password = "password"
+qmetry_project = "proj"
+qmetry_release = "rel"
+qmetry_build = "1"
 # =============================================================================
 # Default Choices
 all_volume_acess_levels = [         # Valid volume access levels
