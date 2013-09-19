@@ -90,7 +90,6 @@ class CleanIscsiAction(ActionBase):
         for client_ip in client_ips:
             results[thread_index] = False
             th = multiprocessing.Process(target=self._ClientThreadFunction, args=(client_ip, client_user, client_pass, default_iscsid, results, thread_index))
-            th.start()
             self._threads.append(th)
             thread_index += 1
 
