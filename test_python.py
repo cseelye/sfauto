@@ -39,7 +39,7 @@ modules = [
     "time",
     "urllib2",
     "libvirt",
-    "mysqldb"
+    "MySQLdb"
 ]
 failed = False
 for mod in modules:
