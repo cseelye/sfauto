@@ -59,16 +59,12 @@ while True:
             if m.group(1).startswith("192"):
                 local_ip = m.group(1)
                 break
-            # CFT private network in VWC
-            if m.group(1).startswith("172.25.11"):
+            # CFT private network in BDR
+            if m.group(1).startswith("172.30"):
                 local_ip = m.group(1)
                 break
-            # CFT public network in VWC
-            if m.group(1).startswith("172.25.107"):
-                local_ip = m.group(1)
-                break
-            # ENGR client network in VWC
-            if m.group(1).startswith("172.25.106"):
+            # CFT management network in BDR
+            if m.group(1).startswith("172.16"):
                 local_ip = m.group(1)
                 break
 
