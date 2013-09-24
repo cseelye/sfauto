@@ -1,5 +1,5 @@
 {
-    "server" : "172.16.150.253",
+    "server" : "172.16.150.254",
     "database" : "monitor",
     "listenPort" : 58083,
     "username" : "root",

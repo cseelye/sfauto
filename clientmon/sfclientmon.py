@@ -6,6 +6,7 @@ import re
 import sys
 sys.path.append("..")
 import lib.libsf
+from lib.libsf import mylog
 from lib.libsf import SfError
 from clientmon.libclientmon import ClientMon
 
