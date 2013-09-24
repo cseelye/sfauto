@@ -6,7 +6,7 @@
 # Any time you boot the template after that, firstboot will run and create /opt/firstboot/firstbootdone, so make sure to remove it before shutting down and cloning
 
 # Do nothing if we have already run
-if [ -e /opt/firstboot/firstbootdone ]; then exit; fi
+if [ -e /opt/sfauto/client_daemons/firstbootdone ]; then exit; fi
 
 # Alphabetically first MAC addr to use as unique ID
 MAC=`/sbin/ifconfig -a | /bin/grep HWaddr | /usr/bin/awk '{print $5}' | /bin/sed 's/://g' | /usr/bin/sort | /usr/bin/head -1 | /usr/bin/awk '{ print tolower($0) }'`
@@ -14,9 +14,7 @@ MAC=`/sbin/ifconfig -a | /bin/grep HWaddr | /usr/bin/awk '{print $5}' | /bin/sed
 
 # If you know the MAC of your template, you can use it here to skip running on your template
 # Note all letters in lower case!
-if [[ "$MAC" == "525400ac913d" ||       # kvm-ubuntu-goldraw
-      "$MAC" == "52540077cab0" ||       # kvm-ubuntu-goldimg
-      "$MAC" == "005056b07557" ]];      # esx-ubuntu-template
+if [[ "$MAC" == "525400ac913d" ]];
 then
     /usr/bin/logger -s -t firstboot "Skipping first boot setup because this is a template VM"
     exit
@@ -64,5 +62,5 @@ fi
 rm -f /root/shutdown_template.sh
 
 /usr/bin/logger -s -t firstboot "Rebooting..."
-/bin/touch /opt/firstboot/firstbootdone
+/bin/touch /opt/sfauto/client_daemons/firstbootdone
 /sbin/reboot
