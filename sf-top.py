@@ -268,19 +268,6 @@ class ConsoleColors:
     else:
         YellowFore = 11
 
-#screen = terminal.get_terminal()
-#screen.set_color(fg=ConsoleColors.YellowFore, bk=ConsoleColors.RedBack)
-#print "help me"
-#screen.reset()
-#exit(0)
-#for i in xrange(0,15):
-    #for j in xrange(0,15):
-        #screen.set_color(fg=i, bk=j)
-        #print "%2d + %2d    test    " % (i,j),
-    #print "\n"
-#screen.reset()
-#exit(0)
-
 def HttpRequest(log, pUrl, pUsername, pPassword):
     if (pUsername != None):
         password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
