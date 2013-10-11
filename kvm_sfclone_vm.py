@@ -248,7 +248,7 @@ class KvmSfcloneVmAction(ActionBase):
             if not clone_device_path:
                 time.sleep(5)
 
-        clone_device_path += "-part1"
+        #clone_device_path += "-part1"
 
         mylog.info("Importing the new VM")
         # Create the XML for the new VM

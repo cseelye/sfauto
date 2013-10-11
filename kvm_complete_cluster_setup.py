@@ -193,7 +193,7 @@ class KvmCompleteClusterSetupAction(ActionBase):
             loc = stdout[-1]
             for line in stdout:
                 temp = line
-                if "part" in temp:
+                if not "part" in temp:
                     loc = temp
         rawPath = "/dev/disk/by-path/" + loc
 
