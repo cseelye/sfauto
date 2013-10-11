@@ -121,6 +121,8 @@ class ListOption(Option):
     def take_action(self, action, dest, opt, value, values, parser):
         if action == "list":
             lvalue = value.split(",")
+            if not values.ensure_value(dest, []):
+                setattr(values, dest, [])
             values.ensure_value(dest, []).extend(lvalue)
         else:
             Option.take_action(
