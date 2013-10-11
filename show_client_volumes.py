@@ -22,7 +22,7 @@ import sys
 import logging
 import lib.libsf as libsf
 from lib.libsf import mylog
-from libclient import SfClient, ClientError, OsType
+from lib.libclient import SfClient, ClientError, OsType
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues

@@ -18,7 +18,7 @@ from optparse import OptionParser
 import re
 import lib.libsf as libsf
 from lib.libsf import mylog
-from libclient import SfClient, ClientError
+from lib.libclient import SfClient, ClientError
 import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
