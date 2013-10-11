@@ -1303,6 +1303,14 @@ class SfClient:
                     else:
                         login_count += 1
 
+            # Set up automatic login
+            all_targets = self.GetAllTargets()
+            for target in all_targets:
+                retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m node -o update -n node.startup -v automatic -T " + target)
+                if retcode != 0:
+                    self._error("Failed to set automatic login on " + target)
+                    error_count += 1
+
             # Wait for SCSI devices for all sessions
             if login_count > 0:
                 start_time = time.time()
