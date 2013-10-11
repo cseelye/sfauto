@@ -80,7 +80,12 @@ class CreateClusterAction(ActionBase):
                 return False
 
             nodelist = response["nodes"]
-            mylog.info("\tNodes:      " + ", ".join(nodelist))
+            templist = "Nodes: \t"
+            for each in nodelist:
+                ipaddress = each["name"].encode('utf8')
+            	templist += ipaddress + ',\t'
+            mylog.info("\t" + templist)
+            
             if node_count == 0 or len(nodelist) >= node_count:
                 break
             else:
