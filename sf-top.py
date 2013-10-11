@@ -1799,14 +1799,17 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
             screen.set_color(fg=ConsoleColors.YellowFore, bk=ConsoleColors.RedBack)
             for fault in pClusterInfo.ClusterFaultsCrit:
                 print " " + fault,
+            screen.reset()
 
             screen.set_color(ConsoleColors.RedFore)
             for fault in pClusterInfo.ClusterFaultsError:
                 print " " + fault,
+            screen.reset()
 
             screen.set_color(ConsoleColors.YellowFore)
             for fault in pClusterInfo.ClusterFaultsWarn:
                 print " " + fault,
+            screen.reset()
 
     # 'bad' events
     if (len(pClusterInfo.OldEvents) > 0):
