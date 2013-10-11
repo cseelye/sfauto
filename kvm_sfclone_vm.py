@@ -53,7 +53,8 @@ class KvmSfcloneVmAction(ActionBase):
 
     def ValidateArgs(self, args):
         libsf.ValidateArgs({"vmhost" : libsf.IsValidIpv4Address,
-                            "host_user" : None,
+                            "mvip" : libsf.IsValidIpv4Address,
+			    "host_user" : None,
                             "host_pass" : None,
                             "vm_name" : None,
                             "clone_name" : None},
