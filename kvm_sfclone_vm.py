@@ -323,6 +323,9 @@ if __name__ == '__main__':
         mylog.warning("Aborted by user")
         Abort()
         sys.exit(1)
+    except libsf.SFApiError as e:
+        mylog.error("Invalid arguments - \n" + str(e))
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
