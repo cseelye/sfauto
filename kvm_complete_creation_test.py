@@ -90,7 +90,7 @@ class KvmCompleteCreationTestAction(ActionBase):
 
             mylog.banner("Cloning VM " + str(i + 1) + " of " + str(cloneCount))
             if (kvm_sfclone_vm.Execute(vm_name=sourceName, connection="tcp", clone_name=updated_clone_name, mvip=mvip, username=username, password=password, vmhost=vmHost, host_user=hostUser, host_pass=hostPass) == False):
-                mylog.error("There was an error creating clone number: " + i)
+                mylog.error("There was an error creating clone number: " + str(i))
                 return False
 
         return True
