@@ -314,18 +314,23 @@ if __name__ == '__main__':
             sys.exit(0)
         else:
             sys.exit(1)
+
     except libsf.SfArgumentError as e:
         mylog.error("Invalid arguments - \n" + str(e))
         sys.exit(1)
+
     except SystemExit:
         raise
+
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
         Abort()
         sys.exit(1)
+
     except libsf.SfApiError as e:
         mylog.error("Invalid arguments - \n" + str(e))
         sys.exit(1)
+
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
