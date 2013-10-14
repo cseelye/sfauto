@@ -191,7 +191,12 @@ class KvmSfcloneVmAction(ActionBase):
         params["volumeID"] = source_volume_id
         params["name"] = clone_name
         params["access"] = "readWrite"
-        result = libsf.CallApiMethod(mvip, username, password, "CloneVolume", params)
+	try:
+	    result = libsf.CallApiMethod(mvip, username, password, "CloneVolume", params)
+	except libsf.SfApiError as e:
+            if e.name == "xInvalidAPIParameter":
+		mylog.error("Invalid arguments - \n" + str(e))
+		sys.exit(1) 
 
         # Wait for the clone to complete
         clone_volume_id = result["volumeID"]
@@ -318,19 +323,12 @@ if __name__ == '__main__':
     except libsf.SfArgumentError as e:
         mylog.error("Invalid arguments - \n" + str(e))
         sys.exit(1)
-
     except SystemExit:
         raise
-
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
         Abort()
         sys.exit(1)
-
-    except libsf.SfApiError as e:
-        mylog.error("Invalid arguments - \n" + str(e))
-        sys.exit(1)
-
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
