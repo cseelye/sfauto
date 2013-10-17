@@ -11,7 +11,7 @@ When run as a script, the following options/env variables apply:
 
     --interface     The interface to be taken up or down, '1g' or '10g'
 
-    --action        The action to take on the interface, 'up' or 'down'
+    --action        The action to take on the interface, 'Up' or 'down'
 """
 
 import sys
@@ -28,7 +28,7 @@ class NodeNetworkUpDownAction(ActionBase):
     class Events:
         FAILURE = "FAILURE"
         INTERFACE_DOWN = "INTERFACE_DOWN"
-        INTERFACE_UP = "INTERFACE_UP"
+        INTERFACE_UP = "INTERFACE_UP_AND_RUNNING"
 
     def __init__(self):
         super(self.__class__,self).__init__(self.__class__.Events)
@@ -69,7 +69,7 @@ class NodeNetworkUpDownAction(ActionBase):
                 return False
         elif(interface == "10g" and action == "up"):
             try:
-                result = libsf.CallNodeApiMethod(nodeIP, username, password, "SetNetworkInterfaceStatus", {"interfaces":["eth0","eth1","Bond10G"], "status":"Up", "minutes": 5})
+                result = libsf.CallNodeApiMethod(nodeIP, username, password, "SetNetworkInterfaceStatus", {"interfaces":["eth0","eth1","Bond10G"], "status":"UpAndRunning", "minutes": 5})
                 self._RaiseEvent(self.Events.INTERFACE_UP)
             except libsf.SfError as e:
                 mylog.error("Failed to bring the Bond10G network up on: " + nodeIP + ": " + e.message)
@@ -87,7 +87,7 @@ class NodeNetworkUpDownAction(ActionBase):
                 return False
         elif(interface == "1g" and action == "up"):
             try:
-                result = libsf.CallNodeApiMethod(nodeIP, username, password, "SetNetworkInterfaceStatus", {"interfaces":["eth0", "eth1", "Bond1G"], "status":"Up", "minutes": 5})
+                result = libsf.CallNodeApiMethod(nodeIP, username, password, "SetNetworkInterfaceStatus", {"interfaces":["eth0", "eth1", "Bond1G"], "status":"UpAndRunning", "minutes": 5})
                 self._RaiseEvent(self.Events.INTERFACE_UP)
             except libsf.SfError as e:
                 mylog.error("Failed to bring the Bond1G network up on: " + nodeIP + ": " + e.message)
