@@ -995,7 +995,15 @@ def ParseIpsFromList(pIpListString):
     return ip_addr
 
 def IsValidIpv4Address(pAddressString):
-    if not pAddressString: return False
+    if not pAddressString:
+        return False
+    elif any (c.isalpha() for c in pAddressString):
+	try:
+	    tempAddressString = pAddressString
+	    pAddressString = socket.gethostbyname(tempAddressString)
+	except socket.gaierror as e: #Unable to resolve host name
+            mylog.error(" invalid HostName: " + str(e) ) 
+	    return False
     pieces = pAddressString.split(".")
     last_octet = 0
     try:
