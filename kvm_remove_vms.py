@@ -192,6 +192,7 @@ class KvmRemoveVmsAction(ActionBase):
 
         mylog.info("Searching for matching VMs")
         matched_vms = []
+        matched_vm_names =[]
 
         # Get a list of stopped VMs
         try:
@@ -209,8 +210,10 @@ class KvmRemoveVmsAction(ActionBase):
                 m = re.search(vm_regex, vm.name())
                 if m:
                     matched_vms.append(vm)
+                    matched_vm_names.append(vm.name())
             else:
                 matched_vms.append(vm)
+                matched_vm_names.append(vm.name())
 
         # Get a list of running VMs
         try:
@@ -228,9 +231,13 @@ class KvmRemoveVmsAction(ActionBase):
                 m = re.search(vm_regex, vm.name())
                 if m:
                     matched_vms.append(vm)
+                    matched_vm_names.append(vm.name())
             else:
                 matched_vms.append(vm)
+                matched_vm_names.append(vm.name())
 
+        
+        mylog.info("Totally " + str(len(matched_vm_names)) +" VMs are being deleted, they are: "+ str(matched_vm_names))
         #delete on the vms
         matched_vms = sorted(matched_vms, key=lambda vm: vm.name())
         self._threads = []
@@ -249,12 +256,13 @@ class KvmRemoveVmsAction(ActionBase):
                 th.daemon = True
                 self._threads.append(th)
 
-        allgood = libsf.ThreadRunner(self._threads, results, thread_max)
+        allgood_counter = libsf.ThreadRunner_counter(self._threads, results, thread_max)
+        allgood, counter = allgood_counter
         if allgood:
-            mylog.passed("All VMs Deleted successfully")
+            mylog.passed("All VMs Deleted successfully - No. of VMs deleted: " + str(counter))
             return True
         else:
-            mylog.error("Not all VMs could be deleted")
+            mylog.error("Not all VMs could be deleted, Only " + str(counter) + " VMs could be deleted")
             return False
 
 
@@ -296,4 +304,5 @@ if __name__ == '__main__':
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
+
 
