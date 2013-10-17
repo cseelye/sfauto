@@ -1729,7 +1729,8 @@ def ValidateArgs(argsToValidate, argsPassed):
     if errors:
         raise SfArgumentError("\n".join(errors))
 
-def ThreadRunner(threadList, resultList, concurrentThreadCount):
+
+def ThreadRunner_counter(threadList, resultList, concurrentThreadCount):
     """Run a list of threads at a specified concurrency level
 
     Args:
@@ -1738,9 +1739,11 @@ def ThreadRunner(threadList, resultList, concurrentThreadCount):
         concurrentThreadCount: max number of threads to execute in parallel
 
     Returns:
-        True if all results evaluated true, False if any thread result failed
+        A tuple of True if all results evaluated true/False if any thread result failed, Successful thread counter.
     """
     running_threads = []
+    success_threads = 0
+    failure_flag = False
     for th in threadList:
         # If we are above the thread count, wait for at least one thread to finish
         while len(running_threads) >= concurrentThreadCount:
@@ -1757,10 +1760,32 @@ def ThreadRunner(threadList, resultList, concurrentThreadCount):
 
     # Check the results
     for res in resultList.values():
-        if not res:
-            return False
-    return True
+        if res:
+            global success_threads
+            success_threads += 1
+            failure_flag = True
+    
+    if failure_flag:
+        return (True, success_threads)
+    else:
+        return (False, success_threads)
 
+
+def ThreadRunner(threadList, resultList, concurrentThreadCount):
+    """Run a list of threads at a specified concurrency level
+    
+    Args:
+        threadList: the list of thread or process objects to be run
+        resultList: the dictionary results are stored in, with key string threadname => value boolean result
+        concurrentThreadCount: max number of threads to execute in parallel
+    
+    Returns:
+        True if all results evaluated true, False if any thread result failed
+    """
+    result_counter = ThreadRunner_counter(threadList, resultList, concurrentThreadCount)
+    result, counter = result_counter
+    return result
+    
 def CallbackWrapper(callback):
     """Create a safe callback that does not throw exceptions
 
