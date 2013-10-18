@@ -49,7 +49,7 @@ class XenPoweronVmsAction(ActionBase):
                             "host_pass" : None},
             args)
 
-    def _VmThread(self, VmHost, HostUser, HostPass, VmName, VmRef, results):
+    def _VmThread(self, VmHost, HostUser, HostPass, VmName, VmRef, results, debug):
         results[VmName] = False
 
         mylog.debug("  " + VmName + ": connecting")
@@ -60,7 +60,7 @@ class XenPoweronVmsAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), vmName=VmName, exception=e)
             return
 
-        mylog.debug("  " + VmName + ": powering on")
+        mylog.info("  " + VmName + ": powering on")
         retry = 3
         while retry > 0:
             try:
@@ -177,7 +177,8 @@ class XenPoweronVmsAction(ActionBase):
             return True
         else:
             mylog.error("Not all VMs could be powered on")
-            return True
+            return False
+
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
