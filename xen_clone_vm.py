@@ -45,7 +45,8 @@ class XenCloneVmAction(ActionBase):
                             "host_pass" : None,
                             "vm_name" : None,
                             "clone_name" : None,
-                            "dest_sr" : None},
+                            #"dest_sr" : None
+                            },
             args)
 
     def Execute(self, vm_name, clone_name, dest_sr=None, vmhost=sfdefaults.vmhost_xen, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
