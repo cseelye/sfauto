@@ -129,7 +129,7 @@ class KvmListVmNamesAction(ActionBase):
 
         return vm_names
 
-    def Execute(self, vmhost=sfdefaults.vmhost_kvm, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, vm_regex=None, debug=False):
+    def Execute(self, vmhost=sfdefaults.vmhost_kvm, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, connection=sfdefaults.kvm_connection, vm_regex=None, debug=False):
         """
         List VMs
         """
@@ -140,7 +140,7 @@ class KvmListVmNamesAction(ActionBase):
             mylog.silence = True
 
         mylog.info("Connecting to " + vmhost)
-        vm_names = self.Get(vmhost, host_user, host_pass, vm_regex, debug)
+        vm_names = self.Get(vmhost, host_user, host_pass, connection, vm_regex, debug)
         if vm_names == False:
             mylog.error("There was an error getting the list of VMs")
             return False
