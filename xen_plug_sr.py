@@ -76,7 +76,7 @@ class XenPlugSrAction(ActionBase):
         if len(sr_ref_list) > 0:
             sr_ref = sr_ref_list[0]
             try:
-                sr = session.xenapi.SR.get_record(new_sr_ref)
+                sr = session.xenapi.SR.get_record(sr_ref)
             except XenAPI.Failure as e:
                 mylog.error("Could not get SR record for " + sr_name + " - " + str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
