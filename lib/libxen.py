@@ -96,3 +96,22 @@ def GetScsiLun(XenSession, Host, TargetIqn, Svip, ChapUser=None, ChapPass=None):
     sr_size = int(lun_xml.find("LUN/size").text.strip())
 
     return scsi_id, sr_size
+
+def GetAllVMs(xenSession):
+    try:
+        vm_ref_list = xenSession.xenapi.VM.get_all()
+    except XenAPI.Failure as e:
+        raise XenError("Could not get VM list: " + str(e))
+
+    vm_list = dict()
+    for vm_ref in vm_ref_list:
+        try:
+            vm = xenSession.xenapi.VM.get_record(vm_ref)
+        except XenAPI.Failure as e:
+            raise XenError("Could not query VM record: " + str(e))
+
+        if not vm["is_a_template"] and not vm["is_control_domain"] and vm["power_state"] == "Running":
+            vm["ref"] = vm_ref
+            vname = vm["name_label"]
+            vm_list[vname] = vm
+    return vm_list

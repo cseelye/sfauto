@@ -674,7 +674,7 @@ class SFCluster(object):
                 source_account_id = int(accountID)
             elif accountName:
                 account_info = self.FindAccount(accountName=accountName)
-                source_account_id = account_info["accountID"]
+                source_account_id = account_info.ID
             params = {}
             params["accountID"] = source_account_id
             account_volumes = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListVolumesForAccount", params)
