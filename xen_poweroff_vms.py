@@ -64,7 +64,7 @@ class XenPoweroffVmsAction(ActionBase):
         retry = 3
         while retry > 0:
             try:
-                session.xenapi.VM.start(VmRef, False, False)
+                session.xenapi.VM.hard_shutdown(VmRef)
                 results[VmName] = True
                 break
             except XenAPI.Failure as e:
