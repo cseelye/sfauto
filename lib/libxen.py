@@ -110,7 +110,7 @@ def GetAllVMs(xenSession):
         except XenAPI.Failure as e:
             raise XenError("Could not query VM record: " + str(e))
 
-        if not vm["is_a_template"] and not vm["is_control_domain"] and vm["power_state"] == "Running":
+        if not vm["is_a_template"] and not vm["is_control_domain"]: # and vm["power_state"] == "Running":
             vm["ref"] = vm_ref
             vname = vm["name_label"]
             vm_list[vname] = vm

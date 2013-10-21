@@ -704,7 +704,7 @@ def ParseDateTime(pTimeString):
         "%Y-%m-%d %H:%M:%S.%f",     # old sf format
         "%Y-%m-%dT%H:%M:%S.%fZ",    # ISO format with UTC timezone
         "%Y-%m-%dT%H:%M:%SZ"     # almost ISO format with UTC timezone
-                                    # 2012-11-15T19:18:46Z
+        # 2012-11-15T19:18:46Z
     ]
     parsed = None
     for format in known_formats:
@@ -764,7 +764,7 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
             if ExitOnError:
                 sys.exit(1)
             else:
-                raise SfApiError(last_error_code, last_error_message)
+                raise SfApiError(last_error_code, last_error_mess)
 
         # First try to get a valid HTTP reply to the web service call
         http_retry = 5
@@ -788,7 +788,7 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
                     last_error_code = str(e.code)
                     if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
                         mylog.warning("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
-                        last_error_message = str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code])
+                        last_error_mess = str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code])
                     else:
                         mylog.warning("HTTPError: " + str(e.code))
             except urllib2.URLError as e:
@@ -998,12 +998,12 @@ def IsValidIpv4Address(pAddressString):
     if not pAddressString:
         return False
     elif any (c.isalpha() for c in pAddressString):
-	try:
-	    tempAddressString = pAddressString
-	    pAddressString = socket.gethostbyname(tempAddressString)
-	except socket.gaierror as e: #Unable to resolve host name
-            mylog.error(" invalid HostName: " + str(e) ) 
-	    return False
+        try:
+            tempAddressString = pAddressString
+            pAddressString = socket.gethostbyname(tempAddressString)
+        except socket.gaierror as e: #Unable to resolve host name
+            mylog.error(" invalid HostName: " + str(e) )
+            return False
     pieces = pAddressString.split(".")
     last_octet = 0
     try:
@@ -1750,8 +1750,6 @@ def ThreadRunner_counter(threadList, resultList, concurrentThreadCount):
         A tuple of True if all results evaluated true/False if any thread result failed, Successful thread counter.
     """
     running_threads = []
-    success_threads = 0
-    failure_flag = False
     for th in threadList:
         # If we are above the thread count, wait for at least one thread to finish
         while len(running_threads) >= concurrentThreadCount:
@@ -1767,13 +1765,12 @@ def ThreadRunner_counter(threadList, resultList, concurrentThreadCount):
         th.join()
 
     # Check the results
+    success_threads = 0
     for res in resultList.values():
         if res:
-            global success_threads
             success_threads += 1
-            failure_flag = True
-    
-    if failure_flag:
+
+    if success_threads == len(threadList):
         return (True, success_threads)
     else:
         return (False, success_threads)
@@ -1781,19 +1778,19 @@ def ThreadRunner_counter(threadList, resultList, concurrentThreadCount):
 
 def ThreadRunner(threadList, resultList, concurrentThreadCount):
     """Run a list of threads at a specified concurrency level
-    
+
     Args:
         threadList: the list of thread or process objects to be run
         resultList: the dictionary results are stored in, with key string threadname => value boolean result
         concurrentThreadCount: max number of threads to execute in parallel
-    
+
     Returns:
         True if all results evaluated true, False if any thread result failed
     """
     result_counter = ThreadRunner_counter(threadList, resultList, concurrentThreadCount)
     result, counter = result_counter
     return result
-    
+
 def CallbackWrapper(callback):
     """Create a safe callback that does not throw exceptions
 

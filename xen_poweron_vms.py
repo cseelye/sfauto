@@ -52,7 +52,7 @@ class XenPoweronVmsAction(ActionBase):
     def _VmThread(self, VmHost, HostUser, HostPass, VmName, VmRef, results, debug):
         results[VmName] = False
 
-        mylog.debug("  " + VmName + ": connecting")
+        mylog.debug("  " + VmName + ": connecting to pool")
         try:
             session = libxen.Connect(VmHost, HostUser, HostPass)
         except libxen.XenError as e:
@@ -68,11 +68,11 @@ class XenPoweronVmsAction(ActionBase):
                 results[VmName] = True
                 break
             except XenAPI.Failure as e:
-                if e[0] == "CANNOT_CONTACT_HOST":
+                if e.details[0] == "CANNOT_CONTACT_HOST":
                     time.sleep(30)
                     retry -= 1
                     continue
-                if e[0] == "VM_BAD_POWER_STATE" and e[3].lower() == "running":
+                if e.details[0] == "VM_BAD_POWER_STATE" and e.details[3].lower() == "running":
                     # The VM was powered on by someone else before this thread had a chance to
                     results[VmName] = True
                     break
@@ -120,26 +120,16 @@ class XenPoweronVmsAction(ActionBase):
                 return False
 
         mylog.info("Searching for matching VMs")
-
         # Get a list of all VMs
-        vm_list = dict()
         try:
-            vm_ref_list = session.xenapi.VM.get_all()
-        except XenAPI.Failure as e:
-            mylog.error("Could not get VM list: " + str(e))
+            vm_list = libxen.GetAllVMs(session)
+        except libxen.XenError as e:
+            mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
-        for vm_ref in vm_ref_list:
-            vm = session.xenapi.VM.get_record(vm_ref)
-            vname = vm["name_label"]
-            vm_list[vname] = dict()
-            vm_list[vname]["ref"] = vm_ref
-            vm_list[vname]["vm"] = vm
 
         matched_vms = dict()
         for vname in sorted(vm_list.keys()):
-            vm = vm_list[vname]["vm"]
-            vm_ref = vm_list[vname]["ref"]
             if vm_regex:
                 m = re.search(vm_regex, vname)
                 if m:
@@ -149,6 +139,41 @@ class XenPoweronVmsAction(ActionBase):
 
             if vm_count > 0 and len(matched_vms) >= vm_count:
                 break
+
+        ## Get a list of all VMs
+        #vm_list = dict()
+        #try:
+            #vm_ref_list = session.xenapi.VM.get_all()
+        #except XenAPI.Failure as e:
+            #mylog.error("Could not get VM list: " + str(e))
+            #self.RaiseFailureEvent(message=str(e), exception=e)
+            #return False
+        #for vm_ref in vm_ref_list:
+            #vm = session.xenapi.VM.get_record(vm_ref)
+            #vname = vm["name_label"]
+            #vm_list[vname] = dict()
+            #vm_list[vname]["ref"] = vm_ref
+            #vm_list[vname]["vm"] = vm
+
+        #matched_vms = dict()
+        #for vname in sorted(vm_list.keys()):
+            #vm = vm_list[vname]["vm"]
+            #vm_ref = vm_list[vname]["ref"]
+            #if vm_regex:
+                #m = re.search(vm_regex, vname)
+                #if m:
+                    #matched_vms[vname] = vm_list[vname]
+            #else:
+                #matched_vms[vname] = vm_list[vname]
+
+            #if vm_count > 0 and len(matched_vms) >= vm_count:
+                #break
+
+        if len(matched_vms.keys()) <= 0:
+            mylog.info("No VMs found")
+            return True
+
+        mylog.info(str(len(matched_vms.keys())) + " VMs will be powered on: " + ", ".join(matched_vms.keys()))
 
         # Run the API operations in parallel if there are enough
         if len(matched_vms.keys()) <= parallel_thresh:
@@ -161,7 +186,7 @@ class XenPoweronVmsAction(ActionBase):
         self._threads = []
         for vname in sorted(matched_vms.keys()):
             vm_ref = matched_vms[vname]["ref"]
-            vm = matched_vms[vname]["vm"]
+            vm = matched_vms[vname]
             if vm["power_state"] == "Running":
                 mylog.passed("  " + vname + " is already powered on")
             else:

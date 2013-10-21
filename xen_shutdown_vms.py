@@ -20,7 +20,9 @@ When run as a script, the following options/env variables apply:
 import sys
 from optparse import OptionParser
 import logging
+import multiprocessing
 import re
+import time
 import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.XenAPI as XenAPI
@@ -45,7 +47,41 @@ class XenShutdownVmsAction(ActionBase):
                             "host_pass" : None},
             args)
 
-    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_xen, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def _VmThread(self, VmHost, HostUser, HostPass, VmName, VmRef, results, debug):
+        results[VmName] = False
+
+        mylog.debug("  " + VmName + ": connecting to pool")
+        try:
+            session = libxen.Connect(VmHost, HostUser, HostPass)
+        except libxen.XenError as e:
+            mylog.error("  " + VmName + ": " + str(e))
+            self.RaiseFailureEvent(message=str(e), vmName=VmName, exception=e)
+            return
+
+        mylog.info("  " + VmName + ": shutting down")
+        retry = 3
+        while retry > 0:
+            try:
+                session.xenapi.VM.clean_shutdown(VmRef)
+                results[VmName] = True
+                break
+            except XenAPI.Failure as e:
+                if e.details[0] == "CANNOT_CONTACT_HOST":
+                    time.sleep(30)
+                    retry -= 1
+                    continue
+                if e.details[0] == "VM_BAD_POWER_STATE" and e.details[3].lower() == "halted":
+                    # The VM was powered off by someone else before this thread had a chance to
+                    results[VmName] = True
+                    break
+                else:
+                    mylog.error("  " + VmName + ": Failed to shutdown - " + str(e))
+                    self.RaiseFailureEvent(message=str(e), vmName=VmName, exception=e)
+                    return
+        if not results[VmName]:
+            mylog.error("  " + VmName + ": Failed to shutdown")
+
+    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_xen, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, parallel_thresh=sfdefaults.xenapi_parallel_calls_thresh, parallel_max=sfdefaults.xenapi_parallel_calls_max, debug=False):
         """
         Shutdown VMs
         """
@@ -77,31 +113,25 @@ class XenShutdownVmsAction(ActionBase):
             try:
                 session.xenapi.VM.clean_shutdown(vm_ref)
             except XenAPI.Failure as e:
-                mylog.error("Could not shutdown " + vm_name + " - " + str(e))
+                mylog.error("Failed to shutdown " + vm_name + " - " + str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
+
+            mylog.passed("Successfully shutdown" + vm_name)
+            return True
 
         mylog.info("Searching for matching VMs")
 
         # Get a list of all VMs
-        vm_list = dict()
         try:
-            vm_ref_list = session.xenapi.VM.get_all()
-        except XenAPI.Failure as e:
-            mylog.error("Could not get VM list: " + str(e))
+            vm_list = libxen.GetAllVMs(session)
+        except libxen.XenError as e:
+            mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
-        for vm_ref in vm_ref_list:
-            vm = session.xenapi.VM.get_record(vm_ref)
-            vname = vm["name_label"]
-            vm_list[vname] = dict()
-            vm_list[vname]["ref"] = vm_ref
-            vm_list[vname]["vm"] = vm
 
         matched_vms = dict()
         for vname in sorted(vm_list.keys()):
-            vm = vm_list[vname]["vm"]
-            vm_ref = vm_list[vname]["ref"]
             if vm_regex:
                 m = re.search(vm_regex, vname)
                 if m:
@@ -112,29 +142,41 @@ class XenShutdownVmsAction(ActionBase):
             if vm_count > 0 and len(matched_vms) >= vm_count:
                 break
 
-        shutdown_count = 0
+        if len(matched_vms.keys()) <= 0:
+            mylog.info("No VMs found")
+            return True
+
+        mylog.info(str(len(matched_vms.keys())) + " VMs will be shutdown: " + ", ".join(matched_vms.keys()))
+
+        # Run the API operations in parallel if there are enough
+        if len(matched_vms.keys()) <= parallel_thresh:
+            parallel_calls = 1
+        else:
+            parallel_calls = parallel_max
+
+        manager = multiprocessing.Manager()
+        results = manager.dict()
+        self._threads = []
         for vname in sorted(matched_vms.keys()):
             vm_ref = matched_vms[vname]["ref"]
-            vm = matched_vms[vname]["vm"]
+            vm = matched_vms[vname]
             if vm["power_state"] == "Halted":
                 mylog.passed("  " + vname + " is already shutdown")
-                shutdown_count += 1
             else:
-                mylog.info("  Shutting down " + vm["name_label"])
-                try:
-                    session.xenapi.VM.clean_shutdown(vm_ref)
-                    shutdown_count += 1
-                    mylog.passed("  Successfully shutdown " + vname)
-                except XenAPI.Failure as e:
-                    mylog.error("  Failed to shutdown " + vm["name_label"] + " - " + str(e))
-                    self.RaiseFailureEvent(message=str(e), exception=e)
+                results[vname] = False
+                th = multiprocessing.Process(target=self._VmThread, args=(vmhost, host_user, host_pass, vname, vm_ref, results, debug))
+                th.daemon = True
+                self._threads.append(th)
 
-        if shutdown_count == len(matched_vms):
+        # Run all of the threads
+        allgood = libsf.ThreadRunner(self._threads, results, parallel_calls)
+        if allgood:
             mylog.passed("All VMs shutdown successfully")
             return True
         else:
-            mylog.error("Not all VMs were shutdown")
+            mylog.error("Not all VMs could be shutdown")
             return False
+
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
@@ -150,12 +192,14 @@ if __name__ == '__main__':
     parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to power off")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power off")
     parser.add_option("--vm_count", type="string", dest="vm_count", default=None, help="the number of matching VMs to power off")
+    parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=sfdefaults.xenapi_parallel_calls_thresh, help="do not use multiple threads unless there are more than this many [%default]")
+    parser.add_option("--parallel_max", type="int", dest="parallel_max", default=sfdefaults.xenapi_parallel_calls_max, help="the max number of threads to use [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.debug):
+        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.parallel_thresh, options.parallel_max, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
