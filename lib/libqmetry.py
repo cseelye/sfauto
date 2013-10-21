@@ -104,7 +104,7 @@ class QmetryClient(object):
         for suite in suites:
             if suite.name.lower() == suiteName.lower():
                 return suite
-            raise QmetryError("Could not find suite '" + suiteName + "'")
+        raise QmetryError("Could not find suite '" + suiteName + "'")
 
     def FindPlatformInSuite(self, platformName, parentSuiteID):
         """
