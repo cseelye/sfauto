@@ -49,7 +49,7 @@ class XenCloneVmAction(ActionBase):
                             },
             args)
 
-    def Execute(self, vm_name, clone_name, dest_sr=None, vmhost=sfdefaults.vmhost_xen, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def Execute(self, vm_name, clone_name, dest_sr=None, poweron=True, vmhost=sfdefaults.vmhost_xen, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         Clone a VM
         """
@@ -159,25 +159,26 @@ class XenCloneVmAction(ActionBase):
             session.xenapi.VDI.set_name_label(vdi_ref, clone_name + "-disk0")
             session.xenapi.VDI.set_name_description(vdi_ref, "Boot disk for " + clone_name)
 
-        # Select a host for the clone
-        host_ref_list = session.xenapi.VM.get_possible_hosts(clone_ref)
-        min_vms = sys.maxint
-        dest_host_ref = None
-        dest_host = ""
-        for host_ref in host_ref_list:
-            h = session.xenapi.host.get_record(host_ref)
-            if len(h["resident_VMs"]) < min_vms:
-                min_vms = len(h["resident_VMs"])
-                dest_host_ref = host_ref
-                dest_host = h["name_label"]
+        if poweron:
+            # Select a host for the clone
+            host_ref_list = session.xenapi.VM.get_possible_hosts(clone_ref)
+            min_vms = sys.maxint
+            dest_host_ref = None
+            dest_host = ""
+            for host_ref in host_ref_list:
+                h = session.xenapi.host.get_record(host_ref)
+                if len(h["resident_VMs"]) < min_vms:
+                    min_vms = len(h["resident_VMs"])
+                    dest_host_ref = host_ref
+                    dest_host = h["name_label"]
 
-        mylog.info("Booting " + clone_name + " on host " + dest_host)
-        try:
-            session.xenapi.VM.start_on(clone_ref, dest_host_ref, False, False)
-        except XenAPI.Failure as e:
-            mylog.error("Could not start " + clone_name + " : " + str(e))
-            self.RaiseFailureEvent(message=str(e), exception=e)
-            return False
+            mylog.info("Booting " + clone_name + " on host " + dest_host)
+            try:
+                session.xenapi.VM.start_on(clone_ref, dest_host_ref, False, False)
+            except XenAPI.Failure as e:
+                mylog.error("Could not start " + clone_name + " : " + str(e))
+                self.RaiseFailureEvent(message=str(e), exception=e)
+                return False
 
         mylog.passed("Successfully cloned " + vm_name + " to " + clone_name)
         return True
@@ -193,6 +194,7 @@ if __name__ == '__main__':
     parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to clone")
     parser.add_option("--clone_name", type="string", dest="clone_name", default=None, help="the name of the clone to create")
     parser.add_option("--dest_sr", type="string", dest="dest_sr", default=None, help="the name of the SR to put the clone in. If not specified, determine the SR based on clone name")
+    parser.add_option("--nopoweron", action="store_false", dest="poweron", default=True, help="do not power on the clone after creation")
     parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_xen, help="the management IP of the hypervisor [%default]")
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
@@ -201,7 +203,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_name, options.clone_name, options.dest_sr, options.vmhost, options.host_user, options.host_pass, options.debug):
+        if Execute(options.vm_name, options.clone_name, options.dest_sr, options.poweron, options.vmhost, options.host_user, options.host_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
