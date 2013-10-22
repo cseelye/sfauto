@@ -44,7 +44,6 @@ class XenDeleteVmsAction(ActionBase):
         libsf.ValidateArgs({"vmhost" : libsf.IsValidIpv4Address,
                             "host_user" : None,
                             "host_pass" : None,
-                            "vm_name" : None,
                             },
             args)
 
@@ -99,7 +98,7 @@ class XenDeleteVmsAction(ActionBase):
 
     def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_xen, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, parallel_thresh=sfdefaults.xenapi_parallel_calls_thresh, parallel_max=sfdefaults.xenapi_parallel_calls_max, debug=False):
         """
-        Clone a VM
+        Delete VMs
         """
         self.ValidateArgs(locals())
         if debug:
