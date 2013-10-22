@@ -93,7 +93,7 @@ class XenListSrNamesAction(ActionBase):
 
     def Execute(self, sr_regex=None, vmhost=sfdefaults.vmhost_xen, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
-        List VMs
+        List SRs
         """
         self.ValidateArgs(locals())
         if debug:

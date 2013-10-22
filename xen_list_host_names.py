@@ -43,7 +43,7 @@ class XenListHostNamesAction(ActionBase):
 
     def Get(self, vmhost=sfdefaults.vmhost_xen, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
-        List SRs
+        List hosts
         """
         self.ValidateArgs(locals())
         if debug:
@@ -81,7 +81,7 @@ class XenListHostNamesAction(ActionBase):
 
     def Execute(self, vmhost=sfdefaults.vmhost_xen, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
-        List VMs
+        List hosts
         """
         self.ValidateArgs(locals())
         if debug:
