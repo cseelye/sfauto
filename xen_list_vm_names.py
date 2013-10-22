@@ -43,7 +43,7 @@ class XenListVmNamesAction(ActionBase):
                             "host_pass" : None},
             args)
 
-    def Get(self, vm_regex=None, vmhost=sfdefaults.vmhost_xen, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def Get(self, vm_regex=None, vm_powerstate=None, vmhost=sfdefaults.vmhost_xen, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         List VMs
         """
@@ -72,17 +72,19 @@ class XenListVmNamesAction(ActionBase):
             return False
 
         matching_vms = []
-        if vm_regex:
-            for vname in vm_list.keys():
+        for vname in vm_list.keys():
+            if vm_powerstate and vm_list[vname]['power_state'].lower() != vm_powerstate.lower():
+                continue
+            if vm_regex:
                 m = re.search(vm_regex, vname)
-                if m:
-                    matching_vms.append(vname)
-        else:
-            matching_vms = vm_list.keys()
+                if not m:
+                    continue
+
+            matching_vms.append(vname)
 
         return sorted(matching_vms)
 
-    def Execute(self, vm_regex=None, vmhost=sfdefaults.vmhost_xen, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
+    def Execute(self, vm_regex=None, vm_powerstate=None, vmhost=sfdefaults.vmhost_xen, csv=False, bash=False, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False):
         """
         List VMs
         """
@@ -121,18 +123,19 @@ if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
 
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs - show all if not specified")
+    parser.add_option("--vm_state", type="choice", dest="vm_state", default=None, choices=["running", "halted"], help="the power state of the VMs to list - show all if not specified")
     parser.add_option("-v", "--vmhost", type="string", dest="vmhost", default=sfdefaults.vmhost_xen, help="the management IP of the Xen hypervisor [%default]")
     parser.add_option("--host_user", type="string", dest="host_user", default=sfdefaults.host_user, help="the username for the hypervisor [%default]")
     parser.add_option("--host_pass", type="string", dest="host_pass", default=sfdefaults.host_pass, help="the password for the hypervisor [%default]")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
-    parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs - show all if not specified")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(vm_regex=options.vm_regex, vmhost=options.vmhost, csv=options.csv, bash=options.bash, host_user=options.host_user, host_pass=options.host_pass, debug=options.debug):
+        if Execute(vm_regex=options.vm_regex, vm_powerstate=options.vm_state, vmhost=options.vmhost, csv=options.csv, bash=options.bash, host_user=options.host_user, host_pass=options.host_pass, debug=options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
