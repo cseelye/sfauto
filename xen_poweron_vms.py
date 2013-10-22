@@ -108,7 +108,17 @@ class XenPoweronVmsAction(ActionBase):
                 mylog.error("Could not find VM " + vm_name + " - " + str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
-            vm = session.xenapi.VM.get_record(vm_ref)
+            if not vm_ref or len(vm_ref) <= 0:
+                mylog.error("Could not find source VM '" + vm_name + "'")
+                self.RaiseFailureEvent(message="Could not find source VM '" + vm_name + "'")
+                return False
+            vm_ref = vm_ref[0]
+            try:
+                vm = session.xenapi.VM.get_record(vm_ref)
+            except XenAPI.Failure as e:
+                mylog.error("Could not get VM record - " + str(e))
+                self.RaiseFailureEvent(message=str(e), exception=e)
+                return False
             if vm["power_state"] == "Running":
                 mylog.passed(vm_name + " is already powered on")
                 return False
