@@ -703,7 +703,8 @@ def ParseDateTime(pTimeString):
     known_formats = [
         "%Y-%m-%d %H:%M:%S.%f",     # old sf format
         "%Y-%m-%dT%H:%M:%S.%fZ",    # ISO format with UTC timezone
-        "%Y-%m-%dT%H:%M:%SZ"     # almost ISO format with UTC timezone
+        "%Y-%m-%dT%H:%M:%SZ",     # almost ISO format with UTC timezone
+        "%Y%m%dT%H:%M:%SZ"
         # 2012-11-15T19:18:46Z
     ]
     parsed = None
@@ -718,7 +719,10 @@ def ParseDateTime(pTimeString):
 def ParseTimestamp(pTimeString):
     date_obj = ParseDateTime(pTimeString)
     if (date_obj != None):
-        return calendar.timegm(date_obj.timetuple())
+        timestamp = calendar.timegm(date_obj.timetuple())
+        if timestamp <= 0:
+            timestamp = calendar.timegm(date_obj.utctimetuple())
+        return timestamp
     else:
         return 0
 

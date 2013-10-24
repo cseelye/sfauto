@@ -156,8 +156,23 @@ class XenCloneVmAction(ActionBase):
                 continue
             vdi_ref = vbd["VDI"]
             #vdi = session.xenapi.VDI.get_record(vdi_ref)
-            session.xenapi.VDI.set_name_label(vdi_ref, clone_name + "-disk0")
-            session.xenapi.VDI.set_name_description(vdi_ref, "Boot disk for " + clone_name)
+            #session.xenapi.VDI.set_name_label(vdi_ref, clone_name + "-disk0")
+            #session.xenapi.VDI.set_name_description(vdi_ref, "Boot disk for " + clone_name)
+            try:
+                vdi = session.xenapi.VDI.get_record(vdi_ref)
+            except XenAPI.Failure as e:
+                mylog.error("Failed to get VDI record - " + str(e))
+                self.RaiseFailureEvent(message=str(e), exception=e)
+                allgood = False
+                continue
+            try:
+                session.xenapi.VDI.set_name_label(vdi_ref, clone_name + "-" + vbd["device"])
+                session.xenapi.VDI.set_name_description(vdi_ref, "Disk for " + clone_name)
+            except XenAPI.Failure as e:
+                mylog.error("Failed to set VDI label - " - str(e))
+                self.RaiseFailureEvent(message=str(e), exception=e)
+                allgood = False
+                continue
 
         if poweron:
             # Select a host for the clone

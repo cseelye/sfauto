@@ -75,6 +75,8 @@ class XenRenameVdiAction(ActionBase):
                 continue
             if vm["is_snapshot_from_vmpp"]:
                 continue
+            if vm["is_snapshot"]:
+                continue
 
             vname = vm["name_label"]
             vm_list[vname] = dict()
@@ -103,10 +105,17 @@ class XenRenameVdiAction(ActionBase):
                     continue
                 vdi_ref = vbd["VDI"]
                 try:
-                    session.xenapi.VDI.set_name_label(vdi_ref, vname + "-disk0")
-                    session.xenapi.VDI.set_name_description(vdi_ref, "Boot disk for " + vname)
+                    vdi = session.xenapi.VDI.get_record()
                 except XenAPI.Failure as e:
-                    mylog.error(str(e))
+                    mylog.error("Failed to get VDI record - " + str(e))
+                    self.RaiseFailureEvent(message=str(e), exception=e)
+                    allgood = False
+                    continue
+                try:
+                    session.xenapi.VDI.set_name_label(vdi_ref, vname + "-" + vbd["device"])
+                    session.xenapi.VDI.set_name_description(vdi_ref, "Disk for " + vname)
+                except XenAPI.Failure as e:
+                    mylog.error("Failed to set VDI label - " - str(e))
                     self.RaiseFailureEvent(message=str(e), exception=e)
                     allgood = False
 
