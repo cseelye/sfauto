@@ -41,8 +41,16 @@ if /bin/uname -a | /bin/grep -qi "ubuntu"; then
         /bin/echo -e "auto $dev\niface $dev inet dhcp\n" >> /etc/network/interfaces
     done
     
-    /usr/bin/logger -s -t firstboot "  Setting hostname to ubuntu-$MAC"
-    /bin/echo "ubuntu-$MAC" > /etc/hostname
+    HOSTNAME="ubuntu=$MAC"
+    HYPERVISOR=$(/usr/sbin/virt-what | /usr/bin/head -1 | /usr/bin/awk '{ print tolower($0) }')
+    if [[ "$HYPERVISOR" == "xen" ]]; then
+        TEMP=$(/usr/bin/xenstore-read name)
+        if [[ "$?" == "0" ]]; then
+            HOSTNAME=$TEMP
+        fi
+    fi
+    /usr/bin/logger -s -t firstboot "  Setting hostname to $HOSTNAME"
+    /bin/echo "$HOSTNAME" > /etc/hostname
 fi
 
 # RHEL
