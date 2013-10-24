@@ -113,9 +113,13 @@ class CheckVmHealthClientmonAction(ActionBase):
                     else:
                         mylog.info("The VMs on " + ",".join(good_vm_types) + " hypervisors are all healthy")
                         return False
-            
-            mylog.passed("The VMs on "+ ",".join(good_vm_types) + " hypervisors are all healthy")
-            return True
+
+            if len(VdBenchDown) > 0:
+                mylog.passed("The VMs on " + ",".join(good_vm_types) + " hypervisors are all healthy, But the vdbench is not running on: " + ", ".join(VdBenchDown))
+                return True
+            else: 
+                mylog.passed("The VMs on "+ ",".join(good_vm_types) + " hypervisors are all healthy")
+                return True
             
         #If vmType was provided 
         else: 
