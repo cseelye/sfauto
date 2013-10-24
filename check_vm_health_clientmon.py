@@ -1,22 +1,17 @@
 """
 This script will make sure that all the VMs are healthy
-Takes in a hypervisor and a mvip
 
 When run as a script, the following options/env variables apply:
 
-    --vm_type           The type of hypervisor to run a health check on None=All hypervisors
-
-    --client_user       The username for the client
-
-    --client_pass       The password for the client
+    --group           The type of hypervisor to run a health check on None=All hypervisors, In this code "group--> vm_type"
 
     --no_logs           If true will suppress most logging
 
-    --thread_max        Max number of threads to use while checking a client's health
-
+    --vm_regex          Regex to match to select VMs to power on
 """
 
 import sys
+import re
 from optparse import OptionParser
 import logging
 import lib.libsf as libsf
@@ -26,6 +21,7 @@ import lib.libclient as libclient
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 import multiprocessing
+import time
 
 
 
@@ -39,33 +35,17 @@ class CheckVmHealthClientmonAction(ActionBase):
     def __init__(self):
         super(self.__class__, self).__init__(self.__class__.Events)
 
-    def _HealthCheckThread(self, ip, username, password, noLogs, results):
-        client = libclient.SfClient()
-        isHealthy = False
-
-        try:    
-            client.Connect(ip, username, password)
-            if noLogs == False:
-                isHealthy = client.IsHealthy()
-            else:
-                isHealthy = client.IsHealthySilent()
-        except libclient.ClientError as e:
-            mylog.error(ip + ": There was a problem checking the health of the client. Message: " + str(e))
-            results[ip] = False
-            return
-        results[ip] = isHealthy
-
-
+    """
     def ValidateArgs(self, args):
         libsf.ValidateArgs({"clientUser" : None,
                             "clientPass" : None,
                             "threadMax" : libsf.IsInteger},
-            args)
+            args)"""
 
 
-    def Execute(self, vmType=None, clientUser=sfdefaults.client_user, clientPass=sfdefaults.client_pass, noLogs=False, threadMax=sfdefaults.parallel_max, debug=False):
+    def Execute(self, vmType=None, noLogs=False, vm_regex=None, debug=False):
 
-        self.ValidateArgs(locals())
+        #self.ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
@@ -74,7 +54,13 @@ class CheckVmHealthClientmonAction(ActionBase):
             vm_type_list = ["KVM", "ESX", "HyperV", "Xen", "Pysical"]
             bad_vm_types = []
             good_vm_types = []
+            BadHostname = []
+            VdBenchDown = []
             for vm_type in vm_type_list:
+                GoodVm = 0
+                BadVm = 0
+                matched_vms = []
+
                 if noLogs == False:
                     mylog.step("Starting health check on " + vm_type)
 
@@ -83,82 +69,106 @@ class CheckVmHealthClientmonAction(ActionBase):
 
                 #if there are VMs of that type being monitored then we will run a health check on them
                 if len(monitor_list) > 0:
-                    self._threads = []
-                    manager = multiprocessing.Manager()
-                    results = manager.dict()
                     for vm in monitor_list:
-                        ip = vm.IpAddress
-                        th = multiprocessing.Process(target=self._HealthCheckThread, args=(ip, clientUser, clientPass, noLogs, results))
-                        th.daemon = True
-                        self._threads.append(th)
+                        if vm_regex:
+                            m = re.search(vm_regex, vm.Hostname)
+                            if m:
+                                matched_vms.append(vm)
+                        else:
+                            matched_vms.append(vm)
 
-                    allgood = libsf.ThreadRunner(self._threads, results, threadMax)
-
-                    if allgood:
-                        if noLogs == False:
-                            mylog.passed("All " + vm_type + " VMs are healthy")
-                        good_vm_types.append(vm_type)
-                    else:
-                        mylog.error("Not all " + vm_type + " VMs are healthy")
+                    for host in matched_vms:
+                        if (time.time()- float(host.Timestamp))< 30:
+                            if (host.VdbenchCount>0 or host.VdbenchExit >0):
+                                mylog.debug("The Host " + host.Hostname +" at, time:" + time.asctime(time.localtime(host.Timestamp))+" Is actively responding and vdbench is running")
+                                GoodVm += 1
+                            else:
+                                mylog.debug("The Host " + host.Hostname +" at, time:" + time.asctime(time.localtime(host.Timestamp))+" Is actively responding, But vdbench is Not running")
+                                GoodVm += 1
+                                VdBenchDown.append(host.Hostname)
+                        else:
+                            mylog.debug("The Host " + host.Hostname +" Is neither responding nor vdbench is running, Last responded: "+ time.asctime(time.localtime(host.Timestamp)))
+                            BadVm += 1
+                            BadHostname.append(host.Hostname)  
+                    
+                    if BadVm > 0: 
                         bad_vm_types.append(vm_type)
-                        badVMs = []
-                        for vm in monitor_list:
-                            ip = vm.IpAddress
-                            if results[ip] == False:
-                                badVMs.append(ip)
-                        for vm in badVMs:
-                            mylog.error(vm + " is not healthy. Type is: " + vm_type)
+                    elif GoodVm > 0:
+                        good_vm_types.append(vm_type)     
+
 
                 #else when len < 0
                 else:
                     if noLogs == False:
                         mylog.warning("There are no " + vm_type + " VMs being monitored on this database")
 
+                
             #if there are bad VMs on any of the hypervisors then we will report them here
             if len(bad_vm_types) > 0:
-                mylog.error("There are bad VMs on the: " + ", ".join(bad_vm_types) + " hypervisors")
+                mylog.error("There are bad VMs on the " + ",".join(bad_vm_types) + " hypervisors. The bad VMs are:" + ", ".join(BadHostname))
                 if len(good_vm_types) > 0:
-                    mylog.info("The VMs on: " + ", ".join(good_vm_types) + " are all healthy")
-                return False
-            mylog.passed("The VMs on: " + ", ".join(good_vm_types) + " are all healthy")
+                    if len(VdBenchDown) > 0:
+                        mylog.info("The VMs on " + ",".join(good_vm_types) + " hypervisors are all healthy, But the vdbench is not running on: " + ", ".join(VdBenchDown))
+                        return False
+                    else:
+                        mylog.info("The VMs on " + ",".join(good_vm_types) + " hypervisors are all healthy")
+                        return False
+            
+            mylog.passed("The VMs on "+ ",".join(good_vm_types) + " hypervisors are all healthy")
             return True
-
-
+            
         #If vmType was provided 
-        vm_type_list = ["KVM", "ESX", "HyperV", "Xen", "Pysical"]
-
-        if vmType not in vm_type_list:
-            mylog.error("Wrong type of VM Type. Accepted Values are: " + ", ".join(vm_type_list))
-            return False
-
-        monitor = ClientMon()
-        monitor_list = monitor.ListClientStatusByGroup(vmType)
-
-        self._threads = []
-        manager = multiprocessing.Manager()
-        results = manager.dict()
-        for vm in monitor_list:
-            ip = vm.IpAddress
-            th = multiprocessing.Process(target=self._HealthCheckThread, args=(ip, clientUser, clientPass, noLogs, results))
-            th.daemon = True
-            self._threads.append(th)
-
-        allgood = libsf.ThreadRunner(self._threads, results, threadMax)
-
-        if allgood:
-            mylog.passed("All KVM VMs are healthy")
-            return True
-        else:
-            mylog.error("Not all KVM VMs are healthy")
-            badVMs = []
-            for vm in monitor_list:
-                ip = vm.IpAddress
-                if results[ip] == False:
-                    badVMs.append(ip)
-            for vm in badVMs:
-                mylog.error(vm + " is not healthy")
-            return False
-
+        else: 
+            vm_type_list = ["KVM", "ESX", "HyperV", "Xen", "Pysical"]
+            MatchedVms = []
+            GoodVm = 0
+            BadVm = 0
+            Bad_Hostname = []
+            VdBench_Bad = []
+            if vmType not in vm_type_list:
+                mylog.error("Wrong type of VM Type. Accepted Values are: " + ", ".join(vm_type_list))
+                return False
+    
+            monitor = ClientMon()
+            monitor_list = monitor.ListClientStatusByGroup(vmType)
+            
+            if len(monitor_list) > 0:
+    
+                for vm in monitor_list:
+                    if vm_regex:
+                        m = re.search(vm_regex, vm.Hostname)
+                        if m:
+                            MatchedVms.append(vm)
+                    else:
+                        MatchedVms.append(vm)
+                
+                for Host in MatchedVms:
+                    if (time.time() - float(Host.Timestamp))< 30:
+                        if (Host.VdbenchCount>0 or Host.VdbenchExit >0):
+                            mylog.debug("The Host " + Host.Hostname +" at, time:" + time.asctime(time.localtime(Host.Timestamp))+" Is actively responding and vdbench is running")
+                            GoodVm += 1
+                        else:
+                            mylog.debug("The Host " + Host.Hostname +" at, time:" + time.asctime(time.localtime(Host.Timestamp))+" Is actively responding and But vdbench is not running")
+                            GoodVm += 1
+                            VdBench_Bad.append(Host.Hostname)
+                    else:
+                        BadVm += 1
+                        mylog.debug("The Host " + Host.Hostname +" Is neither responding nor vdbench is running, Last responded: "+ time.asctime(time.localtime(Host.Timestamp)))
+                        Bad_Hostname.append(Host.Hostname)
+                #if there are bad VMs on any of the hypervisors then we will report them here
+                if BadVm > 0: 
+                    mylog.error("There are " +str(BadVm)+" bad VMs on the " + vmType + " hypervisor. The bad VMs are: " + ", ".join(Bad_Hostname))
+                    return False
+                elif GoodVm == len(MatchedVms):
+                    if len(VdBench_Bad) > 0: 
+                        mylog.passed("The VMs on "+vmType + " hypervisors are all healthy, But vdbench is not running on: " + ", ".join(VdBench_Bad))
+                        return True
+                    else: 
+                        mylog.passed("The VMs on "+vmType + " hypervisors are all healthy")
+                        return True
+            else: 
+                mylog.warning("There are no " + vmType + " VMs being monitored on this database")
+                return False
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
 libsf.PopulateActionModule(sys.modules[__name__])
@@ -167,17 +177,15 @@ if __name__ == '__main__':
     mylog.debug("Starting " + str(sys.argv))
 
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
-    parser.add_option("--vm_type", type="string", dest="vm_type", default=None, help="The type of VM to check, ex: KVM")
-    parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the client [%default]")
-    parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the client [%default]")
+    parser.add_option("--group", type="string", dest="group", default=None, help="The type of VM to check, ex: KVM")
     parser.add_option("--no_logs", action="store_true", dest="noLogs", default=False, help="Turns off logs")
-    parser.add_option("--thread_max", type="int", dest="thread_max", default=sfdefaults.parallel_max, help="The number of threads to use when checking a client's health")
+    parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power on")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_type, options.client_user, options.client_pass, options.noLogs, options.thread_max, options.debug):
+        if Execute(options.group, options.noLogs, options.vm_regex, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
@@ -193,3 +201,4 @@ if __name__ == '__main__':
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
+
