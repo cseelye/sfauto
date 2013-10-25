@@ -150,14 +150,14 @@ class KvmSelectRandomVmsAction(ActionBase):
                 separator = " "
             vm_names = ""
             for vm in vm_list:
-                vm_names += vm.name() + separator
+                vm_names += vm + separator
             sys.stdout.write(vm_names[:-1] + "\n")
             sys.stdout.flush()
 
         else:
             mylog.info(str(len(vm_list)) + " random VMs from " + vmhost)
             for vm in vm_list:
-                mylog.info("VM name: " + vm.name())
+                mylog.info("VM name: " + vm)
         return True
 
 # Instantate the class and add its attributes to the module
@@ -182,7 +182,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_name, options.connection, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.csv, options.bash, options.debug):
+        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.csv, options.bash, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
@@ -198,4 +198,5 @@ if __name__ == '__main__':
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
+
 
