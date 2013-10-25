@@ -79,7 +79,12 @@ class CheckVmHealthClientmonAction(ActionBase):
 
                     for host in matched_vms:
                         if (time.time()- float(host.Timestamp))< 30:
-                            if (host.VdbenchCount>0 or host.VdbenchExit >0):
+                            if (host.VdbenchCount == 0 and host.VdbenchExit == 0):
+                                mylog.debug("The Host " + host.Hostname +" at, time:" + time.asctime(time.localtime(host.Timestamp))+" Is actively responding, But vdbench is Not running")
+                                GoodVm += 1
+                                VdBenchDown.append(host.Hostname)     
+                                                           
+                            elif (host.VdbenchCount>0 or host.VdbenchExit == 0):
                                 mylog.debug("The Host " + host.Hostname +" at, time:" + time.asctime(time.localtime(host.Timestamp))+" Is actively responding and vdbench is running")
                                 GoodVm += 1
                             else:
@@ -148,9 +153,15 @@ class CheckVmHealthClientmonAction(ActionBase):
                 
                 for Host in MatchedVms:
                     if (time.time() - float(Host.Timestamp))< 30:
-                        if (Host.VdbenchCount>0 or Host.VdbenchExit >0):
+                        if (Host.VdbenchCount == 0 and Host.VdbenchExit == 0):
+                            mylog.debug("The Host " + Host.Hostname +" at, time:" + time.asctime(time.localtime(Host.Timestamp))+" Is actively responding and But vdbench is not running")
+                            GoodVm += 1
+                            VdBench_Bad.append(Host.Hostname)
+
+                        elif (Host.VdbenchCount>0 or Host.VdbenchExit == 0):
                             mylog.debug("The Host " + Host.Hostname +" at, time:" + time.asctime(time.localtime(Host.Timestamp))+" Is actively responding and vdbench is running")
                             GoodVm += 1
+                        
                         else:
                             mylog.debug("The Host " + Host.Hostname +" at, time:" + time.asctime(time.localtime(Host.Timestamp))+" Is actively responding and But vdbench is not running")
                             GoodVm += 1
