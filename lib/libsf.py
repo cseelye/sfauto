@@ -1391,7 +1391,7 @@ def SearchForVolumes(pMvip, pUsername, pPassword, VolumeId=None, VolumeName=None
             volume_id_list = map(int, volume_id_list)
         else:
             try:
-                volume_id_list = list(VolumeId)
+                volume_id_list = [VolumeId]
             except ValueError:
                 volume_id_list.append(VolumeId)
 
