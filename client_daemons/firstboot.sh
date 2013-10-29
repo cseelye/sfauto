@@ -41,11 +41,16 @@ if /bin/uname -a | /bin/grep -qi "ubuntu"; then
         /bin/echo -e "auto $dev\niface $dev inet dhcp\n" >> /etc/network/interfaces
     done
     
-    HOSTNAME="ubuntu=$MAC"
+    HOSTNAME="ubuntu-$MAC"
     HYPERVISOR=$(/usr/sbin/virt-what | /usr/bin/head -1 | /usr/bin/awk '{ print tolower($0) }')
     if [[ "$HYPERVISOR" == "xen" ]]; then
         TEMP=$(/usr/bin/xenstore-read name)
-        if [[ "$?" == "0" ]]; then
+        if [[ "$?" == "0" ]] && [[ -n $TEMP ]]; then
+            HOSTNAME=$TEMP
+        fi
+    elif [[ "$HYPERVISOR" == "vmware" ]]; then
+        TEMP=$(vmtoolsd --cmd "info-get guestinfo.name" 2>/dev/null)
+        if [[ "$?" == "0" ]] && [[ -n $TEMP ]]; then
             HOSTNAME=$TEMP
         fi
     fi
