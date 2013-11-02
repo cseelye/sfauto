@@ -29,6 +29,12 @@ my %opts = (
         help => "Find the first gap in the sequence instead of the highest number",
         required => 0,
     },
+    count => {
+        type => "=i",
+        help => "Get the next 'count' numbers in the sequence",
+        required => 0,
+        default => 1,
+    },
     csv => {
         type => "",
         help => "Display a minimal output that is formatted as a comma separated list",
@@ -63,9 +69,11 @@ my $vsphere_server = Opts::get_option("mgmt_server");
 Opts::set_option("server", $vsphere_server);
 my $vm_prefix = Opts::get_option('vm_prefix');
 my $fill_gap = Opts::get_option('fill');
+my $count = Opts::get_option('count');
 my $enable_debug = Opts::get_option('debug');
 my $csv = Opts::get_option('csv');
 my $bash = Opts::get_option('bash');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 $mylog::DisplayDebug = 1 if $enable_debug;
@@ -79,12 +87,12 @@ $ENV{PERL_LWP_SSL_VERIFY_HOSTNAME} = 0;
 mylog::info("Connecting to vSphere at $vsphere_server...");
 eval
 {
-   Util::connect();
+    Util::connect();
 };
 if ($@)
 {
-   mylog::error("Could not connect to $vsphere_server: $@");
-   exit 1;
+    mylog::error("Could not connect to $vsphere_server: $@");
+    exit 1;
 }
 
 
@@ -109,51 +117,69 @@ eval
             }
         }
     }
-
-    # Find the first gap in the sequence
+    
+    my @seq;
+    
+    # Find the gaps in the sequence
     if ($fill_gap)
     {
         my $gap;
-        my @found = sort keys %found_numbers;
+        my $previous;
+        my @found = sort { $a <=> $b } keys %found_numbers;
         for (my $i = 1; $i <= scalar(@found); $i++)
         {
-            if ($found[$i-1] != $i)
+            if (!$previous)
             {
-                $gap = $i;
-                last;
+                $previous = $found[$i];
+                next
             }
-        }
-        if ($gap)
-        {
-            if ($bash || $csv)
+            if ($found[$i] != $previous + 1)
             {
-                print "$gap\n";
+                push(@seq, $previous+1..$found[$i]-1);
+                $previous = $seq[-1] + 1;
+                if ($previous  > $highest)
+                {
+                    $highest = $previous;
+                }
             }
             else
             {
-                mylog::info("The first gap in $vm_prefix is $gap");
+                $previous = $found[$i]
             }
-            exit 0;
         }
-        else
+        if (scalar(@seq) <= 0)
         {
-            mylog::info("There are no gaps in $vm_prefix")
+            mylog::info("There are no gaps in $vm_prefix");
+            push (@seq, $highest+1);
+            $highest++;
         }
-    }
-
-    # Show the next higher number
-    if ($bash || $csv)
-    {
-        print (($highest + 1) . "\n");
+        if (scalar(@seq) < $count)
+        {
+            push(@seq, $highest+1..$highest+1+$count-scalar(@seq));
+        }
     }
     else
     {
-        mylog::info("The next VM number for $vm_prefix is " . ($highest + 1));
+        @seq = $highest+1..$highest+1+$count;
+    }
+    # Make sure the list is only the requested length
+    $#seq = $count - 1;
+    
+    # Show the results
+    if ($bash || $csv)
+    {
+        my $sep = " ";
+        $sep = "," if $csv;
+        print join($sep, @seq);
+    }
+    else
+    {
+        mylog::info("The next $count VM numbers for $vm_prefix are " . join(",", @seq));
     }
     # Send the info back to parent script if requested
     if (defined $result_address)
     {
-        libsf::SendResultToParent(result_address => $result_address, result => ($highest + 1));
+        libsf::SendResultToParent(result_address => $result_address, result => @seq);
     }
 };
 if ($@)

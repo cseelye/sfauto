@@ -42,7 +42,7 @@ my %opts = (
     folder => {
         type => "=s",
         help => "Name of the folder to put the clone in",
-        required => 1,
+        required => 0,
     },
     thin => {
         type => "",
@@ -116,17 +116,21 @@ if (!$source_vm)
 }
 
 # Find the destination folder
-mylog::info("Searching for destination folder $dest_folder_name");
-my $dest_folder = Vim::find_entity_view(view_type => 'Folder', filter => {'name' => qr/^$dest_folder_name$/i});
-if (!$dest_folder)
+my $dest_folder;
+if ($dest_folder_name)
 {
-    mylog::error("Could not find destination folder '$dest_folder_name'");
-    exit 1;
+   mylog::info("Searching for destination folder $dest_folder_name");
+   $dest_folder = Vim::find_entity_view(view_type => 'Folder', filter => {'name' => qr/^$dest_folder_name$/i});
+   if (!$dest_folder)
+   {
+       mylog::error("Could not find destination folder '$dest_folder_name'");
+       exit 1;
+   }
 }
 
 # Find the destination datastore
 mylog::info("Searching for destination datastore $dest_datastore_name");
-my $dest_datastore = Vim::find_entity_view(view_type => 'Datastore', filter => {'name' => qr/^$dest_datastore_name$/i});
+my $dest_datastore = Vim::find_entity_view(view_type => 'Datastore', filter => {'name' => qr/^$dest_datastore_name/i});
 if (!$dest_datastore)
 {
     mylog::error("Could not find destination datastore '$dest_datastore_name'");
@@ -150,6 +154,7 @@ if (!$dest_host)
     mylog::error("Could not find host '$dest_host_name'");
     exit 1;
 }
+mylog::debug("Finding parent cluster and root resource pool");
 my $cluster = Vim::get_view(mo_ref => $dest_host->parent);
 my $root_pool = $cluster->resourcePool;
 
