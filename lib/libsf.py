@@ -112,7 +112,9 @@ def PopulateActionModule(module):
         setattr(module, attr_name, attr)
 
 class ListOption(Option):
-
+    """
+    Option subclass for a comma delimited list of strings
+    """
     ACTIONS = Option.ACTIONS + ("list",)
     STORE_ACTIONS = Option.STORE_ACTIONS + ("list",)
     TYPED_ACTIONS = Option.TYPED_ACTIONS + ("list",)
@@ -120,7 +122,9 @@ class ListOption(Option):
 
     def take_action(self, action, dest, opt, value, values, parser):
         if action == "list":
-            lvalue = value.split(",")
+            # Split on any number of ',' or ' ' and remove empty entries
+            lvalue = [i for i in re.split("[,\s]+", value) if i != None]
+
             if not values.ensure_value(dest, []):
                 setattr(values, dest, [])
             values.ensure_value(dest, []).extend(lvalue)
