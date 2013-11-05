@@ -6,7 +6,28 @@
 # Any time you boot the template after that, firstboot will run and create /opt/firstboot/firstbootdone, so make sure to remove it before shutting down and cloning
 
 # Do nothing if we have already run
-if [ -e /opt/sfauto/client_daemons/firstbootdone ]; then exit; fi
+if [ -e /opt/sfauto/client_daemons/firstbootdone ]; then
+    /usr/bin/logger -s -t firstboot "Exiting because firstboot has already run"
+    exit
+fi
+
+# Detect the hypervisor we are running on
+HYPERVISOR=$(/usr/sbin/virt-what | /usr/bin/head -1 | /usr/bin/awk '{ print tolower($0) }')
+
+# Try to read our VM name from the hypervisor
+if [[ "$HYPERVISOR" == *xen* ]]; then
+    VM_NAME=$(/usr/bin/xenstore-read name 2>/dev/null)
+fi  
+if [[ "$HYPERVISOR" == *vmware* ]]; then
+    VM_NAME=$(/usr/sbin/vmtoolsd --cmd "info-get guestinfo.hostname" 2>/dev/null)
+fi
+
+# Skip running firstboot if the VM name contains gold or template
+if [[ -n "$VM_NAME" && ( "$VM_NAME" == *gold* || "$VM_NAME" == *template* ) ]]; then
+    /usr/bin/logger -s -t firstboot "Skipping first boot setup because my VM name looks like template VM"
+    exit
+fi
+
 
 # Alphabetically first MAC addr to use as unique ID
 MAC=`/sbin/ifconfig -a | /bin/grep HWaddr | /usr/bin/awk '{print $5}' | /bin/sed 's/://g' | /usr/bin/sort | /usr/bin/head -1 | /usr/bin/awk '{ print tolower($0) }'`
@@ -14,9 +35,9 @@ MAC=`/sbin/ifconfig -a | /bin/grep HWaddr | /usr/bin/awk '{print $5}' | /bin/sed
 
 # If you know the MAC of your template, you can use it here to skip running on your template
 # Note all letters in lower case!
-if [[ "$MAC" == "525400ac913d" ]];
+if [[ "$MAC" == "005056ac49d1" ]];
 then
-    /usr/bin/logger -s -t firstboot "Skipping first boot setup because this is a template VM"
+    /usr/bin/logger -s -t firstboot "Skipping first boot setup because my MAC looks like a template VM"
     exit
 fi
 
@@ -42,17 +63,8 @@ if /bin/uname -a | /bin/grep -qi "ubuntu"; then
     done
     
     HOSTNAME="ubuntu-$MAC"
-    HYPERVISOR=$(/usr/sbin/virt-what | /usr/bin/head -1 | /usr/bin/awk '{ print tolower($0) }')
-    if [[ "$HYPERVISOR" == "xen" ]]; then
-        TEMP=$(/usr/bin/xenstore-read name)
-        if [[ "$?" == "0" ]] && [[ -n $TEMP ]]; then
-            HOSTNAME=$TEMP
-        fi
-    elif [[ "$HYPERVISOR" == "vmware" ]]; then
-        TEMP=$(vmtoolsd --cmd "info-get guestinfo.name" 2>/dev/null)
-        if [[ "$?" == "0" ]] && [[ -n $TEMP ]]; then
-            HOSTNAME=$TEMP
-        fi
+    if [[ -n "$VM_NAME" ]]; then
+        HOSTNAME=$VM_NAME
     fi
     /usr/bin/logger -s -t firstboot "  Setting hostname to $HOSTNAME"
     /bin/echo "$HOSTNAME" > /etc/hostname
