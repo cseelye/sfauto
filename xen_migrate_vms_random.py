@@ -118,7 +118,7 @@ class XenMigrateVmsRandomAction(ActionBase):
         matched_vms = dict()
         if vm_name:
             try:
-                vm_ref = session.xenapi.VM.get_by_name_label(vm_name)[0]
+                vm_ref = session.xenapi.VM.get_by_name_label(vm_name)
             except XenAPI.Failure as e:
                 mylog.error("Could not find VM " + vm_name + " - " + str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
