@@ -82,7 +82,7 @@ class WaitForNoFaultsAction(ActionBase):
         while True:
             # Get a list of current faults
             try:
-                current_faults = cluster.GetCurrentFaultSet()
+                current_faults = cluster.GetCurrentFaultSet(forceUpdate = True)
             except libsf.SfError as e:
                 mylog.error("Failed to get list of faults: " + str(e))
                 self.RaiseFailureEvent(message="Failed to get list of faults: " + str(e))

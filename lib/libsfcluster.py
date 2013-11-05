@@ -481,14 +481,14 @@ class SFCluster(object):
 
         return False
 
-    def GetCurrentFaultSet(self):
+    def GetCurrentFaultSet(self, forceUpdate=False):
         """
         Get a list of the current cluster faults
 
         Returns:
             A set of cluster fault codes (strings)
         """
-        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListClusterFaults", {"exceptions": 1, "faultTypes": "current"})
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListClusterFaults", {"exceptions": 1, "faultTypes": "current", "update": forceUpdate})
         current_faults = set()
         if (len(result["faults"]) > 0):
             for fault in result["faults"]:
