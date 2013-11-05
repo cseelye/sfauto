@@ -117,7 +117,7 @@ class NodeInfo:
         self.ClusterMaster = False
         self.Processes = dict()
         self.Nics = dict()
-        self.SCache = dict()
+        #self.SCache = dict()
         self.ExpectedBSCount = 0
 
 class ProcessResourceUsage:
@@ -521,26 +521,27 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     #
     # Get the secondary cache usage
     #
-    command = ""
-    for pname in process_names2pids.keys():
-        if "slice" in pname:
-            pid = process_names2pids[pname]
-            disk = process_pids2disks[pid]
-            command += ";echo `ls -1 " + disk + "/failed | wc -l` `du " + disk + "/failed`"
-    command = command.strip(";")
-    stdin, stdout, stderr = ssh.exec_command(command)
-    data = stdout.readlines()
-    for line in data:
-        pieces = line.split()
-        #files = int(pieces[0])
-        size = int(pieces[1]) * 1024
-        disk = pieces[2]
-        pieces = disk.split("/")
-        disk = pieces[2]
-        for pid, device in process_pids2disks.iteritems():
-            if disk in device:
-                proc_name = process_pids2names[pid]
-                usage.SCache[proc_name] = size
+    # Obsolete for B, completely unworkable for C
+    #command = ""
+    #for pname in process_names2pids.keys():
+        #if "slice" in pname:
+            #pid = process_names2pids[pname]
+            #disk = process_pids2disks[pid]
+            #command += ";echo `ls -1 " + disk + "/failed | wc -l` `du " + disk + "/failed`"
+    #command = command.strip(";")
+    #stdin, stdout, stderr = ssh.exec_command(command)
+    #data = stdout.readlines()
+    #for line in data:
+        #pieces = line.split()
+        ##files = int(pieces[0])
+        #size = int(pieces[1]) * 1024
+        #disk = pieces[2]
+        #pieces = disk.split("/")
+        #disk = pieces[2]
+        #for pid, device in process_pids2disks.iteritems():
+            #if disk in device:
+                #proc_name = process_pids2names[pid]
+                #usage.SCache[proc_name] = size
 
     #
     # Run 'top', 'ifconfig', grep /proc/diskstatus, grep /proc/[pid]/io.
@@ -1120,11 +1121,11 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
                             for oldssid in previousClusterInfo.SliceServices:
                                 if oldssid == current_slice.ServiceId:
                                     current_slice.PreviousSecCacheBytes = previousClusterInfo.SliceServices[oldssid].SecCacheBytes
-                    else:
-                        for node in pNodesInfo.itervalues():
-                            if "slice" + str(service_id) in node.SCache.keys():
-                                current_slice.SecCacheBytes = node.SCache["slice" + service_id]
-                                break
+                    #else:
+                        #for node in pNodesInfo.itervalues():
+                            #if "slice" + str(service_id) in node.SCache.keys():
+                                #current_slice.SecCacheBytes = node.SCache["slice" + service_id]
+                                #break
                     info.SliceServices[service_id] = current_slice
 
     # Look for failed/available drives
