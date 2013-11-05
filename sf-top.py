@@ -822,6 +822,8 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
 
     sf_version = 0
     for node_ip in pNodesInfo.keys():
+        if pNodesInfo[node_ip] == None:
+            continue
         m = re.search(r'Ver=(\d+\.\d+)', pNodesInfo[node_ip].SfVersion)
         if m:
             ver_str = m.group(1)
