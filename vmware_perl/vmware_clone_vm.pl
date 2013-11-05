@@ -43,10 +43,16 @@ my %opts = (
         type => "=s",
         help => "Name of the folder to put the clone in",
         required => 0,
+        default => "vm",
     },
     thin => {
         type => "",
         help => "Clone to a thin provisioned VMDK instead of thick provisioned",
+        required => 0,
+    },
+    nopoweron => {
+        type => "",
+        help => "Do not power on the clone after cloning is finished",
         required => 0,
     },
     result_address => {
@@ -84,6 +90,7 @@ my $dest_folder_name = Opts::get_option('folder');
 my $enable_debug = Opts::get_option('debug');
 my $template = Opts::get_option('template');
 my $thin_prov = Opts::get_option('thin');
+my $nopoweron = Opts::get_option('nopoweron');
 my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
@@ -208,19 +215,60 @@ eval
 };
 if ($@)
 {
-    my $fault = $@;
-    if (ref($fault) ne 'SoapFault')
+   libvmware::DisplayFault("Failed to create clone $clone_name", $@);
+   exit 1;
+}
+
+# Get a ref to the new clone
+my $clone_vm = Vim::find_entity_view(view_type => 'VirtualMachine', filter => {'name' => qr/^$clone_name$/i});
+
+# Set the hostname parameter for the VM
+my $key = "guestinfo.hostname";
+my $extra_conf = OptionValue->new(key => $key, value => $clone_name);
+my $spec = VirtualMachineConfigSpec->new(extraConfig => [$extra_conf]);
+mylog::debug("Setting $key = $clone_name on VM $clone_name");
+eval
+{
+    my $task_ref = $clone_vm->ReconfigVM_Task(spec => $spec);
+    while (1)
     {
-        mylog::error($fault);
-        exit 1;
+        my $task = Vim::get_view(mo_ref => $task_ref);
+        my $state = $task->info->state->val;
+        if ($state eq 'success')
+        {
+            last;
+        }
+        elsif ($state eq 'error')
+        {
+            my $soap_fault = SoapFault->new;
+            $soap_fault->name($task->info->error->fault);
+            $soap_fault->detail($task->info->error->fault);
+            $soap_fault->fault_string($task->info->error->localizedMessage);
+            libsf::DisplayFault("$clone_name reconfig failed", $soap_fault);
+        }
+        sleep 1;
     }
-    mylog::error(ref($fault->name) . ": " . $fault->fault_string);
+};
+if ($@)
+{
+    libsf::DisplayFault("$clone_name reconfig failed", $@);
     exit 1;
 }
 
-<<<<<<< HEAD
-mylog::pass("Successfully cloned $source_vm_name to $clone_name");
-=======
+# Power on the new clone
+if (!$nopoweron)
+{
+   eval
+   {
+      $clone_vm->PowerOnVM();
+   };
+   if ($@)
+   {
+      libvmware::DisplayFault("Failed to power on clone", $@);
+      exit 1;
+   }
+}
+
 mylog::pass("Sucessfully cloned $source_vm_name to $clone_name");
 
 # Send the info back to parent script if requested
@@ -228,5 +276,4 @@ if (defined $result_address)
 {
     libsf::SendResultToParent(result_address => $result_address, result => 1);
 }
->>>>>>> ec1c333... vmware_clone_vm.pl: added result address option for ZMQ server, added option for cloning as a template
 exit 0;

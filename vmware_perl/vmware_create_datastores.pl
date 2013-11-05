@@ -158,14 +158,10 @@ if ($@)
 
 
 
-<<<<<<< HEAD
-mylog::pass("Successfully created datastores on $host_name");
-=======
 mylog::pass("Sucessfully created datastores on $host_name");
 # Send the info back to parent script if requested
 if (defined $result_address)
 {
     libsf::SendResultToParent(result_address => $result_address, result => \@return_disk_list);
 }
->>>>>>> 9e226db... vmware_create_datastores.pl: added option for result address for ZMQ server, returns list of datastore names
 exit 0;

@@ -139,8 +139,13 @@ mylog::debug("Memory size:       " . sprintf("%.2f", $vm_memory/1024/1024/1024) 
 
 # Find the destination datastore
 mylog::info("Searching for datastore $datastore_name");
-my $datastore = Vim::find_entity_view(view_type => 'Datastore', filter => {'name' => qr/^$datastore_name$/i}, properties => ['summary']);
-
+my $datastore = Vim::find_entity_view(view_type => 'Datastore', filter => {'name' => qr/^$datastore_name/i}, properties => ['name', 'summary']);
+if (!$datastore)
+{
+    mylog::error("Could not find datastore");
+    exit 1;
+}
+$datastore_name = $datastore->name;
 # Determine if the VM will fit in the datastore
 my $ds_free = $datastore->summary->freeSpace;
 mylog::debug($datastore_name . " has " . sprintf("%.2f", $ds_free/1024/1024/1024) . " GiB free");
@@ -191,12 +196,12 @@ eval
 if ($@)
 {
     my $fault = $@;
-    libsf::DisplayFault("Relocation failed", $fault);
+    libsf::DisplayFault("$vm_name relocation failed", $fault);
     exit 1;
 }
 my $end = time();
-mylog::info("Relocate took " . libsf::SecondsToElapsed($end - $start));
-mylog::pass("Successfully relocated");
+mylog::info("$vm_name relocate took " . libsf::SecondsToElapsed($end - $start));
+mylog::pass("$vm_name successfully relocated");
 # Send the info back to parent script if requested
 if (defined $result_address)
 {

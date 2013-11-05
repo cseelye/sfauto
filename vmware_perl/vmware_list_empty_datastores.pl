@@ -49,7 +49,7 @@ Opts::add_options(%opts);
 
 if (scalar(@ARGV) < 1)
 {
-   print "Get a list of powered-on VMs in the specified folder.";
+   print "Get a list of empty datastores on a given cluster.";
    Opts::usage();
    exit 1;
 }
