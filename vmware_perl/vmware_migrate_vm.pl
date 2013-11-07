@@ -137,7 +137,7 @@ elsif ($host_index >= 0)
     my $host_list = Vim::get_views(mo_ref_array => \@{$parent_cluster->host}, properties => ['name']);
     foreach my $h (@{$host_list})
     {
-        $name2host{$host->name} = $h;
+        $name2host{$h->name} = $h;
     }
     my @name_list = sort keys(%name2host);
     $vmhost = $name_list[$host_index];

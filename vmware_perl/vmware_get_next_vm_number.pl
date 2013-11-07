@@ -100,7 +100,7 @@ eval
 {
     # Find the source VM
     mylog::info("Searching for VMs with prefix '$vm_prefix'");
-    my $vm_list = Vim::find_entity_views(view_type => 'VirtualMachine', filter => {'name' => qr/^$vm_prefix/i});
+    my $vm_list = Vim::find_entity_views(view_type => 'VirtualMachine', filter => {'name' => qr/^$vm_prefix/i}, 'properties' => ['name']);
     my $highest = 0;
     my %found_numbers;
     foreach my $vm (@$vm_list)

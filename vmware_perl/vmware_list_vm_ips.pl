@@ -158,6 +158,10 @@ if ($@)
 }
 
 # Find all the VMs with IP addresses
+my @acceptable_ips = (
+    '192',
+    '172',
+);
 my %vms;
 foreach my $vm_mo (@vm_list)
 {
@@ -185,10 +189,13 @@ foreach my $vm_mo (@vm_list)
             {
                 foreach my $ip (@{$net->ipAddress})
                 {
-                    if ($ip =~ /^192/)
+                    for my $prefix (@acceptable_ips)
                     {
-                        $vm_ip = $ip;
-                        last;
+                        if ($ip =~ /^$prefix/)
+                        {
+                            $vm_ip = $ip;
+                            last;
+                        }
                     }
                 }
                 last if $vm_ip;
@@ -201,7 +208,7 @@ foreach my $vm_mo (@vm_list)
         # Skip if we couldn't find an IP - either the VM doesn't have one, it's not fully booted, VMware Tools not running, etc.
         if (!$vm_ip)
         {
-            mylog::warn("$vm_name is powered on but has no 192 IP address");
+            mylog::warn("$vm_name is powered on but does not have an IP address on a recognized subnet");
             next;
         }
         $vms{$vm_name} = $vm_ip;

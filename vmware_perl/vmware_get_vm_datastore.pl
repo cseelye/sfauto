@@ -49,7 +49,7 @@ my %opts = (
 Opts::add_options(%opts);
 if (scalar(@ARGV) < 1)
 {
-   print "Get the IP address of a virtual machine.";
+   print "Get the datastore a virtual machine is currently in.";
    Opts::usage();
    exit 1;
 }

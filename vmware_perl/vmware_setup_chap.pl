@@ -10,7 +10,7 @@ Opts::set_option("password", "password");
 
 # Set default vCenter Server
 # This can be overridden with --mgmt_server
-Opts::set_option("server", "192.168.144.20");
+Opts::set_option("server", "vcenter.domain.local");
 
 my %opts = (
     mgmt_server => {
@@ -21,23 +21,23 @@ my %opts = (
     },
     vmhost => {
         type => "=s",
-        help => "The hostname/IP of the host to rescan",
+        help => "The hostname/IP of the host to configure",
         required => 1,
     },
     chap_name => {
         type => "=s",
-        help => "The chap name to use",
+        help => "The chap usernamename to use",
         required => 1,
     },
-    chap_secret => {
+    init_secret => {
         type => "=s",
-        help => "The chap secret to use",
+        help => "The initiator secret to use",
         required => 1,
     },
-    chap_target => {
+    targ_secret => {
         type => "=s",
-        help => "The chap target to use",
-        required => 1,
+        help => "The target secret to use",
+        required => 0,
     },
     result_address => {
         type => "=s",
@@ -46,7 +46,7 @@ my %opts = (
     },
     svip => {
         type => "=s",
-        help => "Address of the cluster storage)",
+        help => "Discovery address of the iSCSI storage",
         required => 1,
     },
     debug => {
@@ -59,7 +59,7 @@ my %opts = (
 Opts::add_options(%opts);
 if (scalar(@ARGV) < 1)
 {
-   print "Rescan iSCSI on an ESX host";
+   print "Setup CHAP credentials on an ESX host";
    Opts::usage();
    exit 1;
 }
@@ -68,8 +68,8 @@ my $vsphere_server = Opts::get_option("mgmt_server");
 Opts::set_option("server", $vsphere_server);
 my $host_name = Opts::get_option('vmhost');
 my $chap_name = Opts::get_option('chap_name');
-my $chap_secret = Opts::get_option('chap_secret');
-my $chap_target = Opts::get_option('chap_target');
+my $init_secret = Opts::get_option('init_secret');
+my $targ_secret = Opts::get_option('targ_secret');
 my $svip = Opts::get_option('svip');
 my $result_address = Opts::get_option('result_address');
 my $enable_debug = Opts::get_option('debug');
@@ -95,74 +95,98 @@ if ($@)
    exit 1;
 }
 
-my @host_list;
 # Find the host
 mylog::info("Searching for host $host_name");
-my $vmhost = Vim::find_entity_view(view_type => 'HostSystem', filter => {'name' => qr/^$host_name$/i});
+my $vmhost = Vim::find_entity_view(view_type => 'HostSystem', filter => {'name' => qr/^$host_name$/i}, properties => ['name', 'config', 'configManager']);
 if (!$vmhost)
 {
     mylog::error("Could not find host '$host_name'");
     exit 1;
 }
 
-push (@host_list, $vmhost);  
+# Get a reference to the storage system and find the iSCSI HBA
+mylog::debug("Getting a reference to the storage manager");
+my $storage = Vim::get_view(mo_ref => $vmhost->configManager->storageSystem, properties => []);
+my $iscsi_hba = libsf::VMwareFindIscsiHba($vmhost);
+my $hba_name = $iscsi_hba->device;
 
-
-#sets up the chap settings: must use chap, not inherited from client, and sets name and secrets
-my $chap_spec = HostInternetScsiHbaAuthenticationProperties->new(
-                                    chapAuthEnabled => 1, 
-                                    chapAuthenticationType => "chapRequired",
-                                    chapInherited => 0,
-                                    chapName => $chap_name, 
-                                    chapSecret => $chap_secret, 
-                                    mutualChapAuthenticationType => "chapRequired",
-                                    mutualChapInherited => 0,
-                                    mutualChapName => $chap_name, 
-                                    mutualChapSecret => $chap_target);
-
-#set up the settings for discovery
-my $host_internet_scsi_hba_send_targets = HostInternetScsiHbaSendTarget->new(address => $svip, authenticationProperties => $chap_spec); 
-my @host_set;
-push (@host_set, $host_internet_scsi_hba_send_targets);
-
-eval 
+my $chap_spec;
+# CHAP settings for mutual CHAP if specified
+if ($targ_secret)
 {
-    my $storage = Vim::get_view(mo_ref => $vmhost->configManager->storageSystem);
-
-    my $target_set = HostInternetScsiHbaTargetSet->new(sendTargets => \@host_set);
-
-    #get the hba for the iscsi device
-    my $iscsi_hba = libsf::VMwareFindIscsiHba($vmhost);
-    my $iscsi_key = $iscsi_hba->key;
-    my $rindex = rindex($iscsi_key, "-");
-    my $vmhba = substr($iscsi_key, $rindex + 1);
-
-    #update the iscsi storage settings
-    mylog::info("Setting the CHAP settings on $vmhba \n CHAP Name: $chap_name  \n CHAP Secret: $chap_secret \n CHAP Target Secret: $chap_target");
-    $storage->AddInternetScsiSendTargets(iScsiHbaDevice => $vmhba, targets => \@host_set);
-    $storage->UpdateInternetScsiAuthenticationProperties(iScsiHbaDevice => $vmhba, authenticationProperties => $chap_spec, targetSet => $target_set);
-    $storage->UpdateInternetScsiAuthenticationProperties(iScsiHbaDevice => $vmhba, authenticationProperties => $chap_spec);
-};
-
-if ($@)
+    $chap_spec = HostInternetScsiHbaAuthenticationProperties->new(
+                                        chapAuthEnabled => 1, 
+                                        chapAuthenticationType => "chapRequired",
+                                        chapInherited => 0,
+                                        chapName => $chap_name, 
+                                        chapSecret => $init_secret, 
+                                        mutualChapAuthenticationType => "chapRequired",
+                                        mutualChapInherited => 0,
+                                        mutualChapName => $chap_name,
+                                        mutualChapSecret => $targ_secret,
+    );
+}
+# CHAP settings for one-way CHAP
+else
 {
-    my $fault = $@;
-    if (ref($fault) ne 'SoapFault')
-    {
-        mylog::error($fault);
-        exit 1;
-    }
-    mylog::error(ref($fault->name) . ": " . $fault->fault_string);
-    exit 1;
+    $chap_spec = HostInternetScsiHbaAuthenticationProperties->new(
+                                        chapAuthEnabled => 1, 
+                                        chapAuthenticationType => "chapRequired",
+                                        chapInherited => 0,
+                                        chapName => $chap_name, 
+                                        chapSecret => $init_secret, 
+                                        mutualChapAuthenticationType => "chapProhibited",
+    );
 }
 
+# See if the target address already exists on the host and update it
+mylog::debug("Looking for existing send targets");
+if ($iscsi_hba->configuredSendTarget)
+{
+    for my $st (@{$iscsi_hba->configuredSendTarget})
+    {
+        if ($st->address eq $svip)
+        {
+            # Update the existing target
+            mylog::info("Updating auth on $svip");
+            eval
+            {
+                my $target_set = HostInternetScsiHbaTargetSet->new(sendTargets => [$st]);
+                $storage->UpdateInternetScsiAuthenticationProperties(iScsiHbaDevice => $hba_name, authenticationProperties => $chap_spec, targetSet => $target_set);
+            };
+            if ($@)
+            {
+                libvmware::DisplayFault("Failed to update target auth", $@);
+                exit 1;
+            }
+            mylog::pass("Successfully updated CHAP settings for $svip");
+            # Send the info back to parent script if requested
+            if (defined $result_address)
+            {
+                libsf::SendResultToParent(result_address => $result_address, result => 1);
+            }
+            exit 0;
+        }
+    }
+}
+
+# Add the target if it did not exist
+mylog::info("Adding $svip");
+my $send_target = HostInternetScsiHbaSendTarget->new(address => $svip, authenticationProperties => $chap_spec);
+eval
+{
+    $storage->AddInternetScsiSendTargets(iScsiHbaDevice => $hba_name, targets => [$send_target]);
+};
+if ($@)
+{
+    libvmware::DisplayFault("Failed to add target auth", $@);
+    exit 1;
+}
+mylog::pass("Successfully added CHAP settings for $svip");
 # Send the info back to parent script if requested
 if (defined $result_address)
 {
     libsf::SendResultToParent(result_address => $result_address, result => 1);
 }
-
-mylog::pass("The CHAP settings have been updated");
-
 exit 0;
 

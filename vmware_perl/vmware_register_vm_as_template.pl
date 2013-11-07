@@ -11,7 +11,7 @@ Opts::set_option("password", "password");
 
 # Set default vCenter Server
 # This can be overridden with --mgmt_server
-Opts::set_option("server", "192.168.144.20");
+Opts::set_option("server", "vcenter.domain.local");
 
 my %opts = (
     mgmt_server => {
@@ -60,7 +60,7 @@ my %opts = (
 Opts::add_options(%opts);
 if (scalar(@ARGV) < 1)
 {
-   print "Relocate (Storage vMotion) a VM to a new datastore";
+   print "Register a VM as a template";
    Opts::usage();
    exit 1;
 }
