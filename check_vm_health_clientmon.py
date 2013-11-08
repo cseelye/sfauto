@@ -43,7 +43,7 @@ class CheckVmHealthClientmonAction(ActionBase):
             args)"""
 
 
-    def Execute(self, vmType=None, noLogs=False, vm_regex=None, debug=False):
+    def Execute(self, vmType=None, noLogs=False, vm_regex=None, debug=False, count = None):
 
         #self.ValidateArgs(locals())
         if debug:
@@ -95,8 +95,10 @@ class CheckVmHealthClientmonAction(ActionBase):
                             mylog.debug("The Host " + host.Hostname +" Is neither responding nor vdbench is running, Last responded: "+ time.asctime(time.localtime(host.Timestamp)))
                             BadVm += 1
                             BadHostname.append(host.Hostname)  
-                    
-                    if BadVm > 0: 
+                    if count:
+                        if BadVm > 0 and GoodVm > count: 
+                            good_vm_types.append(vm_type)
+                    elif BadVm > 0: 
                         bad_vm_types.append(vm_type)
                     elif GoodVm > 0:
                         good_vm_types.append(vm_type)     
@@ -171,9 +173,15 @@ class CheckVmHealthClientmonAction(ActionBase):
                         mylog.debug("The Host " + Host.Hostname +" Is neither responding nor vdbench is running, Last responded: "+ time.asctime(time.localtime(Host.Timestamp)))
                         Bad_Hostname.append(Host.Hostname)
                 #if there are bad VMs on any of the hypervisors then we will report them here
-                if BadVm > 0: 
+                
+                if count and GoodVm >= count and BadVm > 0:
+                    mylog.warning("There are " +str(GoodVm)+" >= "+str(count)+"(min count) Good VMs on the " + vmType + " hypervisor. The bad VMs are: " + ", ".join(Bad_Hostname))
+                    return True
+                
+                elif BadVm > 0: 
                     mylog.error("There are " +str(BadVm)+" bad VMs on the " + vmType + " hypervisor. The bad VMs are: " + ", ".join(Bad_Hostname))
                     return False
+                
                 elif GoodVm == len(MatchedVms):
                     if len(VdBench_Bad) > 0: 
                         mylog.passed("The VMs on "+vmType + " hypervisors are all healthy, But vdbench is not running on: " + ", ".join(VdBench_Bad))
@@ -193,6 +201,7 @@ if __name__ == '__main__':
 
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
     parser.add_option("--group", type="string", dest="group", default=None, help="The type of VM to check, ex: KVM")
+    parser.add_option("--count", type="int", dest="count", default=None, help="Minimum number of VMs to be found healthy, if count > number of VMs checks for all VMs")
     parser.add_option("--no_logs", action="store_true", dest="noLogs", default=False, help="Turns off logs")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match VMs to power on")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -200,7 +209,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.group, options.noLogs, options.vm_regex, options.debug):
+        if Execute(options.group, options.noLogs, options.vm_regex, options.debug, options.count):
             sys.exit(0)
         else:
             sys.exit(1)
@@ -216,4 +225,3 @@ if __name__ == '__main__':
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
-
