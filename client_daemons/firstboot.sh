@@ -21,6 +21,9 @@ fi
 if [[ "$HYPERVISOR" == *vmware* ]]; then
     VM_NAME=$(/usr/sbin/vmtoolsd --cmd "info-get guestinfo.hostname" 2>/dev/null)
 fi
+if [[ "$HYPERVISOR" == *hyperv* ]]; then
+    VM_NAME=$(/bin/cat /var/opt/hyperv/.kvp_pool_3 | /bin/sed 's/\x0/ /g' | /usr/bin/awk '{print $20}')
+fi
 
 # Skip running firstboot if the VM name contains gold or template
 if [[ -n "$VM_NAME" && ( "$VM_NAME" == *gold* || "$VM_NAME" == *template* ) ]]; then
