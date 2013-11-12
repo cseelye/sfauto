@@ -2,6 +2,7 @@
 use strict;
 use VMware::VIRuntime;
 use libsf;
+use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -120,12 +121,12 @@ foreach my $vmhost (@host_list)
 {
     eval
     {
-        libsf::VMwareRescanIscsi($vmhost)
+        libvmware::VMwareRescanIscsi($vmhost)
     };
     if ($@)
     {
         my $fault = $@;
-        libsf::DisplayFault("Rescan failed", $fault);
+        libvmware::DisplayFault("Rescan failed", $fault);
         exit 1;
     }
 }

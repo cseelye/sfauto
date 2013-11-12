@@ -2,6 +2,7 @@
 use strict;
 use VMware::VIRuntime;
 use libsf;
+use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -107,7 +108,7 @@ if (!$vmhost)
 # Get a reference to the storage system and find the iSCSI HBA
 mylog::debug("Getting a reference to the storage manager");
 my $storage = Vim::get_view(mo_ref => $vmhost->configManager->storageSystem, properties => []);
-my $iscsi_hba = libsf::VMwareFindIscsiHba($vmhost);
+my $iscsi_hba = libvmware::VMwareFindIscsiHba($vmhost);
 my $hba_name = $iscsi_hba->device;
 
 my $chap_spec;

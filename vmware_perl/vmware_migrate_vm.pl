@@ -2,7 +2,7 @@
 use strict;
 use VMware::VIRuntime;
 use libsf;
-use Data::Dumper;
+use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -152,7 +152,7 @@ eval
 if ($@)
 {
     my $fault = $@;
-    libsf::DisplayFault("Migration failed", $fault);
+    libvmware::DisplayFault("Migration failed", $fault);
     exit 1;
 }
 # Send the info back to parent script if requested

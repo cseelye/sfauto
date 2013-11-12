@@ -2,7 +2,7 @@
 use strict;
 use VMware::VIRuntime;
 use libsf;
-use Data::Dumper;
+use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -125,7 +125,7 @@ eval {
 };
 if ($@) {
     my $fault = $@;
-    libsf::DisplayFault("Failed registering the VM ", $fault);
+    libvmware::DisplayFault("Failed registering the VM ", $fault);
 
     exit 1;
 }

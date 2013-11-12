@@ -2,6 +2,7 @@
 use strict;
 use VMware::VIRuntime;
 use libsf;
+use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -244,14 +245,14 @@ eval
             $soap_fault->name($task->info->error->fault);
             $soap_fault->detail($task->info->error->fault);
             $soap_fault->fault_string($task->info->error->localizedMessage);
-            libsf::DisplayFault("$clone_name reconfig failed", $soap_fault);
+            libvmware::DisplayFault("$clone_name reconfig failed", $soap_fault);
         }
         sleep 1;
     }
 };
 if ($@)
 {
-    libsf::DisplayFault("$clone_name reconfig failed", $@);
+    libvmware::DisplayFault("$clone_name reconfig failed", $@);
     exit 1;
 }
 

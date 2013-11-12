@@ -407,4 +407,55 @@ sub GetVmsInPool
 }
 
 
+
+sub VMwareFindIscsiHba
+{
+    my $vmhost = shift;
+    my $host_name = $vmhost->name;
+
+    mylog::debug("Searching for iSCSI adapter on $host_name");
+    my $adapter_list = $vmhost->config->storageDevice->hostBusAdapter;
+    foreach my $adapter (@{$adapter_list})
+    {
+        if ($adapter->driver =~ /iscsi_vmk/)
+        {
+            mylog::debug("iSCSI HBA is " . $adapter->device);
+            return $adapter;
+        }
+    }
+
+    die "Could not find an iSCSI HBA on $host_name";
+}
+
+sub VMwareRescanIscsi
+{
+    my $vmhost = shift;
+    my $host_name = $vmhost->name;
+
+    my $iscsi_hba = VMwareFindIscsiHba($vmhost);
+
+    mylog::info("Starting rescan");
+    mylog::debug("Getting a reference to the storage manager");
+    my $storage_manager = Vim::get_view(mo_ref => $vmhost->configManager->storageSystem);
+    mylog::info("  Rescan HBA...");
+    $storage_manager->RescanHba(hbaDevice => $iscsi_hba->device);
+    mylog::info("  Rescan VMFS...");
+    $storage_manager->RescanVmfs();
+    mylog::info("  Refresh storage system...");
+    $storage_manager->RefreshStorageSystem();
+}
+
+sub VMwareGetParentDatacenterName
+{
+    my $start = shift;
+    my $parent_mo = $start->parent;
+    my $parent = Vim::get_view(mo_ref => $parent_mo);
+    while ($parent_mo->{type} ne 'Datacenter')
+    {
+        $parent_mo = $parent->parent;
+      $parent = Vim::get_view(mo_ref => $parent_mo);
+    }
+    return $parent->name;
+}
+
 1;

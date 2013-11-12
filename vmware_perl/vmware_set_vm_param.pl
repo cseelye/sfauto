@@ -2,7 +2,7 @@
 use strict;
 use VMware::VIRuntime;
 use libsf;
-use Data::Dumper;
+use libvmware;
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -113,7 +113,7 @@ eval
             $soap_fault->name($task->info->error->fault);
             $soap_fault->detail($task->info->error->fault);
             $soap_fault->fault_string($task->info->error->localizedMessage);
-            libsf::DisplayFault("$vm_name reconfig failed", $soap_fault);
+            libvmware::DisplayFault("$vm_name reconfig failed", $soap_fault);
         }
         sleep 1;
     }
@@ -121,7 +121,7 @@ eval
 if ($@)
 {
     my $fault = $@;
-    libsf::DisplayFault("$vm_name reconfig failed", $fault);
+    libvmware::DisplayFault("$vm_name reconfig failed", $fault);
     exit 1;
 }
 
