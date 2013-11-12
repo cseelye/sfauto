@@ -29,20 +29,178 @@ package VMwareError;
 
 package libvmware;
 
-sub DisplayFault
+sub FaultToString
 {
-    my ($message, $fault) = @_;
+    my $fault = shift;
+    my $fault_str = "";
     if (ref($fault) ne 'SoapFault')
     {
-        mylog::error("$message - " . $fault);
+        $fault_str .= $fault;
     }
-    if (ref($fault->name))
+    elsif (ref($fault->name))
     {
-        mylog::error("$message - " . ref($fault->name) . ": " . $fault->fault_string);
+        $fault_str .= ref($fault->name) . ": " . $fault->fault_string
     }
     else
     {
-        mylog::error("$message - " . $fault->name . ": " . $fault->fault_string);
+        $ fault_str .= $fault->name . ": " . $fault->fault_string
+    }
+    $fault_str =~ s/(\s+$)//g;
+    return $fault_str;
+}
+
+sub DisplayFault
+{
+    my ($message, $fault) = @_;
+    mylog::error("$message - " . FaultToString($fault));
+}
+
+sub WaitForTask
+{
+    my %params = (
+        vim             => undef,
+        task_ref        => undef,
+    @_);
+    
+    if (!$params{vim})
+    {
+        $params{vim} = $Vim::vim_global;
+    }
+
+    while (1)
+    {
+        my $task = Vim::get_view($params{vim}, mo_ref => $params{task_ref});
+        my $state = $task->info->state->val;
+        if ($state eq 'success')
+        {
+            return;
+        }
+        elsif ($state eq 'error')
+        {
+            my $soap_fault = SoapFault->new;
+            $soap_fault->name($task->info->error->fault);
+            $soap_fault->detail($task->info->error->fault);
+            $soap_fault->fault_string($task->info->error->localizedMessage);
+            die FaultToString($soap_fault);
+        }
+        sleep 1;
+    }
+}
+
+sub WaitForVmBooted
+{
+    my %params = (
+        vim             => undef,
+        vm_ref          => undef,
+    @_);
+
+    if (!$params{vim})
+    {
+        $params{vim} = $Vim::vim_global;
+    }
+
+    my $vm;
+    eval
+    {
+        $vm = Vim::get_view($params{vim}, mo_ref => $params{vm_ref}, properties => ['name', 'runtime', 'guest', 'guestHeartbeatStatus']);
+    };
+    if ($@)
+    {
+        die "Could not look up VM ref " . $params{vm_ref} . " - " . FaultToString($@) . "\n";
+    }
+    eval
+    {
+        my $previous_status = "";
+        my $status = "";
+    
+        # Wait for the VM to be powered on
+        $status = $vm->runtime->powerState->val;
+        $previous_status = "";
+        while ($status ne "poweredOn")
+        {
+            if ($status ne $previous_status)
+            {
+                mylog::info("  VM is " . $status);
+                $previous_status = $status;
+            }
+            $vm->update_view_data();
+            $status = $vm->runtime->powerState->val;
+            sleep 5 if ($status ne "poweredOn");
+        }
+        mylog::info("  VM " . $vm->name . " is poweredOn");
+        
+        # See if VMware tools are installed
+        if ($vm->guest->toolsStatus->val eq "toolsNotInstalled")
+        {
+            die "VMware Tools are not installed in this VM; cannot detect VM boot/health";
+        }
+
+        $previous_status = "";
+        $status = $vm->guestHeartbeatStatus->val;
+        while ($status ne "green")
+        {
+            if ($status ne $previous_status)
+            {
+                mylog::info("  VM " . $vm->name . " heartbeat is " . $status);
+                $previous_status = $status;
+            }
+            $vm->update_view_data();
+            $status = $vm->guestHeartbeatStatus->val;
+            sleep 5 if ($status ne "green");
+        }
+        mylog::info("  VM " . $vm->name . " heartbeat is green");
+    };
+    if ($@)
+    {
+        die FaultToString($@) . "\n";
+    }
+}
+
+sub WaitForVmDown
+{
+    my %params = (
+        vim             => undef,
+        vm_ref          => undef,
+    @_);
+
+    if (!$params{vim})
+    {
+        $params{vim} = $Vim::vim_global;
+    }
+
+    my $vm;
+    eval
+    {
+        $vm = Vim::get_view($params{vim}, mo_ref => $params{vm_ref}, properties => ['name', 'runtime']);
+    };
+    if ($@)
+    {
+        die "Could not look up VM ref " . $params{vm_ref} . " - " . FaultToString($@) . "\n";
+    }
+    eval
+    {
+        my $previous_status = "";
+        my $status = "";
+    
+        # Wait for the VM to be powered off
+        $status = $vm->runtime->powerState->val;
+        $previous_status = "";
+        while ($status ne "poweredOff")
+        {
+            if ($status ne $previous_status)
+            {
+                mylog::info("  VM is " . $status);
+                $previous_status = $status;
+            }
+            $vm->update_view_data();
+            $status = $vm->runtime->powerState->val;
+            sleep 5 if ($status ne "poweredOff");
+        }
+        mylog::info("  VM " . $vm->name . " is poweredOff");
+    };
+    if ($@)
+    {
+        die FaultToString($@) . "\n";
     }
 }
 
@@ -52,6 +210,7 @@ sub DisplayFault
 sub SearchForVms
 {
     my %params = (
+        vim              => undef,
         datacenter_name  => undef,
         cluster_name     => undef,
         pool_name        => 'Resources',
@@ -63,11 +222,15 @@ sub SearchForVms
         vm_powerstate    => undef,
         @_);
 
+    if (!$params{vim})
+    {
+        $params{vim} = $Vim::vim_global;
+    }
     my $dc;
     if ($params{datacenter_name})
     {
         mylog::info("Searching for datacenter $params{datacenter_name}");
-        $dc = Vim::find_entity_view(view_type => 'Datacenter', filter => { 'name' => qr/^$params{datacenter_name}$/i }, properties => []);
+        $dc = Vim::find_entity_view($params{vim}, view_type => 'Datacenter', filter => { 'name' => qr/^$params{datacenter_name}$/i }, properties => []);
         if (!$dc)
         {
             die VMwareError->new("Cannot find datacenter $params{datacenter_name}");
@@ -83,11 +246,11 @@ sub SearchForVms
         my $folder;
         if ($dc)
         {
-            $folder = Vim::find_entity_view(view_type => 'Folder', begin_entity => $dc, filter => { 'name' => qr/^$params{folder_name}/i }, properties => []);
+            $folder = Vim::find_entity_view($params{vim}, view_type => 'Folder', begin_entity => $dc, filter => { 'name' => qr/^$params{folder_name}/i }, properties => []);
         }
         else
         {
-            $folder = Vim::find_entity_view(view_type => 'Folder', filter => { 'name' => qr/^$params{folder_name}/i }, properties => []);
+            $folder = Vim::find_entity_view($params{vim}, view_type => 'Folder', filter => { 'name' => qr/^$params{folder_name}/i }, properties => []);
         }
         if (!$folder)
         {
@@ -102,7 +265,7 @@ sub SearchForVms
 
         # Find matching VMs
         mylog::info("Searching for matching VMs in folder");
-        my @temp_vm_list = GetVmsInFolder($folder->{mo_ref}, $params{recurse}, $params{vm_regex}, $params{vm_powerstate});
+        my @temp_vm_list = GetVmsInFolder($params{vim}, $folder->{mo_ref}, $params{recurse}, $params{vm_regex}, $params{vm_powerstate});
         my $count = 0;
         foreach my $vm (@temp_vm_list)
         {
@@ -117,11 +280,11 @@ sub SearchForVms
         my $cluster;
         if ($dc)
         {
-            $cluster = Vim::find_entity_view(view_type => 'ClusterComputeResource', begin_entity => $dc, filter => { 'name' => qr/^$params{cluster_name}/i }, properties => []);
+            $cluster = Vim::find_entity_view($params{vim}, view_type => 'ClusterComputeResource', begin_entity => $dc, filter => { 'name' => qr/^$params{cluster_name}/i }, properties => []);
         }
         else
         {
-            $cluster = Vim::find_entity_view(view_type => 'ClusterComputeResource', filter => { 'name' => qr/^$params{cluster_name}/i }, properties => []);
+            $cluster = Vim::find_entity_view($params{vim}, view_type => 'ClusterComputeResource', filter => { 'name' => qr/^$params{cluster_name}/i }, properties => []);
         }
         if (!$cluster)
         {
@@ -133,7 +296,7 @@ sub SearchForVms
             $params{recurse} = 1;
         }
         mylog::info("Searching for pool $params{pool_name}");
-        my $pool = Vim::find_entity_view(view_type => 'ResourcePool', begin_entity => $cluster, filter => { 'name' => qr/^$params{pool_name}$/i }, properties => []);
+        my $pool = Vim::find_entity_view($params{vim}, view_type => 'ResourcePool', begin_entity => $cluster, filter => { 'name' => qr/^$params{pool_name}$/i }, properties => []);
         if (!$pool)
         {
             die VMwareError->new("Could not find pool '$params{pool_name}' on cluster '$params{cluster_name}'");
@@ -146,7 +309,7 @@ sub SearchForVms
         }
 
         mylog::info("Searching for matching VMs in pool");
-        my @temp_vm_list = GetVmsInPool($pool->{mo_ref}, $params{recurse}, $params{vm_regex}, $params{vm_powerstate});
+        my @temp_vm_list = GetVmsInPool($params{vim}, $pool->{mo_ref}, $params{recurse}, $params{vm_regex}, $params{vm_powerstate});
         my $count = 0;
         foreach my $vm (@temp_vm_list)
         {
@@ -175,11 +338,11 @@ sub SearchForVms
         my $vm_matches;
         if ($dc)
         {
-            $vm_matches = Vim::find_entity_views(view_type => 'VirtualMachine', begin_entity => $dc, filter => \%filter, properties => ['name']);
+            $vm_matches = Vim::find_entity_views($params{vim}, view_type => 'VirtualMachine', begin_entity => $dc, filter => \%filter, properties => ['name']);
         }
         else
         {
-            $vm_matches = Vim::find_entity_views(view_type => 'VirtualMachine', filter => \%filter, properties => ['name']);
+            $vm_matches = Vim::find_entity_views($params{vim}, view_type => 'VirtualMachine', filter => \%filter, properties => ['name']);
         }
         my $count = 0;
         foreach my $vm (sort {$a->name cmp $b->name} @{$vm_matches})
@@ -195,8 +358,8 @@ sub SearchForVms
 
 sub GetVmsInFolder
 {
-    my ($folder_mor, $search_recursive, $vm_regex, $vm_power) = @_;
-    my $folder = Vim::get_view(mo_ref => $folder_mor, properties => ['childEntity']);
+    my ($vim, $folder_mor, $search_recursive, $vm_regex, $vm_power) = @_;
+    my $folder = Vim::get_view($vim, mo_ref => $folder_mor, properties => ['childEntity']);
 
     my %filter;
     if ($vm_regex)
@@ -207,7 +370,7 @@ sub GetVmsInFolder
     {
         $filter{'runtime.powerState'} = $vm_power;
     }
-    my $vm_matches = Vim::find_entity_views(view_type => 'VirtualMachine', begin_entity => $folder_mor, filter => \%filter, properties => ['parent', 'name']);
+    my $vm_matches = Vim::find_entity_views($vim, view_type => 'VirtualMachine', begin_entity => $folder_mor, filter => \%filter, properties => ['parent', 'name']);
     my @vm_list;
     foreach my $vm (sort {$a->name cmp $b->name} @{$vm_matches})
     {
@@ -220,8 +383,8 @@ sub GetVmsInFolder
 
 sub GetVmsInPool
 {
-    my ($pool_mor, $search_recursive, $vm_regex, $vm_power) = @_;
-    my $pool = Vim::get_view(mo_ref => $pool_mor, properties => ['resourcePool', 'vm']);
+    my ($vim, $pool_mor, $search_recursive, $vm_regex, $vm_power) = @_;
+    my $pool = Vim::get_view($vim, mo_ref => $pool_mor, properties => ['resourcePool', 'vm']);
 
     my %filter;
     if ($vm_regex)
@@ -232,7 +395,7 @@ sub GetVmsInPool
     {
         $filter{'runtime.powerState'} = $vm_power;
     }
-    my $vm_matches = Vim::find_entity_views(view_type => 'VirtualMachine', begin_entity => $pool_mor, filter => \%filter, properties => ['resourcePool', 'name']);
+    my $vm_matches = Vim::find_entity_views($vim, view_type => 'VirtualMachine', begin_entity => $pool_mor, filter => \%filter, properties => ['resourcePool', 'name']);
     my @vm_list;
     foreach my $vm (sort {$a->name cmp $b->name} @{$vm_matches})
     {

@@ -172,6 +172,8 @@ package libsf;
 
 package mylog;
 {
+    use threads;
+    use threads::shared;
     use IO::Handle;
     use Sys::Syslog qw/:standard :macros/;
     use Term::ANSIScreen qw/:constants/;
@@ -186,6 +188,9 @@ package mylog;
             Win32::Console::ANSI->import;
         }
     }
+    
+    my $stdout_lock : shared;   # Only allow one thread to write to the screen at a time
+                                # Mostly useful for Windows
 
     our $Silent = 0;        # Enable to silence logging to the screen
     our $DisplayDebug = 0;  # Enable to display debug messages to the screen
@@ -212,13 +217,16 @@ package mylog;
         syslog(LOG_ERR, "ERROR $message");
 
         return if $Silent;
-        if ($redirected)
         {
-	        STDOUT->printflush("$timestamp: ERROR   $message\n");
-        }
-        else
-        {
-        	print BOLD RED ON BLACK "$timestamp: ERROR   $message\n";
+            lock $stdout_lock;
+            if ($redirected)
+            {
+                    STDOUT->printflush("$timestamp: ERROR   $message\n");
+            }
+            else
+            {
+                    print BOLD RED ON BLACK "$timestamp: ERROR   $message\n";
+            }
         }
     }
 
@@ -230,14 +238,16 @@ package mylog;
         syslog(LOG_WARNING, " WARN  $message");
 
         return if $Silent;
-
-        if ($redirected)
         {
-        	STDOUT->printflush("$timestamp: WARN    $message\n");
-        }
-        else
-        {
-        	print BOLD YELLOW ON BLACK "$timestamp: WARN    $message\n";
+            lock $stdout_lock;
+            if ($redirected)
+            {
+                    STDOUT->printflush("$timestamp: WARN    $message\n");
+            }
+            else
+            {
+                    print BOLD YELLOW ON BLACK "$timestamp: WARN    $message\n";
+            }
         }
     }
 
@@ -249,13 +259,16 @@ package mylog;
         syslog(LOG_INFO, "INFO  $message");
 
         return if $Silent;
-        if ($redirected)
         {
-	        STDOUT->printflush("$timestamp: INFO    $message\n");
-        }
-        else
-        {
-        	print BOLD WHITE ON BLACK "$timestamp: INFO    $message\n";
+            lock $stdout_lock;
+            if ($redirected)
+            {
+                    STDOUT->printflush("$timestamp: INFO    $message\n");
+            }
+            else
+            {
+                    print BOLD WHITE ON BLACK "$timestamp: INFO    $message\n";
+            }
         }
     }
 
@@ -268,13 +281,16 @@ package mylog;
 
         return if $Silent;
         return if !$DisplayDebug;
-        if ($redirected)
         {
-        	STDOUT->printflush("$timestamp: DEBUG   $message\n");
-        }
-        else
-        {
-	        STDOUT->printflush(WHITE ON BLACK "$timestamp: DEBUG   $message\n");
+            lock $stdout_lock;
+            if ($redirected)
+            {
+                    STDOUT->printflush("$timestamp: DEBUG   $message\n");
+            }
+            else
+            {
+                    STDOUT->printflush(WHITE ON BLACK "$timestamp: DEBUG   $message\n");
+            }
         }
     }
 
@@ -286,13 +302,16 @@ package mylog;
         syslog(LOG_INFO, "PASS  $message");
 
         return if $Silent;
-        if ($redirected)
         {
-        	STDOUT->printflush("$timestamp: PASS    $message\n");
-        }
-        else
-        {
-	        print BOLD GREEN ON BLACK "$timestamp: PASS    $message\n";
+            lock $stdout_lock;
+            if ($redirected)
+            {
+                    STDOUT->printflush("$timestamp: PASS    $message\n");
+            }
+            else
+            {
+                    print BOLD GREEN ON BLACK "$timestamp: PASS    $message\n";
+            }
         }
     }
 }
