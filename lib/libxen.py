@@ -3,6 +3,7 @@ from libsf import mylog
 import socket
 import XenAPI
 from xml.etree import ElementTree
+import re
 
 
 
@@ -115,3 +116,21 @@ def GetAllVMs(xenSession):
             vname = vm["name_label"]
             vm_list[vname] = vm
     return vm_list
+
+def GetAllTasks(xenSession):
+    try:
+        task_ref_list = xenSession.xenapi.task.get_all()
+    except XenAPI.Failure as e:
+        raise XenError("Could not get Task list: " + str(e))
+    tasks = {}
+    
+    for t in task_ref_list:
+        try:
+            record = xenSession.xenapi.task.get_record(t)
+        except XenAPI.Failure as e:
+            raise XenError("Could not query Task record: " + str(e))
+        uuid = record["uuid"]
+        tasks[uuid] = record
+    return tasks
+
+
