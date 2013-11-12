@@ -133,4 +133,26 @@ def GetAllTasks(xenSession):
         tasks[uuid] = record
     return tasks
 
+def GetVMsRegex(xenSession, regex):
+    try:
+        vm_ref_list = xenSession.xenapi.VM.get_all()
+    except XenAPI.Failure as e:
+        raise XenError("Could not get tasks running on the VM's list: " + str(e))
+    
+    vm_list = {}
+    for vm_ref in vm_ref_list:
+        try:
+            vm = xenSession.xenapi.VM.get_record(vm_ref)
+        except XenAPI.Failure as e:
+            raise XenError("Could not query VM record: "+ str(e))
+        
+        if not vm["is_a_template"] and not vm["is_control_domain"] and not vm["is_a_snapshot"]:
+            vm["ref"] = vm_ref
+            vname = vm["name_label"]
+            m = re.search(regex, vname)
+            if not m:
+                continue
+            vm_list[vname] = vm
+
+    return vm_list
 
