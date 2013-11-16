@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 use strict;
+use Data::GUID;
 use VMware::VIRuntime;
 use libsf;
 use libvmware;
@@ -17,7 +18,7 @@ no warnings 'threads';
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_usr");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server
@@ -58,17 +59,17 @@ my %opts = (
     },
     vm_name => {
         type => "=s",
-        help => "The name of the virtual machine to power off",
+        help => "The name of the virtual machine to snapshot",
         required => 0,
     },
     vm_regex => {
         type => "=s",
-        help => "The regex to match names of virtual machines to power off",
+        help => "The regex to match names of virtual machines to snapshot",
         required => 0,
     },
     vm_count => {
         type => "=i",
-        help => "The number of matching virtual machines to power off",
+        help => "The number of matching virtual machines to snapshot",
         required => 0,
     },
     result_address => {
@@ -131,7 +132,7 @@ if ($@)
 my @vm_list;
 eval
 {
-    @vm_list = libvmware::SearchForVms(vim => $mainvim, datacenter_name => $dc_name, cluster_name => $cluster_name, pool_name => $pool_name, folder_name => $folder_name, recurse => $recurse, vm_name => $vm_name, vm_regex => $vm_regex, vm_count => $vm_count, vm_powerstate => "poweredOn");
+    @vm_list = libvmware::SearchForVms(vim => $mainvim, datacenter_name => $dc_name, cluster_name => $cluster_name, pool_name => $pool_name, folder_name => $folder_name, recurse => $recurse, vm_name => $vm_name, vm_regex => $vm_regex, vm_count => $vm_count);
     if (scalar(@vm_list) <= 0)
     {
         mylog::warn("There are no matching VMs");
@@ -143,13 +144,14 @@ if ($@)
     libvmware::DisplayFault("Error searching for VMs", $@);
     exit 1;
 }
+mylog::info("Found " . scalar(@vm_list) . " matching VMs to snapshot");
 
 my $th_success : shared;
 $th_success = 0;
 my @active_threads;
 foreach my $vm_mor (@vm_list)
 {
-    my $th = threads->create(\&poweroffVM, $vm_mor);
+    my $th = threads->create(\&snapshotVM, $vm_mor);
     push (@active_threads, $th);
     while (scalar(@active_threads) >= $parallel_max)
     {
@@ -184,11 +186,11 @@ while (1)
 my $exitcode = 0;
 if ($th_success == scalar(@vm_list))
 {
-    mylog::pass("Successfully powered off all VMs");
+    mylog::pass("Successfully took a snapshot of all VMs");
 }
 else
 {
-    mylog::error("Failed to power off all VMs");
+    mylog::error("Failed to snapshot all VMs");
     $exitcode = 1;
 }
 
@@ -199,7 +201,7 @@ if (defined $result_address)
 }
 exit $exitcode;
 
-sub poweroffVM
+sub snapshotVM
 {
     my $vm_mor = shift;
     my $tid = threads->self()->tid;
@@ -217,28 +219,30 @@ sub poweroffVM
     }
     my $vm = Vim::get_view($threadvim, mo_ref => $vm_mor, properties => ['name']);
     mylog::debug("  Thread $tid is operating on " . $vm->name);
+    
+    my $snap_name = Data::GUID->new()->as_string();
 
-    mylog::info("  " . $vm->name . ": Powering off");
+    mylog::info("  " . $vm->name . ": Taking snapshot");
     my $task_ref;
     eval
     {
-        $task_ref = $vm->PowerOffVM_Task();
+        $task_ref = $vm->CreateSnapshot_Task(name => $snap_name, memory => 1, quiesce => 1);
     };
     if ($@)
     {
-        libvmware::DisplayFault("  " . $vm->name . ": Failed to power off", $@);
+        libvmware::DisplayFault("  " . $vm->name . ": Failed to snapshot", $@);
         return 0;
     }
     
     eval
     {
-        libvmware::WaitForTask(vim => $threadvim, task_ref => $task_ref, fail_message => "  Failed to power off " . $vm->name);
+        libvmware::WaitForTask(vim => $threadvim, task_ref => $task_ref, fail_message => "  Failed to snapshot " . $vm->name);
     };
     if ($@)
     {
         my $er = $@;
         $er =~ s/\s+$//;
-        mylog::error("  " . $vm->name . ": Failed to power off - $er");
+        mylog::error("  " . $vm->name . ": Failed to snapshot - $er");
         return 0;
     }
 
@@ -246,7 +250,7 @@ sub poweroffVM
         lock($th_success);
         $th_success++;
     }
-    mylog::pass("  " . $vm->name . ": Sucessfully powered off");
+    mylog::pass("  " . $vm->name . ": Sucessfully created snapshot $snap_name");
     return 1;
 }
 

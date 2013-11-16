@@ -1,9 +1,11 @@
 use strict;
+use constant { TRUE => 1, FALSE => 0 };
 
 package libsf;
 {
     use VMware::VIRuntime;
     use DateTime;
+    use DateTime::Format::Strptime;
     use Time::HiRes qw/ gettimeofday /;
     use IPC::Open3;
 
@@ -101,6 +103,23 @@ package libsf;
         $res = sprintf "%dw$res", $weeks   if                                $weeks;
 
         return "$sign$res";
+    }
+
+    sub DateStringToEpoch
+    {
+        # Currently this is constrained to the format used by VMware's API
+        # 2013-11-14T16:12:11.081321Z
+
+        my $time_str = shift;
+
+        my $parser = DateTime::Format::Strptime->new(pattern => "%Y-%m-%dT%H:%M:%S.%6N", locale => "en_US", time_zone => "UTC");
+        my $dt = $parser->parse_datetime($time_str);
+        if (!$dt)
+        {
+            mylog::debug("Failed to parse '$time_str' to a DateTime");
+            return 0;
+        }
+        return $dt->epoch;
     }
 }
 

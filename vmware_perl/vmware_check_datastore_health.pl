@@ -84,7 +84,7 @@ my %hosts;
 for my $hr (@{$cluster->host})
 {
     my $host = Vim::get_view(mo_ref => $hr, properties => ['name']);
-    $hosts{$hr} = $host->name;
+    $hosts{$hr->{value}} = $host->name;
 }
 
 # Make a table of datastores that are on iscsi volumes
@@ -155,7 +155,7 @@ for my $ds (@{$datastore_list})
         my $host_ref = $mount->key;
         if (!$mount->mountInfo->accessible)
         {
-            my $out = "  " . $ds->name . " is not accessible on " . $hosts{$host_ref};
+            my $out = "  " . $ds->name . " is not accessible on " . $hosts{$host_ref->{value}};
             if ($mount->mountInfo->inaccessibleReason)
             {
                 $out .= ": " . $mount->mountInfo->inaccessibleReason;

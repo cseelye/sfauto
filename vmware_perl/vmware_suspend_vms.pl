@@ -17,7 +17,7 @@ no warnings 'threads';
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
-Opts::set_option("username", "script_usr");
+Opts::set_option("username", "script_user");
 Opts::set_option("password", "password");
 
 # Set default vCenter Server
@@ -58,17 +58,17 @@ my %opts = (
     },
     vm_name => {
         type => "=s",
-        help => "The name of the virtual machine to power off",
+        help => "The name of the virtual machine to suspend",
         required => 0,
     },
     vm_regex => {
         type => "=s",
-        help => "The regex to match names of virtual machines to power off",
+        help => "The regex to match names of virtual machines to suspend",
         required => 0,
     },
     vm_count => {
         type => "=i",
-        help => "The number of matching virtual machines to power off",
+        help => "The number of matching virtual machines to suspend",
         required => 0,
     },
     result_address => {
@@ -143,13 +143,14 @@ if ($@)
     libvmware::DisplayFault("Error searching for VMs", $@);
     exit 1;
 }
+mylog::info("Found " . scalar(@vm_list) . " matching VMs to suspend");
 
 my $th_success : shared;
 $th_success = 0;
 my @active_threads;
 foreach my $vm_mor (@vm_list)
 {
-    my $th = threads->create(\&poweroffVM, $vm_mor);
+    my $th = threads->create(\&suspendVM, $vm_mor);
     push (@active_threads, $th);
     while (scalar(@active_threads) >= $parallel_max)
     {
@@ -184,11 +185,11 @@ while (1)
 my $exitcode = 0;
 if ($th_success == scalar(@vm_list))
 {
-    mylog::pass("Successfully powered off all VMs");
+    mylog::pass("Successfully suspended all VMs");
 }
 else
 {
-    mylog::error("Failed to power off all VMs");
+    mylog::error("Failed to suspend all VMs");
     $exitcode = 1;
 }
 
@@ -199,7 +200,7 @@ if (defined $result_address)
 }
 exit $exitcode;
 
-sub poweroffVM
+sub suspendVM
 {
     my $vm_mor = shift;
     my $tid = threads->self()->tid;
@@ -218,27 +219,27 @@ sub poweroffVM
     my $vm = Vim::get_view($threadvim, mo_ref => $vm_mor, properties => ['name']);
     mylog::debug("  Thread $tid is operating on " . $vm->name);
 
-    mylog::info("  " . $vm->name . ": Powering off");
+    mylog::info("  " . $vm->name . ": Suspending");
     my $task_ref;
     eval
     {
-        $task_ref = $vm->PowerOffVM_Task();
+        $task_ref = $vm->SuspendVM_Task();
     };
     if ($@)
     {
-        libvmware::DisplayFault("  " . $vm->name . ": Failed to power off", $@);
+        libvmware::DisplayFault("  " . $vm->name . ": Failed to suspend", $@);
         return 0;
     }
     
     eval
     {
-        libvmware::WaitForTask(vim => $threadvim, task_ref => $task_ref, fail_message => "  Failed to power off " . $vm->name);
+        libvmware::WaitForTask(vim => $threadvim, task_ref => $task_ref, fail_message => "  Failed to snapshot " . $vm->name);
     };
     if ($@)
     {
         my $er = $@;
         $er =~ s/\s+$//;
-        mylog::error("  " . $vm->name . ": Failed to power off - $er");
+        mylog::error("  " . $vm->name . ": Failed to suspend - $er");
         return 0;
     }
 
@@ -246,7 +247,7 @@ sub poweroffVM
         lock($th_success);
         $th_success++;
     }
-    mylog::pass("  " . $vm->name . ": Sucessfully powered off");
+    mylog::pass("  " . $vm->name . ": Sucessfully suspended");
     return 1;
 }
 

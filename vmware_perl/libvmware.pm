@@ -1,5 +1,6 @@
 #!/usr/bin/perl -w
 use strict;
+use constant { TRUE => 1, FALSE => 0 };
 use VMware::VIRuntime;
 
 package VMwareError;
@@ -120,14 +121,14 @@ sub WaitForVmBooted
         {
             if ($status ne $previous_status)
             {
-                mylog::info("  VM is " . $status);
+                mylog::info("  " . $vm->name . ": VM is " . $status);
                 $previous_status = $status;
             }
             $vm->update_view_data();
             $status = $vm->runtime->powerState->val;
             sleep 5 if ($status ne "poweredOn");
         }
-        mylog::info("  VM " . $vm->name . " is poweredOn");
+        mylog::info("  " . $vm->name . ": VM is poweredOn");
         
         # See if VMware tools are installed
         if ($vm->guest->toolsStatus->val eq "toolsNotInstalled")
@@ -141,14 +142,14 @@ sub WaitForVmBooted
         {
             if ($status ne $previous_status)
             {
-                mylog::info("  VM " . $vm->name . " heartbeat is " . $status);
+                mylog::info("  " . $vm->name . ": VM heartbeat is " . $status);
                 $previous_status = $status;
             }
             $vm->update_view_data();
             $status = $vm->guestHeartbeatStatus->val;
             sleep 5 if ($status ne "green");
         }
-        mylog::info("  VM " . $vm->name . " heartbeat is green");
+        mylog::info("  " . $vm->name . ": VM heartbeat is green");
     };
     if ($@)
     {
@@ -189,14 +190,14 @@ sub WaitForVmDown
         {
             if ($status ne $previous_status)
             {
-                mylog::info("  VM is " . $status);
+                mylog::info("  " . $vm->name . ": VM is " . $status);
                 $previous_status = $status;
             }
             $vm->update_view_data();
             $status = $vm->runtime->powerState->val;
             sleep 5 if ($status ne "poweredOff");
         }
-        mylog::info("  VM " . $vm->name . " is poweredOff");
+        mylog::info("  " . $vm->name . ": VM is poweredOff");
     };
     if ($@)
     {

@@ -13,7 +13,7 @@ no warnings 'threads';
 # Joining in a loop causes segfault/memory corruption
 #   perl -d shows "*** glibc detected *** Hiding the command line arguments: malloc(): smallbin double linked list corrupted: 0x0000000002a92b80 ***
 # Detaching threads causes free to wrong pool or double free
-# The workarounds are to supporess thread warnings, never detach or join any threads, and let the interpreter clean up the threads on exit.
+# The workarounds are to suppress thread warnings, never detach or join any threads, and let the interpreter clean up the threads on exit.
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -137,7 +137,7 @@ if ($@)
 my @vm_list;
 eval
 {
-    @vm_list = libvmware::SearchForVms(vim => $mainvim, datacenter_name => $dc_name, cluster_name => $cluster_name, pool_name => $pool_name, folder_name => $folder_name, recurse => $recurse, vm_name => $vm_name, vm_regex => $vm_regex, vm_count => $vm_count, vm_powerstate => "poweredOff");
+    @vm_list = libvmware::SearchForVms(vim => $mainvim, datacenter_name => $dc_name, cluster_name => $cluster_name, pool_name => $pool_name, folder_name => $folder_name, recurse => $recurse, vm_name => $vm_name, vm_regex => $vm_regex, vm_count => $vm_count, vm_powerstate => qr/poweredOff|suspended/);
     if (scalar(@vm_list) <= 0)
     {
         mylog::warn("There are no matching VMs");
@@ -224,7 +224,7 @@ sub poweronVM
     my $vm = Vim::get_view($threadvim, mo_ref => $vm_mor, properties => ['name']);
     mylog::debug("  Thread $tid is operating on " . $vm->name);
 
-    mylog::info("  Powering on " . $vm->name);
+    mylog::info("  " . $vm->name . ": Powering on");
     my $task_ref;
     eval
     {
@@ -232,7 +232,7 @@ sub poweronVM
     };
     if ($@)
     {
-        libvmware::DisplayFault("  Failed to power on " . $vm->name, $@);
+        libvmware::DisplayFault("  " . $vm->name . ": Failed to power on", $@);
         return 0;
     }
     
@@ -244,13 +244,13 @@ sub poweronVM
     {
         my $er = $@;
         $er =~ s/\s+$//;
-        mylog::error("  Failed to power on " . $vm->name . " - $er");
+        mylog::error("  " . $vm->name . ": Failed to power on - $er");
         return 0;
     }
 
     if ($wait_for_booted)
     {
-        mylog::info("  Waiting for " . $vm->name . " to be fully booted");
+        mylog::info("  " . $vm->name . ": Waiting to be fully booted");
         eval
         {
             libvmware::WaitForVmBooted(vim => $threadvim, vm_ref => $vm_mor);
@@ -259,7 +259,7 @@ sub poweronVM
         {
             my $er = "$@";
             $er =~ s/\s+$//;
-            mylog::error("  Failed to wait for " . $vm->name . " to boot - $er");
+            mylog::error("  " . $vm->name . ": Failed to wait for boot - $er");
             return 0;
         }
     }
@@ -268,7 +268,7 @@ sub poweronVM
         lock($th_success);
         $th_success++;
     }
-    mylog::pass("  Sucessfully powered on " . $vm->name);
+    mylog::pass("  " . $vm->name . ": Sucessfully powered on");
     return 1;
 }
 

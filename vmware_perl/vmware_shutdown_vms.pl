@@ -13,7 +13,7 @@ no warnings 'threads';
 # Joining in a loop causes segfault/memory corruption
 #   perl -d shows "*** glibc detected *** Hiding the command line arguments: malloc(): smallbin double linked list corrupted: 0x0000000002a92b80 ***
 # Detaching threads causes free to wrong pool or double free
-# The workarounds are to supporess thread warnings, never detach or join any threads, and let the interpreter clean up the threads on exit.
+# The workarounds are to suppress thread warnings, never detach or join any threads, and let the interpreter clean up the threads on exit.
 
 # Set default username/password to use
 # These can be overridden via --username and --password command line options
@@ -224,7 +224,7 @@ sub shutdownVM
     my $vm = Vim::get_view($threadvim, mo_ref => $vm_mor, properties => ['name']);
     mylog::debug("  Thread $tid is operating on " . $vm->name);
 
-    mylog::info("  Shutting down " . $vm->name);
+    mylog::info("  " . $vm->name . ": Shutting down");
     my $task_ref;
     eval
     {
@@ -232,13 +232,13 @@ sub shutdownVM
     };
     if ($@)
     {
-        libvmware::DisplayFault("  Failed to shutdown " . $vm->name, $@);
+        libvmware::DisplayFault("  " . $vm->name . ": Failed to shutdown", $@);
         return 0;
     }
     
     if ($wait_for_down)
     {
-        mylog::info("  Waiting for " . $vm->name . " to power off");
+        mylog::info("  " . $vm->name . ": Waiting to power off");
         eval
         {
             libvmware::WaitForVmDown(vim => $threadvim, vm_ref => $vm_mor);
@@ -247,7 +247,7 @@ sub shutdownVM
         {
             my $er = "$@";
             $er =~ s/\s+$//;
-            mylog::error("  Failed to wait for " . $vm->name . " to power off - $er");
+            mylog::error("  " . $vm->name . ": Failed to wait for power off - $er");
             return 0;
         }
     }
@@ -256,7 +256,7 @@ sub shutdownVM
         lock($th_success);
         $th_success++;
     }
-    mylog::pass("  Sucessfully shutdown " . $vm->name);
+    mylog::pass("  " . $vm->name . ": Sucessfully shutdown");
     return 1;
 }
 
