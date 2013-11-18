@@ -207,6 +207,7 @@ class ClusterInfo:
         self.FailedDriveCount = 0
         self.NodeCount = 0
         self.LastGc = GCInfo()
+        self.ClusterRepCount = 2
 
 class GCInfo(object):
     """
@@ -304,8 +305,8 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
 
     return response.read()
 
-def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams):
-    rpc_url = 'https://' + pMvip + '/json-rpc/1.0'
+def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, version = 1.0, port = 443):
+    rpc_url = 'https://' + pMvip + ':' + str(port) + '/json-rpc/' + ("%1.1f" % version)
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
     password_mgr.add_password(None, rpc_url, pUsername, pPassword)
     handler = urllib2.HTTPBasicAuthHandler(password_mgr)
@@ -902,6 +903,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     info.Mvip = result['clusterInfo']['mvip']
     info.Svip = result['clusterInfo']['svip']
     info.UniqueId = result['clusterInfo']['uniqueID']
+    info.ClusterRepCount = result['clusterInfo']['repCount']
 
     result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'GetClusterCapacity', {})
     if result is None:
@@ -1001,11 +1003,39 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
                 continue
 
     # Check for slice syncing
-    sync_html = HttpRequest(log, "https://" + pMvip + "/reports/slicesyncing", pApiUser, pApiPass)
-    if (sync_html != None and "table" in sync_html):
-        info.SliceSyncing = "Yes"
+    info.SliceSyncing = "No"
+    if info.SfMajorVersion >= 5:
+        # Get the slice assignments report
+        result = HttpRequest(log, "https://" + pMvip + "/reports/slices.json", pApiUser, pApiPass)
+        slice_report = json.loads(result)
+
+        # Make sure there are no unhealthy services
+        if "services" in slice_report:
+            for ss in slice_report["services"]:
+                if ss["health"] != "good":
+                    log.debug("Slice sync - one or more SS are unhealthy")
+                    info.SliceSyncing = "Yes"
+                    break
+
+        # Make sure there are no volumes with multiple live secondaries or any dead secondaries
+        if "slices" in slice_report:
+            for vol in slice_report["slices"]:
+                if "liveSecondaries" not in vol or len(vol["liveSecondaries"]) < info.ClusterRepCount - 1:
+                    log.debug("Slice sync - one or more volumes have too few live secondaries")
+                    info.SliceSyncing = "Yes"
+                    break
+                if len(vol["liveSecondaries"]) > info.ClusterRepCount - 1:
+                    log.debug("Slice sync - one or more volumes have multiple live secondaries")
+                    info.SliceSyncing = "Yes"
+                    break
+                if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
+                    log.debug("Slice sync - one or more volumes have dead secondaries")
+                    info.SliceSyncing = "Yes"
+                    break
     else:
-        info.SliceSyncing = "No"
+        sync_html = HttpRequest(log, "https://" + pMvip + "/reports/slicesyncing", pApiUser, pApiPass)
+        if (sync_html != None and "table" in sync_html):
+            info.SliceSyncing = "Yes"
 
     # Check for bin syncing
     sync_html = HttpRequest(log, "https://" + pMvip + "/reports/binsyncing", pApiUser, pApiPass)
@@ -1121,11 +1151,6 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
                             for oldssid in previousClusterInfo.SliceServices:
                                 if oldssid == current_slice.ServiceId:
                                     current_slice.PreviousSecCacheBytes = previousClusterInfo.SliceServices[oldssid].SecCacheBytes
-                    #else:
-                        #for node in pNodesInfo.itervalues():
-                            #if "slice" + str(service_id) in node.SCache.keys():
-                                #current_slice.SecCacheBytes = node.SCache["slice" + service_id]
-                                #break
                     info.SliceServices[service_id] = current_slice
 
     # Look for failed/available drives
