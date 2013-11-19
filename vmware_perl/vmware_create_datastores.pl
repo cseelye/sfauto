@@ -104,16 +104,19 @@ mylog::debug("Building a map of LUNS");
 my %lun2target;
 for my $adapter (@{$storage_manager->storageDeviceInfo->scsiTopology->adapter})
 {
-    if ($adapter->adapter eq $iscsi_hba->key)
-    {
-        for my $target (@{$adapter->target})
-        {
-            for my $lun (@{$target->lun})
-            {
-                $lun2target{$lun->scsiLun} = $target->transport->iScsiName
-            }
-        }
-    }
+   if ($adapter->adapter eq $iscsi_hba->key)
+   {
+      next if !$adapter->target;
+      for my $target (@{$adapter->target})
+      {
+         next if !$target->lun;
+         for my $lun (@{$target->lun})
+         {
+            $lun2target{$lun->scsiLun} = $target->transport->iScsiName
+         }
+      }
+      last;
+   }
 }
 my %device2lun;
 for my $disk (@{$storage_manager->storageDeviceInfo->scsiLun})
