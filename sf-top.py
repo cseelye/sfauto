@@ -117,8 +117,6 @@ class NodeInfo:
         self.ClusterMaster = False
         self.Processes = dict()
         self.Nics = dict()
-        #self.SCache = dict()
-        self.ExpectedBSCount = 0
 
 class ProcessResourceUsage:
     def __init__(self):
@@ -445,12 +443,6 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     else:
         usage.NvramMounted = False
 
-    # Use mem size to determine platform type and expected BS count
-    if usage.TotalMemory <= 72 * 1024 * 1024 * 1024:
-        usage.ExpectedBSCount = 10
-    elif usage.TotalMemory <= 144 * 1024 * 1024 * 1024:
-        usage.ExpectedBSCount = 9
-
     # sfapp Release UC Version: 4.06 sfdev: 1.90 Revision: f13bebca8736 Build date: 2011-12-20 10:02
     # sfapp Debug Version: 4.08 sfdev: 1.91 Revision: 58220b8bd90a Build date: 2012-01-07 14:28 Tag: TSIP4v1
     # sfapp BuildType=Release UC Release=lithium Version=3.45 sfdev=1.92 Revision=a7ca42f12f32 BuildDate=2012-02-13@12:20
@@ -518,31 +510,6 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
             else:
                 proc.DiskDevice = None
         usage.Processes[pid] = proc
-
-    #
-    # Get the secondary cache usage
-    #
-    # Obsolete for B, completely unworkable for C
-    #command = ""
-    #for pname in process_names2pids.keys():
-        #if "slice" in pname:
-            #pid = process_names2pids[pname]
-            #disk = process_pids2disks[pid]
-            #command += ";echo `ls -1 " + disk + "/failed | wc -l` `du " + disk + "/failed`"
-    #command = command.strip(";")
-    #stdin, stdout, stderr = ssh.exec_command(command)
-    #data = stdout.readlines()
-    #for line in data:
-        #pieces = line.split()
-        ##files = int(pieces[0])
-        #size = int(pieces[1]) * 1024
-        #disk = pieces[2]
-        #pieces = disk.split("/")
-        #disk = pieces[2]
-        #for pid, device in process_pids2disks.iteritems():
-            #if disk in device:
-                #proc_name = process_pids2names[pid]
-                #usage.SCache[proc_name] = size
 
     #
     # Run 'top', 'ifconfig', grep /proc/diskstatus, grep /proc/[pid]/io.
@@ -884,13 +851,13 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
             info.NvramRamdrive.append(pNodesInfo[node_ip].Hostname)
 
     # Expected service counts
+    info.ExpectedBSCount = 0
+    info.ExpectedSSCount = 0
     for node_ip in pNodesInfo.keys():
-        if pNodesInfo[node_ip] == None: continue
-        info.ExpectedBSCount += pNodesInfo[node_ip].ExpectedBSCount
-        if info.SfMajorVersion <= 5:
-            info.ExpectedSSCount += 2
-        else:
-            info.ExpectedSSCount += 1
+        drive_config = CallApiMethod(log, node_ip, pApiUser, pApiPass, "GetDriveConfig", {}, version=6.0, port=442)
+        info.ExpectedBSCount += drive_config["driveConfig"]["numBlockExpected"]
+        info.ExpectedSSCount += drive_config["driveConfig"]["numSliceExpected"]
+    log.debug("Expecting " + str(info.ExpectedBSCount) + " BServices and " + str(info.ExpectedSSCount) + " SServices")
 
     log.debug("gathering cluster info")
 
@@ -1128,7 +1095,11 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
         gc_list = []
         for gen in sorted(gc_objects.keys()):
             gc_list.append(gc_objects[gen])
-        info.LastGc = gc_list[-1]
+        if len(gc_list) > 0:
+            info.LastGc = gc_list[-1]
+        else:
+            info.LastGc = None
+
 
     # Slice cache usage
     result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'GetCompleteStats', {})
@@ -1272,11 +1243,17 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
     print ' %-8s' % (top.Hostname),
     if not pCompact:
         print '%-15s' % (node_ip),
-    if (top.NodeId >= 0):
+    if top.NodeId > 0:
         if pCompact:
             print "[%s]" % top.NodeId,
         else:
             print " nodeID %s" % top.NodeId,
+    elif top.NodeId == 0:
+        if pCompact:
+            print "pend",
+        else:
+            print " Pending",
+
     if (top.EnsembleNode):
         print "*",
     if (top.ClusterMaster):
@@ -1652,34 +1629,37 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     current_line += 1
     screen.gotoXY(pStartX + 1, pStartY + current_line)
     screen.set_color(ConsoleColors.WhiteFore)
-    print " Last GC Start: ",
+    print "Last GC Start: ",
     screen.reset()
-    if pClusterInfo.LastGc.StartTime > 0:
-        if pClusterInfo.LastGc.StartTime < time.time() - 60 * 60:
-            screen.set_color(ConsoleColors.YellowFore)
-        print TimestampToStr(pClusterInfo.LastGc.StartTime),
+    if not pClusterInfo.LastGc:
+        print "never"
     else:
-        print " never",
-    screen.set_color(ConsoleColors.WhiteFore)
-    screen.reset()
-    if pClusterInfo.LastGc.EndTime > 0:
-        screen.set_color(ConsoleColors.WhiteFore)
-        print "  Elapsed: ",
-        delta = pClusterInfo.LastGc.EndTime - pClusterInfo.LastGc.StartTime
-        if (delta >= 60 * 30):
-            screen.set_color(ConsoleColors.RedFore)
-        elif (delta >= 60 * 25):
-            screen.set_color(ConsoleColors.YellowFore)
+        if pClusterInfo.LastGc.StartTime > 0:
+            if pClusterInfo.LastGc.StartTime < time.time() - 60 * 60:
+                screen.set_color(ConsoleColors.YellowFore)
+            print TimestampToStr(pClusterInfo.LastGc.StartTime),
         else:
-            screen.set_color(ConsoleColors.GreenFore)
-        print TimeDeltaToStr(datetime.timedelta(seconds=delta)),
+            print "never",
         screen.set_color(ConsoleColors.WhiteFore)
-        print "  Discarded: ",
         screen.reset()
-        print HumanizeDecimal(pClusterInfo.LastGc.DiscardedBytes) + "B"
-    if pClusterInfo.LastGc.Rescheduled:
-        screen.set_color(ConsoleColors.YellowFore)
-        print " Rescheduled"
+        if pClusterInfo.LastGc.EndTime > 0:
+            screen.set_color(ConsoleColors.WhiteFore)
+            print " Elapsed: ",
+            delta = pClusterInfo.LastGc.EndTime - pClusterInfo.LastGc.StartTime
+            if (delta >= 60 * 30):
+                screen.set_color(ConsoleColors.RedFore)
+            elif (delta >= 60 * 25):
+                screen.set_color(ConsoleColors.YellowFore)
+            else:
+                screen.set_color(ConsoleColors.GreenFore)
+            print TimeDeltaToStr(datetime.timedelta(seconds=delta)),
+            screen.set_color(ConsoleColors.WhiteFore)
+            print " Discarded: ",
+            screen.reset()
+            print HumanizeDecimal(pClusterInfo.LastGc.DiscardedBytes) + "B"
+        if pClusterInfo.LastGc.Rescheduled:
+            screen.set_color(ConsoleColors.YellowFore)
+            print " Rescheduled"
     screen.reset()
 
     # Syncing
@@ -1883,10 +1863,13 @@ def LogClusterResult(pOutputDir, pClusterInfo):
 
     filename = pOutputDir + "/" + TimestampToStr(START_TIME, "%Y-%m-%d-%H-%M-%S", LOCAL_TZ) + '_cluster_' + pClusterInfo.Mvip + ".csv"
 
-    if not os.path.isfile(filename):
-        log = open(filename, 'w')
-    else:
-        log = open(filename, 'a')
+    try:
+        if not os.path.isfile(filename):
+            log = open(filename, 'w')
+        else:
+            log = open(filename, 'a')
+    except IOError:
+        return
 
     columns = "Timestamp,Time,ClusterMaster,VolumeCount,SessionCount,AccountCount,BSCount,SSCount,CurrentIops,UsedSpace,ProvisionedSpace,Fullness,DedupPercent,CompressionPercent,LastGcStart,LastGcDurationSeconds,LastGcDiscarded"
     for ss in pClusterInfo.SliceServices.values():
@@ -1911,9 +1894,12 @@ def LogClusterResult(pOutputDir, pClusterInfo):
     log.write(",\"" + str(pClusterInfo.ClusterFullThreshold) + "\"")
     log.write(",\"" + str(pClusterInfo.DedupPercent) + "\"")
     log.write(",\"" + str(pClusterInfo.CompressionPercent) + "\"")
-    log.write(",\"" + TimestampToStr(pClusterInfo.GcInfo.StartTime) + "\"")
-    log.write(",\"" + str(pClusterInfo.GcInfo.EndTime - pClusterInfo.GcInfo.StartTime) + "\"")
-    log.write(",\"" + str(pClusterInfo.GcInfo.DiscardedBytes) + "\"")
+    if pClusterInfo.LastGc:
+        log.write(",\"" + TimestampToStr(pClusterInfo.LastGc.StartTime) + "\"")
+        log.write(",\"" + str(pClusterInfo.LastGc.EndTime - pClusterInfo.LastGc.StartTime) + "\"")
+        log.write(",\"" + str(pClusterInfo.LastGc.DiscardedBytes) + "\"")
+    else:
+        log.write(",,,")
     for ss in pClusterInfo.SliceServices.values():
         log.write(",\"" + str(ss.SecCacheBytes) + "\"")
     log.write("\n")
@@ -2079,6 +2065,8 @@ class DebugLog():
     def debug(self, message):
         if not self.Enable: return
         caller = inspect.stack()[1][3]
+        if caller == "<module>":
+            caller = "MainThread"
         with open("sf-top-debug.txt", 'a') as debug_out:
             message = TimestampToStr(time.time(), "%Y-%m-%d-%H-%M-%S", LOCAL_TZ) + "  " + caller + ": " + str(message)
             if not message.endswith("\n"): message += "\n"
@@ -2118,6 +2106,7 @@ if __name__ == '__main__':
     parser.add_option("--export", action="store_true", dest="export", default=False, help="save the results in a file as well as print to the screen")
     parser.add_option("--output_dir", type="string", dest="output_dir", default="sf-top-out", help="the directory to save exported data")
     parser.add_option("--fault_whitelist", action="list", dest="fault_whitelist", default=None, help="ignore these faults when displaying cluster faults")
+    parser.add_option("--nopending", action="store_false", dest="pending_nodes", default=True, help="do not gather/show pending node info (active nodes only)")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="write detailed debug info to a log file")
 
     (options, args) = parser.parse_args()
@@ -2141,6 +2130,7 @@ if __name__ == '__main__':
     fault_whitelist = options.fault_whitelist
     if fault_whitelist == None:
         fault_whitelist = sfdefaults.fault_whitelist
+    monitor_pending_nodes = options.pending_nodes
 
     log = DebugLog()
     log.Enable = options.debug
@@ -2158,12 +2148,15 @@ if __name__ == '__main__':
         try:
             print "Getting a list of nodes in cluster " + mvip
             node_ips = []
-            api_result = CallApiMethod(log, mvip, api_user, api_pass, 'ListActiveNodes', {})
+            api_result = CallApiMethod(log, mvip, api_user, api_pass, 'ListAllNodes', {})
             if not api_result:
                 print "Could not call API on " + mvip
                 sys.exit(1)
             for node_info in api_result["nodes"]:
                 node_ips.append(str(node_info["mip"]))
+            if monitor_pending_nodes:
+                for node_info in api_result["pendingNodes"]:
+                    node_ips.append(str(node_info["mip"]))
         except KeyboardInterrupt:
             sys.exit(0)
     else:
@@ -2182,6 +2175,8 @@ if __name__ == '__main__':
     if (len(node_ips) <= 0):
         print "Please supply at least one node IP address (--mvip=z.z.z.z OR --node_ips=\"x.x.x.x, y.y.y.y\")"
         exit(1)
+
+    print "Gathering info from nodes " + str(node_ips) + " ..."
 
     if (not os.path.exists(output_dir)):
         os.makedirs(output_dir)
@@ -2224,29 +2219,32 @@ if __name__ == '__main__':
         node_results[n_ip] = None
     cluster_results = main_manager.dict()
 
+    previous_node_list = set(node_results.keys())
     all_threads = dict()
+    all_threads["GatherNodeInfoThread"] = None
     previous_table_height = 0
+    previous_cell_height = 0
     table_height = 0
+    clear_table = False
     try:
-        #screen.gotoXY(originx, originy)
-        print "Gathering info from nodes " + str(node_ips) + " ..."
-        th = multiprocessing.Process(target=GatherNodeInfoThread, name="GatherNodeInfoThread", args=(log, node_results, interval, node_ips, ssh_user, ssh_pass, keyfile))
-        th.start()
-        log.debug("started GatherNodeInfoThread process " + str(th.pid))
-        all_threads["GatherNodeInfoThread"] = th
-
-        # Wait for at least one good result to come in
-        got_results = False
         while True:
-            for n_ip in node_ips:
-                if node_results[n_ip]:
-                    got_results = True
-                    break
-            if got_results: break
-            time.sleep(2)
+            #screen.gotoXY(originx, originy)
+            if "GatherNodeInfoThread" not in all_threads or all_threads["GatherNodeInfoThread"] == None:
+                th = multiprocessing.Process(target=GatherNodeInfoThread, name="GatherNodeInfoThread", args=(log, node_results, interval, node_ips, ssh_user, ssh_pass, keyfile))
+                th.start()
+                log.debug("started GatherNodeInfoThread process " + str(th.pid))
+                all_threads["GatherNodeInfoThread"] = th
 
-        previous_cell_height = 0
-        while True:
+                # Wait for at least one good result to come in
+                got_results = False
+                while True:
+                    for n_ip in node_ips:
+                        if node_results[n_ip]:
+                            got_results = True
+                            break
+                    if got_results: break
+                    time.sleep(2)
+
             # Look for the mvip if we don't already know it
             if not mvip:
                 for n_ip in node_ips:
@@ -2265,8 +2263,9 @@ if __name__ == '__main__':
                         break
 
             # Start the cluster info thread if we haven't already
-            if showclusterinfo and mvip and "ClusterInfoThread" not in all_threads:
-                cluster_results[mvip] = None
+            if showclusterinfo and mvip and ("ClusterInfoThread" not in all_threads or all_threads["ClusterInfoThread"] == None):
+                if mvip not in cluster_results:
+                    cluster_results[mvip] = None
                 cluster_info_thread = multiprocessing.Process(target=ClusterInfoThread, name="ClusterInfoThread", args=(log, cluster_results, node_results, cluster_interval, mvip, api_user, api_pass, fault_whitelist))
                 cluster_info_thread.start()
                 log.debug("started ClusterInfoThread process " + str(cluster_info_thread.pid))
@@ -2275,7 +2274,7 @@ if __name__ == '__main__':
             # Determine how tall each cell needs to be
             cell_height = 0
             for node_ip in node_ips:
-                if (node_results[node_ip] == None): continue
+                if node_results[node_ip] == None: continue
                 if compact:
                     node_cell_height = 4 + 1 + (len(node_results[node_ip].Processes.keys()) - 2) + 1
                 else:
@@ -2299,8 +2298,13 @@ if __name__ == '__main__':
                     table_height =  math.ceil(float(len(node_ips) + 1) / float(columns)) * (cell_height + 1) + originy
 
             if cell_height != previous_cell_height:
+                clear_table = True
+
+            if clear_table:
+                # Table height changed, node list changed, etc
                 screen.clear()
                 previous_cell_height = cell_height
+                clear_table = False
 
             # Display/log node info
             for i in range(len(node_ips)):
@@ -2357,6 +2361,30 @@ if __name__ == '__main__':
             print
             time.sleep(4)
 
+            # Check to see if the node list has changed
+            if options.mvip:
+                log.debug("Refreshing list of nodes")
+                node_ips = []
+                api_result = CallApiMethod(log, mvip, api_user, api_pass, 'ListAllNodes', {})
+                if api_result:
+                    for node_info in api_result["nodes"]:
+                        node_ips.append(str(node_info["mip"]))
+                    if monitor_pending_nodes:
+                        for node_info in api_result["pendingNodes"]:
+                            node_ips.append(str(node_info["mip"]))
+
+                    if set(node_ips) != previous_node_list:
+                        log.debug("Detected change in node list")
+                        clear_table = True
+                        for name, th in all_threads.items():
+                            log.debug("Killing " + name)
+                            th.terminate()
+                            del all_threads[name]
+
+                        for n_ip in node_ips:
+                            node_results[n_ip] = None
+                        previous_node_list = set(node_ips)
+
     except KeyboardInterrupt:
         log.debug("KeyboardInterrupt")
     finally:
@@ -2383,4 +2411,3 @@ if __name__ == '__main__':
     print
     log.debug("exiting")
     exit(0)
-
