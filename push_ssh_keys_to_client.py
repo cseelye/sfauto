@@ -56,28 +56,21 @@ class PushSshKeysToClientAction(ActionBase):
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        if "win" in platform.system().lower():
-            mylog.error("This action does not work on Windows")
-            return False
-
-        # Get local hostname
-        local_hostname = platform.node()
-
-        # Get current user
-        local_username = getpass.getuser()
-        home = os.path.expanduser("~")
-
         # Look for or create local RSA id
+        local_hostname = platform.node()
+        home = os.path.expanduser("~")
         key_text = ""
-        key_path = home + "/.ssh/id_rsa.pub"
-        if not os.path.exists(key_path):
-            mylog.info("Creating SSH key for " + local_hostname)
-            libsf.RunCommand("ssh-keygen -q -f ~/.ssh/id_rsa -N \"\"")
+        if "win" in platform.system().lower():
+            key_path = home + "\\ssh\\id_rsa.pub"
+            if not os.path.exists(key_path):
+                mylog.error("Please place your RSA id in " + key_path)
+                return False
+        else:
+            if not os.path.exists(key_path):
+                mylog.info("Creating SSH key for " + local_hostname)
+                libsf.RunCommand("ssh-keygen -q -f ~/.ssh/id_rsa -N \"\"")
         with open(key_path) as f:
             key_text = f.read()
-        m = re.search(local_username + r"\@" + local_hostname, key_text)
-        if not m:
-            mylog.warning("The SSH key in " + key_path + " doesn't use the current username/hostname")
         key_text = key_text.rstrip()
 
         # Send the key over to each client
