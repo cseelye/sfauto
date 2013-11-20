@@ -62,7 +62,7 @@ sub WaitForTask
         vim             => undef,
         task_ref        => undef,
     @_);
-    
+
     if (!$params{vim})
     {
         $params{vim} = $Vim::vim_global;
@@ -93,6 +93,7 @@ sub WaitForVmBooted
     my %params = (
         vim             => undef,
         vm_ref          => undef,
+        timeout         => 180,
     @_);
 
     if (!$params{vim})
@@ -111,14 +112,19 @@ sub WaitForVmBooted
     }
     eval
     {
+        my $start_time = time();
         my $previous_status = "";
         my $status = "";
-    
+
         # Wait for the VM to be powered on
         $status = $vm->runtime->powerState->val;
         $previous_status = "";
         while ($status ne "poweredOn")
         {
+            if (time() - $start_time > $params{timeout})
+            {
+                die "Timeout waiting for VM to power on";
+            }
             if ($status ne $previous_status)
             {
                 mylog::info("  " . $vm->name . ": VM is " . $status);
@@ -129,7 +135,7 @@ sub WaitForVmBooted
             sleep 5 if ($status ne "poweredOn");
         }
         mylog::info("  " . $vm->name . ": VM is poweredOn");
-        
+
         # See if VMware tools are installed
         if ($vm->guest->toolsStatus->val eq "toolsNotInstalled")
         {
@@ -140,6 +146,10 @@ sub WaitForVmBooted
         $status = $vm->guestHeartbeatStatus->val;
         while ($status ne "green")
         {
+            if (time() - $start_time > $params{timeout})
+            {
+                die "Timeout waiting for VM heartbeat";
+            }
             if ($status ne $previous_status)
             {
                 mylog::info("  " . $vm->name . ": VM heartbeat is " . $status);
@@ -182,7 +192,7 @@ sub WaitForVmDown
     {
         my $previous_status = "";
         my $status = "";
-    
+
         # Wait for the VM to be powered off
         $status = $vm->runtime->powerState->val;
         $previous_status = "";
