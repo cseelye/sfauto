@@ -147,7 +147,11 @@ if (!$dest_datastore)
 
 # Make sure there is enough free space in the destination
 my $ds_free = $dest_datastore->summary->freeSpace / 1024 / 1024;
-my $vm_usage = $source_vm->summary->storage->committed / 1024 / 1024 + $source_vm->summary->storage->uncommitted / 1024 / 1024 + $source_vm->config->hardware->memoryMB;
+my $vm_usage = $source_vm->summary->storage->committed / 1024 / 1024 + $source_vm->config->hardware->memoryMB;
+if (!$thin_prov)
+{
+   $vm_usage += $source_vm->summary->storage->uncommitted / 1024 / 1024;
+}
 if ($vm_usage > $ds_free)
 {
     mylog::error("There is not enough free space on $dest_datastore_name ($ds_free MB are available but $vm_usage MB are needed)");
