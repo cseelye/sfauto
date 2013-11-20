@@ -120,10 +120,10 @@ eval
             mylog::info("  VM heartbeat is " . $status);
             $previous_status = $status;
         }
-        mylog::debug("Refreshing view");
+        #mylog::debug("Refreshing view");
         $vm->update_view_data();
         $status = $vm->guestHeartbeatStatus->val;
-        mylog::debug($status);
+        #mylog::debug($status);
         sleep 10 if ($status ne "green");
     }
     mylog::info("  VM heartbeat is green");
@@ -147,4 +147,3 @@ if (defined $result_address)
     libsf::SendResultToParent(result_address => $result_address, result => 1);
 }
 exit 0;
-
