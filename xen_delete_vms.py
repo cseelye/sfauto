@@ -86,7 +86,7 @@ class XenDeleteVmsAction(ActionBase):
             try:
                 session.xenapi.VDI.destroy(vdi_ref)
             except XenAPI.Failure as e:
-                mylog.error("  " + vm_name + ": Could not destroy VDI " + vdi_list[vdi_ref] + "- " + str(e))
+                mylog.error("  " + vm_name + ": Could not destroy VDI " + str(vdi_list[vdi_ref]) + "- " + str(e))
                 allgood = False
                 continue
 
