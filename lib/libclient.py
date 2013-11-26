@@ -205,23 +205,12 @@ class SfClient:
             except socket.error as e:
                 raise ClientError("Could not connect to " + pClientIp + ": " + str(e))
 
-        if pCommand.endswith("&"):
-            full_command = pCommand
-            check_return = False
-        else:
-            full_command = pCommand + "; echo $?"
-            check_return = True
-        self._debug("Executing " + full_command)
-        stdin, stdout, stderr = self.SshSession.exec_command(full_command)
-        stdout_data = ""
-        stderr_data = ""
-        return_code = 0
-        if check_return:
-            stdout_data = stdout.readlines()
-            stderr_data = stderr.readlines()
-            if stdout_data:
-                retline = stdout_data.pop()
-                return_code = int(retline.strip())
+        self._debug("Executing " + pCommand)
+        stdin, stdout, stderr = self.SshSession.exec_command(pCommand)
+        return_code = stdout.channel.recv_exit_status()
+        stdout_data = stdout.readlines()
+        stderr_data = stderr.readlines()
+
         stdout_data = "".join(stdout_data)
         stderr_data = "".join(stderr_data)
         return return_code, stdout_data, stderr_data
