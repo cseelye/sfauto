@@ -47,6 +47,8 @@ class CreateClusterAction(ActionBase):
 
     def ValidateArgs(self, args):
         libsf.ValidateArgs({"node_ip" : libsf.IsValidIpv4Address,
+                            "node_count" : libsf.IsPositiveInteger,
+                            "drive_count" : libsf.IsPositiveInteger,
                             "mvip" : libsf.IsValidIpv4Address,
                             "svip" : libsf.IsValidIpv4Address,
                             "username" : None,
@@ -59,7 +61,9 @@ class CreateClusterAction(ActionBase):
         """
         self.ValidateArgs(locals())
         if debug:
-            mylog.console.setLevel(logging.DEBUG)
+            mylog.showDebug()
+        else:
+            mylog.hideDebug()
 
         mylog.info("Creating cluster with")
         mylog.info("\tMVIP:       " + mvip)
@@ -67,33 +71,27 @@ class CreateClusterAction(ActionBase):
         mylog.info("\tAdmin User: " + username)
         mylog.info("\tAdmin Pass: " + password)
 
-        params = {}
         ntries = 0
         if node_count > 0:
             mylog.info("Waiting for " + str(node_count) + " nodes ...")
         while True:
             try:
-                response = libsf.CallApiMethod(node_ip, username, password, "GetBootstrapConfig", params)
+                bootstrap = libsf.CallApiMethod(node_ip, username, password, "GetBootstrapConfig", {})
             except libsf.SfError as e:
                 mylog.error("Failed to get bootstrap config: " + str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
-            nodelist = response["nodes"]
-            templist = "Nodes: \t"
-            for each in nodelist:
-                ipaddress = each["name"].encode('utf8')
-            	templist += ipaddress + ',\t'
-            mylog.info("\t" + templist)
-            
-            if node_count == 0 or len(nodelist) >= node_count:
+            node_ips = [n["name"] for n in bootstrap["nodes"]]
+            mylog.info("\tNodes:  " + ", ".join(node_ips))
+            if node_count == 0 or len(bootstrap["nodes"]) >= node_count:
                 break
             else:
                 time.sleep(10)
             ntries += 1
             if ntries > 10:
-                mylog.error("Couldn't find " + str(node_count) + " nodes, only found " + str(len(nodelist)))
-                self.RaiseFailureEvent(message="Couldn't find " + str(node_count) + " nodes, only found " + str(len(nodelist)))
+                mylog.error("Couldn't find " + str(node_count) + " nodes, only found " + str(len(bootstrap["nodes"])))
+                self.RaiseFailureEvent(message="Couldn't find " + str(node_count) + " nodes, only found " + str(len(bootstrap["nodes"])))
                 return False
 
         mylog.info("Creating cluster ...")
@@ -102,7 +100,7 @@ class CreateClusterAction(ActionBase):
         params["svip"] = svip
         params["username"] = username
         params["password"] = password
-        params["nodes"] = nodelist
+        params["nodes"] = node_ips
         try:
             libsf.CallApiMethod(node_ip, username, password, "CreateCluster", params)
         except libsf.SfError as e:
@@ -114,42 +112,59 @@ class CreateClusterAction(ActionBase):
         if not add_drives:
             return True
 
-        expected_drives = len(nodelist) * 11
+        # Determine how many drives to expect in the cluster
+        expected_drives = 0
         if (drive_count > 0):
             expected_drives = drive_count
-        mylog.info("Waiting for " + str(expected_drives) + " available drives...")
-        actual_drives = 0
+        else:
+            # Try to use the per-node API get the number of drives
+            for node_ip in node_ips:
+                try:
+                    drive_config = libsf.CallNodeApiMethod(node_ip, username, password, "GetDriveConfig", {})
+                except libsf.SfApiError as e:
+                    if e.name == "xUnknownAPIMethod":
+                        # Assume 11 drives per node
+                        expected_drives += 11
+                        continue
+                    else:
+                        mylog.error(str(e))
+                        self.RaiseFailureEvent(message=str(e), exception=e)
+                        return False
 
+                expected_drives += drive_config["driveConfig"]["numBlockExpected"]
+                expected_drives += drive_config["driveConfig"]["numSliceExpected"]
+
+        mylog.info("Waiting for at least " + str(expected_drives) + " available drives...")
         # Wait a little while to make sure the MVIP is up and ready and the drives have become available
-        time.sleep(30)
-
+        time.sleep(20)
+        actual_drives = 0
         while (actual_drives < expected_drives):
-            params = {}
+            time.sleep(10)
             try:
-                response = libsf.CallApiMethod(mvip, username, password, "ListDrives", params)
+                drivelist = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
             except libsf.SfError as e:
                 mylog.error("Failed to list drives: " + str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
-            actual_drives = len(response["drives"])
+            actual_drives = len(drivelist["drives"])
 
         mylog.info("Adding all drives to cluster...")
         try:
-            response = libsf.CallApiMethod(mvip, username, password, "ListDrives", params)
+            drivelist = libsf.CallApiMethod(mvip, username, password, "ListDrives", {})
         except libsf.SfError as e:
             mylog.error("Failed to list drives: " + str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
-        drive_list = []
-        for i in range(len(response["drives"])):
-            drive = response["drives"][i]
+        params = {}
+        params["drives"] = []
+        for i in range(len(drivelist["drives"])):
+            drive = drivelist["drives"][i]
             if (drive["status"].lower() == "available"):
                 new_drive = dict()
                 new_drive["driveID"] = drive["driveID"]
                 new_drive["type"] = "automatic"
-                drive_list.append(new_drive)
-        params = {}
-        params["drives"] = drive_list
+                params["drives"].append(new_drive)
+
         try:
             libsf.CallApiMethod(mvip, username, password, "AddDrives", params)
         except libsf.SfError as e:
@@ -197,4 +212,3 @@ if __name__ == '__main__':
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
-
