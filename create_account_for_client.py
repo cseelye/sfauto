@@ -78,7 +78,7 @@ class CreateAccountForClientAction(ActionBase):
             mylog.info(client_ip + ": Account " + account_name + " already exists.")
         else:
             # Create the account
-            mylog.info("Creating account '" + account_name + "'")
+            mylog.info(client_ip + ": Creating account '" + account_name + "'")
             init_secret = libsf.MakeSimpleChapSecret()
             target_secret = libsf.MakeSimpleChapSecret()
             params = {}
@@ -165,7 +165,7 @@ class CreateAccountForClientAction(ActionBase):
             thread_index += 1
 
         allgood = libsf.ThreadRunner(self._threads, results, parallel_clients)
-        
+
         if allgood:
             mylog.passed("Successfully created accounts for all clients")
             return True
