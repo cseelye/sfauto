@@ -66,6 +66,7 @@ class PushSshKeysToClientAction(ActionBase):
                 mylog.error("Please place your RSA id in " + key_path)
                 return False
         else:
+            key_path = home + "/.ssh/id_rsa.pub"
             if not os.path.exists(key_path):
                 mylog.info("Creating SSH key for " + local_hostname)
                 libsf.RunCommand("ssh-keygen -q -f ~/.ssh/id_rsa -N \"\"")
