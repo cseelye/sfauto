@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import logging
 from logging.handlers import SysLogHandler
+from logging.handlers import NTEventLogHandler
 import optparse
 from optparse import Option
 import ctypes
@@ -38,6 +39,7 @@ try:
 except ImportError:
     import paramiko as ssh
 import shlex
+import math
 
 class SfError(Exception):
     """
@@ -464,8 +466,14 @@ class mylog:
     sftestlog = logging.getLogger("sftest-py")
     sftestlog.setLevel(logging.DEBUG)
 
-    # Log everything to syslog on non-windows
-    if not platform.system().lower().startswith("win"):
+    # Log everything to the platform appropriate syslog
+    if platform.system().lower().startswith("win"):
+        eventlog_formatter = logging.Formatter("%(levelname)s %(message)s") # prepend with ident and our severities
+        eventlog = NTEventLogHandler("sftest")
+        eventlog.setLevel(logging.DEBUG)
+        eventlog.setFormatter(eventlog_formatter)
+        sftestlog.addHandler(eventlog)
+    else:
         syslog_formatter = logging.Formatter("%(name)s: %(levelname)s %(message)s") # prepend with ident and our severities
         syslog_address = "/dev/log"
         if "darwin" in platform.system().lower(): syslog_address="/var/run/syslog"
@@ -1823,3 +1831,146 @@ def CallbackWrapper(callback):
             mylog.warning("Exception in callback: " + str(e))
 
     return wrapped
+
+def GuessHypervisor():
+    """Attempt to determine if I am a guest and which hypervisor I am in
+
+    Returns:
+        A string hypervisor name, or None if this is a physical machine
+    """
+    if platform.system().lower().startswith("win"):
+        command = 'systeminfo | find "System Manufacturer"'
+        retcode, stdout, stderr = RunCommand(command)
+        if retcode != 0:
+            raise SfError("Could not get system info: " + stderr)
+        if "VMware" in stdout:
+            return "ESX"
+        elif "Xen" in stdout:
+            return Xen
+        else:
+            return None
+
+    else:
+        retcode, stdout, stderr = RunCommand("virt-what")
+        if retcode != 0:
+            raise SfError("virt-what failed: " + stderr)
+        output = stdout.strip().lower()
+        if not output:
+            return None
+        elif "kvm" in output:
+            return "KVM"
+        elif "hyperv" in output:
+            return "HyperV"
+        elif "vmware" in output:
+            return "ESX"
+        elif "xen" in output:
+            return "Xen"
+        else:
+            return output
+
+def CimDatetimeToTimestamp(cimDatetime):
+    """Convert a CIM formatted datetime into a unix timestamp
+    yyyymmddHHMMSS.mmmmmmsUUU
+    20131105183538.493757-420
+
+    Args:
+        cimDatetime: a string containing a CIM datetime
+
+    Returns:
+        An integer unix timestamp
+    """
+    if "-" in cimDatetime:
+        pieces = cimDatetime.split("-")
+        time_str = pieces[0]
+        offset = 0 - int(pieces[1])
+    elif "+" in cimDatetime:
+        pieces = cimDatetime.split("+")
+        time_str = pieces[0]
+        offset = int(pieces[1])
+    else:
+        time_str = cimDatetime
+        offset = 0
+
+    time_str = time_str.split(".")[0]
+
+    parsed = None
+    try:
+        parsed = datetime.datetime.strptime(time_str, "%Y%m%d%H%M%S")
+    except ValueError: pass
+    if parsed:
+        timestamp = calendar.timegm(parsed.timetuple())
+        if timestamp <= 0:
+            timestamp = calendar.timegm(parsed.utctimetuple())
+        if offset > 0:
+            timestamp += offset
+
+    return timestamp
+
+def IPToInteger(ipStr):
+    """Convert a string dotted quad IP address to an integer
+
+    Args:
+        ipStr: the IP address to convert
+
+    Returns:
+        The IP address as an integer
+    """
+    pieces = ipStr.split(".")
+    return (int(pieces[0]) << 24) + (int(pieces[1]) << 16) + (int(pieces[2]) << 8) + int(pieces[3])
+
+def IntegerToIP(ipInt):
+    """Convert an integer IP address to dotted quad notation
+
+    Args:
+        ipInt: the IP address to convert
+
+    Returns:
+        The IP address as a string in dotted quad notation
+    """
+    return ".".join(map(str,[(ipInt & (0xFF << (8*n))) >> 8*n for n in (3, 2, 1, 0)]))
+
+def CalculateNetwork(ipAddress, subnetMask):
+    """Calculate the network given an IP address on the network and the subnet mask of the network
+
+    Args:
+        ipAddress: an IP address on the network
+        subnetMask: the mask of the network
+
+    Returns:
+        The network address in dotted quad notation
+    """
+    ip_int = IPToInteger(ipAddress)
+    mask_int = IPToInteger(subnetMask)
+    network_int = ip_int & mask_int
+    return IntegerToIP(network_int)
+
+def CalculateBroadcast(ipAddress, subnetMask):
+    """Calculate the broadcast address of a network given an IP address on the network and the subnet mask of the network
+
+    Args:
+        ipAddress: an IP address on the network
+        subnetMask: the mask of the network
+
+    Returns:
+        The broadcast address in dotted quad notation
+    """
+    ip_int = IPToInteger(ipAddress)
+    mask_int = IPToInteger(subnetMask)
+    bcast_int = ip_int | ~mask_int
+    return IntegerToIP(bcast_int)
+
+def CalculateNetmask(startIP, endIP):
+    """Calculate the subnet mask of a network given the start and end IP
+
+    Args:
+        startIP: the first IP address in the network
+        endIP: the last IP address in the network
+
+    Returns:
+        The subnet mask in dotted quad notation
+    """
+    start_ip_int = IPToInteger(startIP)
+    end_ip_int = IPToInteger(endIP)
+    mask_int = 0xFFFFFFFF ^ start_ip_int ^ end_ip_int
+    return IntegerToIP(mask_int)
+
