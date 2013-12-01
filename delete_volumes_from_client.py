@@ -50,7 +50,11 @@ class DeleteVolumesFromClientAction(ActionBase):
     def __init__(self):
         super(self.__class__, self).__init__(self.__class__.Events)
 
-    def _ClientThread(self, client_ip, client_user, client_pass, mvip, username, password, accounts_list, results, index):
+    def _ClientThread(self, client_ip, client_user, client_pass, mvip, username, password, accounts_list, results, index, debug):
+        if debug:
+            mylog.showDebug()
+        else:
+            mylog.hideDebug()
         # Connect to the client
         client = SfClient()
         mylog.info(client_ip + ": Connecting to client")
@@ -118,7 +122,9 @@ class DeleteVolumesFromClientAction(ActionBase):
             client_ips = sfdefaults.client_ips
         self.ValidateArgs(locals())
         if debug:
-            mylog.console.setLevel(logging.DEBUG)
+            mylog.showDebug()
+        else:
+            mylog.hideDebug()
 
         # Get a list of accounts from the cluster
         try:
@@ -140,8 +146,7 @@ class DeleteVolumesFromClientAction(ActionBase):
         thread_index = 0
         for client_ip in client_ips:
             results[thread_index] = False
-            th = multiprocessing.Process(target=self._ClientThread, args=(client_ip, client_user, client_pass, accounts_list, results, thread_index, debug))
-            th.start()
+            th = multiprocessing.Process(target=self._ClientThread, args=(client_ip, client_user, client_pass, mvip, username, password, accounts_list, results, thread_index, debug))
             self._threads.append(th)
             thread_index += 1
 
@@ -163,7 +168,7 @@ if __name__ == '__main__':
 
     # Parse command line arguments
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
-    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=",".join(sfdefaults.client_ips), help="the IP addresses of the clients")
+    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=None, help="the IP addresses of the clients")
     parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
@@ -176,7 +181,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.client_ips, options.username, options.password, options.client_user, options.client_pass, options.parallel_thresh, options.parallel_max, options.debug):
+        if Execute(mvip=options.mvip, client_ips=options.client_ips, username=options.username, password=options.password, client_user=options.client_user, client_pass=options.client_pass, parallel_thresh=options.parallel_thresh, parallel_max=options.parallel_max, debug=options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
@@ -188,8 +193,8 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         mylog.warning("Aborted by user")
         Abort()
-        exit(1)
+        sys.exit(1)
     except:
         mylog.exception("Unhandled exception")
-        exit(1)
-    exit(0)
+        sys.exit(1)
+    sys.exit(0)
