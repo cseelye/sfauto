@@ -126,10 +126,10 @@ class ListOption(Option):
         if action == "list":
             # Split on any number of ',' or ' ' and remove empty entries
             lvalue = [i for i in re.split("[,\s]+", value) if i != None]
-
+            if lvalue:
+                setattr(values, dest, lvalue)
             if not values.ensure_value(dest, []):
                 setattr(values, dest, [])
-            values.ensure_value(dest, []).extend(lvalue)
         else:
             Option.take_action(
                 self, action, dest, opt, value, values, parser)
@@ -1973,4 +1973,3 @@ def CalculateNetmask(startIP, endIP):
     end_ip_int = IPToInteger(endIP)
     mask_int = 0xFFFFFFFF ^ start_ip_int ^ end_ip_int
     return IntegerToIP(mask_int)
-
