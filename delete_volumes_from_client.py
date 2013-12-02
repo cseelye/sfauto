@@ -76,10 +76,12 @@ class DeleteVolumesFromClientAction(ActionBase):
                 break
 
         if (account_id <= 0):
-            mylog.error(client_ip + ": Could not find account with name '" + client.Hostname.lower() + "'")
+            mylog.info(client_ip + ": There is no account with name '" + client.Hostname.lower() + "'")
+            mylog.info(client_ip + ": " + client.Hostname + " has no volumes to delete")
+            results[index] = True
             return
         if not volume_ids:
-            mylog.info(client.Hostname + " has no volumes to delete")
+            mylog.info(client_ip + ": " + client.Hostname + " has no volumes to delete")
             results[index] = True
             return
 
