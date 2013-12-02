@@ -245,7 +245,38 @@ class SFNode(object):
         ssh = libsf.ConnectSsh(self.ipAddress, self.sshUsername, self.sshPassword)
         command = "top -b -n 1 | grep master-1"
         stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
-        lines = stdout.readlines() 
+        lines = stdout.readlines()
         index = lines[0].strip().index(" ")
-        command = "kill " + str(lines[0].strip()[:index]) 
-        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)    
+        command = "kill " + str(lines[0].strip()[:index])
+        stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
+
+    def AddNetworkRoute(self, network, subnetMask, gateway):
+        """
+        Add a network route to this node
+        """
+
+        # Per-node API is broken for this in C right now
+        #params = {}
+        #params["network"] = {}
+        #params["network"]["Bond10G"] = {}
+        #params["network"]["Bond10G"]["routes"] = []
+        #route = {}
+        #route["type"] = "net"
+        #route["target"] = network
+        #route["netmask"] = subnetMask
+        #route["gateway"] = gateway
+        #params["network"]["Bond10G"]["routes"].append(route)
+        #libsf.CallNodeApiMethod(self.ipAddress, self.clusterUsername, self.clusterPassword, "SetConfig", params)
+
+        # Temporary until C is fixed - this does not persist across reboots
+        if not self.sshUsername:
+            self.sshUsername = "root"
+        ssh = libsf.ConnectSsh(self.ipAddress, self.sshUsername, self.sshPassword)
+        command = "route add -net " + network + " netmask " + subnetMask + " gw " + gateway
+        mylog.debug("Executing '" + command + "' on host " + self.ipAddress)
+        stdin, stdout, stderr = ssh.exec_command(command)
+        return_code = stdout.channel.recv_exit_status()
+        stdout_data = stdout.readlines()
+        stderr_data = stderr.readlines()
+        if return_code != 0:
+            raise libsf.SfError("Failed to add route: " + "\n".join(stderr_data))
