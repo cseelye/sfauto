@@ -223,14 +223,17 @@ while True:
     # See if we have a vdbench last exit status
     vdbench_exit = -1
     if platform.system().lower().startswith("win"):
-        pass
+        vdb_exit_path = r"C:\vdbench\last_vdbench_exit"
     else:
-        retcode, stdout, stderr = libsf.RunCommand("cat /opt/vdbench/last_vdbench_exit")
-        if retcode == 0:
-            try:
-                vdbench_exit = int(stdout.strip())
-            except ValueError:
-                pass
+        vdb_exit_path = "/opt/vdbench/last_vdbench_exit"
+    try:
+        with open(vdb_exit_path, "r") as f:
+            stat_text = f.read()
+        vdbench_exit = int(stat_text.strip())
+    except IOError:
+        pass
+    except ValueError:
+        pass
 
     # Get the OS platform
     if platform.system().lower().startswith("win"):
@@ -256,7 +259,7 @@ while True:
 
     elif platform.system().lower().startswith("linux"):
         os_simple = "linux"
-        osdetail = " ".join(platform.linux_distribution())
+        osdetail = platform.linux_distribution()[0] + platform.linux_distribution()[1]
     else:
         os_simple = "Unknown"
         osdetail = "Unknown"
