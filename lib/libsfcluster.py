@@ -454,8 +454,19 @@ class SFCluster(object):
                         return True
 
             # Make sure there are no volumes with multiple live secondaries or dead secondaries
-            if "slice" in slice_report:
+            if "slices" in slice_report:
                 for vol in slice_report["slices"]:
+                    if "liveSecondaries" not in vol:
+                        mylog.debug("Slice sync - one or more volumes have no live secondaries")
+                        return True
+                    if len(vol["liveSecondaries"]) > 1:
+                        mylog.debug("Slice sync - one or more volumes have multiple live secondaries")
+                        return True
+                    if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
+                        mylog.debug("Slice sync - one or more volumes have dead secondaries")
+                        return True
+            if "slice" in slice_report:
+                for vol in slice_report["slice"]:
                     if "liveSecondaries" not in vol:
                         mylog.debug("Slice sync - one or more volumes have no live secondaries")
                         return True
