@@ -1855,16 +1855,17 @@ def GuessHypervisor():
         if retcode != 0:
             raise SfError("virt-what failed: " + stderr)
         output = stdout.strip().lower()
+        # Order is important for these tests! sometimes virt-what will repond with multiple answers
         if not output:
             return None
+        elif "xen" in output:
+            return "Xen"
         elif "kvm" in output:
             return "KVM"
         elif "hyperv" in output:
             return "HyperV"
         elif "vmware" in output:
             return "ESX"
-        elif "xen" in output:
-            return "Xen"
         else:
             return output
 
