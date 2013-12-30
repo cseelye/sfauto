@@ -1511,7 +1511,7 @@ class SfClient:
             return sorted(devices)
 
         elif self.RemoteOs == OsType.Linux:
-            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m session -P 3");
+            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m session -P 3 | egrep 'Target:|State:|disk'");
             if retcode != 0: raise ClientError("Could not get volume list: " + stderr)
             new_volume = None
             volumes = dict()
@@ -1630,7 +1630,7 @@ class SfClient:
                 size = pieces[1]
                 sectors[dev] = size
 
-            retcode, raw_iscsiadm, stderr = self.ExecuteCommand("iscsiadm -m session -P 3")
+            retcode, raw_iscsiadm, stderr = self.ExecuteCommand("iscsiadm -m session -P 3 | egrep 'Target:|Portal:|State:|SID:|disk'")
             if retcode != 0: raise ClientError("Could not get volume list: " + stderr)
             new_volume = None
             volumes = dict()
