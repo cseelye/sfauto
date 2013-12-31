@@ -1785,9 +1785,15 @@ def ThreadRunner_counter(threadList, resultList, concurrentThreadCount):
 
     # Check the results
     success_threads = 0
-    for res in resultList.values():
-        if res:
+    for i, val in resultList.items():
+        if val:
             success_threads += 1
+            mylog.debug("Thread " + str(i) + " succeeded")
+        else:
+            mylog.debug("Thread " + str(i) + " failed")
+    #for res in resultList.values():
+    #    if res:
+    #        success_threads += 1
 
     if success_threads == len(threadList):
         return (True, success_threads)

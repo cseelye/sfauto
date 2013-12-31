@@ -63,8 +63,8 @@ class SetVolumeQosAction(ActionBase):
         super(self.__class__, self).__init__(self.__class__.Events)
 
     def ValidateArgs(self, args):
-        libsf.ValidateArgs({"nodeIPs" : libsf.IsValidIpv4AddressList,
-                            "newTime" : None},
+        libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
+                            },
             args)
 
     def _ApiCallThread(self, mvip, username, password, volumeName, volumeID, maxIOPS, minIOPS, burstIOPS, results):
@@ -131,10 +131,11 @@ class SetVolumeQosAction(ActionBase):
         manager = multiprocessing.Manager()
         results = manager.dict()
         self._threads = []
-        for volumeName, volumeID in volumes.items():
+        for volumeID, volumeInfo in volumes.items():
+            volume_name = volumeInfo[name]
             thread_name = "volume-" + str(volumeID)
             results[thread_name] = False
-            th = multiprocessing.Process(target=self._ApiCallThread, args=(mvip, username, password, volumeName, volumeID, maxIOPS, minIOPS, burstIOPS, results))
+            th = multiprocessing.Process(target=self._ApiCallThread, name=thread_name, args=(mvip, username, password, volume_name, volumeID, maxIOPS, minIOPS, burstIOPS, results))
             th.deamon = True
             self._threads.append(th)
 
@@ -195,4 +196,3 @@ if __name__ == '__main__':
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
-

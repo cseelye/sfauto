@@ -113,15 +113,15 @@ class LogoutClientAction(ActionBase):
         # Start the client threads
         manager = multiprocessing.Manager()
         results = manager.dict()
-        all_threads = []
+        self._threads = []
         for client_ip in client_ips:
             thread_name = "client-" + client_ip
             results[thread_name] = False
             th = multiprocessing.Process(target=self._ClientThread, name=thread_name, args=(client_ip, client_user, client_pass, target_list, clean, results))
-            all_threads.append(th)
+            self._threads.append(th)
 
         self._RaiseEvent(self.Events.BEFORE_ALL)
-        allgood = libsf.ThreadRunner(all_threads, results, parallel_clients)
+        allgood = libsf.ThreadRunner(self._threads, results, parallel_clients)
         self._RaiseEvent(self.Events.AFTER_ALL)
 
         if allgood:
