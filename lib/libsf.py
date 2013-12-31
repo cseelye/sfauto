@@ -1081,6 +1081,9 @@ def IsInteger(valueToTest):
 def IsPositiveInteger(valueToTest):
     return IsInteger(valueToTest) and valueToTest >= 0
 
+def IsPositiveNonZeroInteger(valueToTest):
+    return IsInteger(valueToTest) and valueToTest > 0
+
 def IsIntegerList(valueToTest):
     for i in valueToTest:
         if not IsInteger(i):
