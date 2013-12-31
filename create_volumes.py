@@ -60,15 +60,17 @@ class CreateVolumesAction(ActionBase):
         libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
                             "username" : None,
                             "password" : None,
-                            "volume_size" : None,
-                            "volume_count" : None,
+                            "volume_size" : libsf.IsPositiveNonZeroInteger,
+                            "volume_count" : libsf.IsPositiveNonZeroInteger,
                             "min_iops" : libsf.IsInteger,
                             "max_iops" : libsf.IsInteger,
                             "burst_iops" : libsf.IsInteger
                             },
                     args)
+        if not args["account_name"] and args["account_id"] <= 0:
+            raise libsf.SfArgumentError("Please specify an account")
 
-    def Execute(self, volume_size, volume_count, volume_name_in=None, volume_prefix=None, volume_start=1, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=None, account_id=0, wait=0, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, volume_size, volume_count, volume_name_in=None, volume_prefix=None, volume_start=1, enable_512=True, min_iops=100, max_iops=100000, burst_iops=100000, account_name=None, account_id=0, wait=0, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, create_single=False, gib=False, debug=False):
         """
         Create volumes
         """
@@ -77,7 +79,13 @@ class CreateVolumesAction(ActionBase):
 
         self.ValidateArgs(locals())
         if debug:
-            mylog.console.setLevel(logging.DEBUG)
+            mylog.showDebug()
+        else:
+            mylog.hideDebug()
+
+        if volume_count > 1 and volume_name_in:
+            mylog.error("You cannot specify a volume name when creating more than 1 volume")
+            return False
 
         # Find the account
         if account_id > 0:
@@ -98,24 +106,31 @@ class CreateVolumesAction(ActionBase):
         if volume_prefix is None:
             volume_prefix = account_name + "-"
 
-        mylog.info("Volume prefix  = " + volume_prefix)
-        mylog.info("Volume size    = " + str(volume_size) + " GB")
+        if volume_name_in is None:
+            mylog.info("Volume prefix  = " + volume_prefix)
+        else:
+            mylog.info("Volume name  = " + volume_name_in)
+        if gib:
+            mylog.info("Volume size    = " + str(volume_size) + " GB")
+        else:
+            mylog.info("Volume size    = " + str(volume_size) + " GiB")
         mylog.info("Volume count   = " + str(volume_count))
         mylog.info("Max IOPS       = " + str(max_iops))
         mylog.info("Min IOPS       = " + str(min_iops))
         mylog.info("Burst IOPS     = " + str(burst_iops))
         mylog.info("512e           = " + str(enable_512))
 
+        if gib:
+            total_size = volume_size * 1024 * 1024 * 1024
+        else:
+            total_size = volume_size * 1000 * 1000 * 1000
+
         # Create the requested volumes
-        created = 0
-        for vol_num in range(volume_start, volume_start + volume_count):
-            volume_name = volume_prefix + "%05d" % vol_num
-            if volume_name_in and volume_count == 1:
-                volume_name = volume_name_in
+        if volume_count == 1 and volume_name_in:
             params = {}
-            params["name"] = volume_name
+            params["name"] = volume_name_in
             params["accountID"] = account_id
-            params["totalSize"] = int(volume_size * 1000 * 1000 * 1000)
+            params["totalSize"] = int(total_size)
             params["enable512e"] = enable_512
             qos = {}
             qos["maxIOPS"] = max_iops
@@ -128,17 +143,56 @@ class CreateVolumesAction(ActionBase):
                 mylog.error(str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
-            mylog.info("Created volume " + volume_name)
-            created += 1
-            if (wait > 0):
-                time.sleep(wait)
+            mylog.info("Created volume " + volume_name_in)
 
-        if (created == volume_count):
-            mylog.passed("Successfully created " + str(volume_count) + " volumes")
+            mylog.passed("Successfully created 1 volume")
             return True
+
         else:
-            mylog.error("Could not create all volumes")
-            return False
+            volume_names = []
+            for vol_num in range(volume_start, volume_start + volume_count):
+                volume_names.append(volume_prefix + "%05d" % vol_num)
+
+            if create_single:
+                for vol_name in volume_names:
+                    params = {}
+                    params["name"] = vol_name
+                    params["accountID"] = account_id
+                    params["totalSize"] = int(total_size)
+                    params["enable512e"] = enable_512
+                    qos = {}
+                    qos["maxIOPS"] = max_iops
+                    qos["minIOPS"] = min_iops
+                    qos["burstIOPS"] = burst_iops
+                    params["qos"] = qos
+                    try:
+                        libsf.CallApiMethod(mvip, username, password, "CreateVolume", params)
+                    except libsf.SfError as e:
+                        mylog.error(str(e))
+                        self.RaiseFailureEvent(message=str(e), exception=e)
+                        return False
+                    mylog.info("Created volume " + vol_name)
+            else:
+                params = {}
+                params["names"] = volume_names
+                params["accountID"] = account_id
+                params["totalSize"] = int(total_size)
+                params["enable512e"] = enable_512
+                qos = {}
+                qos["maxIOPS"] = max_iops
+                qos["minIOPS"] = min_iops
+                qos["burstIOPS"] = burst_iops
+                params["qos"] = qos
+                mylog.info("Creating volumes...")
+                try:
+                    libsf.CallApiMethod(mvip, username, password, "CreateMultipleVolumes", params, ApiVersion=6.0)
+                except libsf.SfError as e:
+                    mylog.error(str(e))
+                    self.RaiseFailureEvent(message=str(e), exception=e)
+                    return False
+                mylog.passed("Successfully created " + str(volume_count) + " volumes")
+                return True
+
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
@@ -160,16 +214,18 @@ if __name__ == '__main__':
     parser.add_option("--max_iops", type="int", dest="max_iops", default=100000, help="the max sustained IOPS to allow on this volume")
     parser.add_option("--min_iops", type="int", dest="min_iops", default=100, help="the min sustained IOPS to guarentee on this volume")
     parser.add_option("--burst_iops", type="int", dest="burst_iops", default=100000, help="the burst IOPS to allow on this volume")
-    parser.add_option("--512e", action="store_true", dest="enable_512", default=False, help="use 512 sector emulation")
+    parser.add_option("--512e", action="store_true", dest="enable_512", default=False, help="use 512 byte sector emulation")
     parser.add_option("--account_name", type="string", dest="account_name", default=None, help="the account to create the volumes for (either name or id must be specified)")
     parser.add_option("--account_id", type="int", dest="account_id", default=0, help="the account to create the volumes for (either name or id must be specified)")
+    parser.add_option("--gib", action="store_true", dest="gib", default=False, help="create volume size in GiB instead of GB")
+    parser.add_option("--create_single", action="store_true", dest="create_single", default=False, help="create single volumes at once (do not use CreateMultipleVolumes API)")
     parser.add_option("--wait", type="int", dest="wait", default=0, help="how long to wait between creating each volume (seconds)")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.volume_size, options.volume_count, options.volume_name, options.volume_prefix, options.volume_start, options.enable_512, options.min_iops, options.max_iops, options.burst_iops, options.account_name, options.account_id, options.wait, options.mvip, options.username, options.password, options.debug):
+        if Execute(options.volume_size, options.volume_count, options.volume_name, options.volume_prefix, options.volume_start, options.enable_512, options.min_iops, options.max_iops, options.burst_iops, options.account_name, options.account_id, options.wait, options.mvip, options.username, options.password, options.create_single, options.gib, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
