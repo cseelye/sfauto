@@ -12,7 +12,7 @@ Display size can be changed with --columns and --compact
 """
 
 # cover a couple different ways of doing this
-__version__ = '2.3'
+__version__ = '2.4'
 VERSION = __version__
 version = __version__
 
@@ -303,7 +303,7 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
 
     return response.read()
 
-def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, version = 1.0, port = 443):
+def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, version = 1.0, port = 443, timeout = 3):
     rpc_url = 'https://' + pMvip + ':' + str(port) + '/json-rpc/' + ("%1.1f" % version)
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
     password_mgr.add_password(None, rpc_url, pUsername, pPassword)
@@ -316,7 +316,7 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
     response_obj = None
     api_resp = None
     try:
-        api_resp = urllib2.urlopen(rpc_url, api_call, 3 * 60)
+        api_resp = urllib2.urlopen(rpc_url, api_call, timeout * 60)
     except urllib2.HTTPError as e:
         if (e.code == 401):
             print "Invalid cluster admin/password"
@@ -358,6 +358,7 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
 def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     if not pKeyFile or not os.path.exists(pKeyFile): pKeyFile = None
 
+    log.debug("Connecting to " + str(pNodeIp) + " user " + str(pNodeUser) + " pass " + str(pNodePass) + " keyfile " + str(pKeyFile))
     begin = datetime.datetime.now()
     #start_time = datetime.datetime.now()
     ssh = paramiko.SSHClient()
@@ -365,6 +366,9 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     ssh.load_system_host_keys()
     try:
         ssh.connect(pNodeIp, username=pNodeUser, password=pNodePass, key_filename=pKeyFile)
+    except socket.error as e:
+        log.debug("Could not connect to " + pNodeIp + ": " + str(e))
+        return None
     except paramiko.BadAuthenticationType:
         print pNodeIp + " - You must use SSH host keys to connect to this node (try adding your key to the node, or disabling OTP)"
         log.debug(pNodeIp + " - You must use SSH host keys to connect to this node (try adding your key to the node, or disabling OTP)")
@@ -854,9 +858,21 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     info.ExpectedBSCount = 0
     info.ExpectedSSCount = 0
     for node_ip in pNodesInfo.keys():
-        drive_config = CallApiMethod(log, node_ip, pApiUser, pApiPass, "GetDriveConfig", {}, version=6.0, port=442)
-        info.ExpectedBSCount += drive_config["driveConfig"]["numBlockExpected"]
-        info.ExpectedSSCount += drive_config["driveConfig"]["numSliceExpected"]
+        if pNodesInfo[node_ip] == None: continue
+        if pNodesInfo[node_ip].NodeId == 0:
+            continue
+        if info.SfMajorVersion >= 6:
+            drive_config = CallApiMethod(log, node_ip, pApiUser, pApiPass, "GetDriveConfig", {}, version=6.0, port=442)
+            if drive_config:
+                info.ExpectedBSCount += drive_config["driveConfig"]["numBlockExpected"]
+                info.ExpectedSSCount += drive_config["driveConfig"]["numSliceExpected"]
+        else:
+            info.ExpectedSSCount += 2
+            info.ExpectedBSCount += 9
+            if pNodesInfo[node_ip].TotalMemory < 100 * 1024 * 1024 * 1024:
+                # SF3010 have one more BS drive than 6010 or 9010
+                info.ExpectedBSCount += 1
+
     log.debug("Expecting " + str(info.ExpectedBSCount) + " BServices and " + str(info.ExpectedSSCount) + " SServices")
 
     log.debug("gathering cluster info")
@@ -885,7 +901,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
         info.CompressionPercent = int(result["clusterCapacity"]["compressionPercent"])
 
 
-    result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'ListActiveVolumes', {})
+    result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'ListActiveVolumes', {}, timeout=10)
     if result is None:
         log.debug("Failed to get active volumes")
         info.VolumeCount = 0
@@ -894,7 +910,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
             info.VolumeCount = len(result["volumes"])
         else:
             info.VolumeCount = 0
-    result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'ListDeletedVolumes', {})
+    result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'ListDeletedVolumes', {}, timeout=10)
     if result is None:
         log.debug("Failed to get deleted volumes")
         info.VolumeCount = 0
@@ -987,11 +1003,25 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
         # Make sure there are no volumes with multiple live secondaries or any dead secondaries
         if "slices" in slice_report:
             for vol in slice_report["slices"]:
-                if "liveSecondaries" not in vol or len(vol["liveSecondaries"]) < info.ClusterRepCount - 1:
-                    log.debug("Slice sync - one or more volumes have too few live secondaries")
+                if "liveSecondaries" not in vol:
+                    log.debug("Slice sync - one or more volumes have no live secondaries")
                     info.SliceSyncing = "Yes"
                     break
-                if len(vol["liveSecondaries"]) > info.ClusterRepCount - 1:
+                if len(vol["liveSecondaries"]) > 1:
+                    log.debug("Slice sync - one or more volumes have multiple live secondaries")
+                    info.SliceSyncing = "Yes"
+                    break
+                if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
+                    log.debug("Slice sync - one or more volumes have dead secondaries")
+                    info.SliceSyncing = "Yes"
+                    break
+        if "slice" in slice_report:
+            for vol in slice_report["slice"]:
+                if "liveSecondaries" not in vol:
+                    log.debug("Slice sync - one or more volumes have no live secondaries")
+                    info.SliceSyncing = "Yes"
+                    break
+                if len(vol["liveSecondaries"]) > 1:
                     log.debug("Slice sync - one or more volumes have multiple live secondaries")
                     info.SliceSyncing = "Yes"
                     break
@@ -1622,14 +1652,14 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
             screen.set_color(ConsoleColors.YellowFore)
         print "%0.02fx" % (float(pClusterInfo.CompressionPercent)/100),
     else:
-        print "0.00"
+        print "0.00",
     screen.reset()
 
     # GC info
     current_line += 1
     screen.gotoXY(pStartX + 1, pStartY + current_line)
     screen.set_color(ConsoleColors.WhiteFore)
-    print "Last GC Start: ",
+    print " Last GC Start: ",
     screen.reset()
     if not pClusterInfo.LastGc:
         print "never"
@@ -1686,10 +1716,10 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
 
     # Slice load/scache
     columns = 2
-    if len(pClusterInfo.SliceServices) > 20:
+    if len(pClusterInfo.SliceServices.keys()) > 20:
         columns = 4
     count = 0
-    for sliceid in sorted(pClusterInfo.SliceServices):
+    for sliceid in sorted(pClusterInfo.SliceServices.keys()):
         x_offset = 1
         x_offset = count % columns * 43 + 1
         if count % columns == 0:
@@ -2022,12 +2052,12 @@ def ClusterInfoThread(log, pClusterResults, pNodeResults, pInterval, pMvip, pApi
         while True:
             try:
                 cluster_info = GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodeResults, previous_cluster_info, faultWhitelist)
-                if cluster_info: log.debug("got cluster info")
-                else: log.debug("no cluster info")
-
-                pClusterResults[pMvip] = copy.deepcopy(cluster_info)
-                #if shutdown_event.is_set(): break
-                previous_cluster_info = cluster_info
+                if cluster_info:
+                    log.debug("got cluster info")
+                    pClusterResults[pMvip] = copy.deepcopy(cluster_info)
+                    previous_cluster_info = cluster_info
+                else:
+                    log.debug("no cluster info")
                 time.sleep(pInterval)
             except KeyboardInterrupt: raise
             except Exception as e:
@@ -2093,10 +2123,10 @@ if __name__ == '__main__':
 
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the MVIP of the cluster")
     parser.add_option("-n", "--node_ips", type="string", dest="node_ips", default=sfdefaults.node_ips, help="the IP addresses of the nodes (if MVIP is not specified, or nodes are not in a cluster)")
-    parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes [%default]")
-    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes [%default]")
-    parser.add_option("--api_user", type="string", dest="api_user", default=sfdefaults.username, help="the API username for the cluster [%default]")
-    parser.add_option("--api_pass", type="string", dest="api_pass", default=sfdefaults.password, help="the API password for the cluster [%default]")
+    parser.add_option("--ssh_user", type="string", dest="ssh_user", default="sfadmin", help="the SSH username for the nodes [%default]")
+    parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=None, help="the SSH password for the nodes [%default]")
+    parser.add_option("--api_user", type="string", dest="api_user", default="admin", help="the API username for the cluster [%default]")
+    parser.add_option("--api_pass", type="string", dest="api_pass", default="solidfire", help="the API password for the cluster [%default]")
     parser.add_option("--keyfile", type="string", dest="keyfile", default=None, help="the full path to your RSA key (Windows only)")
     parser.add_option("--interval", type="int", dest="interval", default=1, help="the number of seconds between each refresh [%default]")
     parser.add_option("--cluster_interval", type="int", dest="cluster_interval", default=0, help="the number of seconds between each cluster refresh (leave at zero to use the same interval) [%default]")
@@ -2141,7 +2171,7 @@ if __name__ == '__main__':
         if extype == KeyboardInterrupt:
             raise ex
         else:
-            log.debug("Suppressing " + str(extype) + " " + "".join(traceback.format_tb(tb)))
+            log.debug("Suppressing " + str(extype) + "\n" + "".join(traceback.format_tb(tb)) + "\n" + str(ex))
     sys.excepthook = UnhandledException
 
     if mvip:
@@ -2283,8 +2313,8 @@ if __name__ == '__main__':
                     cell_height = node_cell_height
 
             if showclusterinfo and cluster_results.get(mvip):
-                cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices)/2
-                if cluster_cell_height > cell_height or len(cluster_results[mvip].SliceServices) > 20:
+                cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices.keys())/2
+                if cluster_cell_height > cell_height or len(cluster_results[mvip].SliceServices.keys()) > 20:
                     cluster_cell_width = cell_width * 2 - 1
 
             # Determine table height, based on cell height, columns, number of nodes + cell for cluster info
