@@ -90,11 +90,12 @@ class VdbenchWinSvc(win32serviceutil.ServiceFramework):
         self.abortFlag = False
         self.runningFlag = True
         self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
+        servicemanager.LogInfoMsg("Starting VDBench service")
 
         try:
             hostname = platform.node()
             if "template" in hostname or "gold" in hostname:
-                servicemanager.LogWarningMsg("Not starting VDBench because my hostname looks like a template")
+                servicemanager.LogWarningMsg("Not running VDBench because my hostname looks like a template")
                 self.ReportServiceStatus(win32service.SERVICE_RUNNING)
                 return
 
@@ -203,4 +204,3 @@ class VdbenchWinSvc(win32serviceutil.ServiceFramework):
 
 if __name__ == '__main__':
     win32serviceutil.HandleCommandLine(VdbenchWinSvc)
-
