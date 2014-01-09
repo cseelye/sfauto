@@ -92,6 +92,7 @@ Opts::add_options(%opts);
 #{
 #   print "Power off a virtual machine.";
 #   Opts::usage();
+
 #   exit 1;
 #}
 Opts::parse();
