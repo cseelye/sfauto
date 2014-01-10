@@ -40,6 +40,7 @@ except ImportError:
     import paramiko as ssh
 import shlex
 import math
+import struct
 
 class SfError(Exception):
     """
@@ -1855,7 +1856,7 @@ def GuessHypervisor():
         if "VMware" in stdout:
             return "ESX"
         elif "Xen" in stdout:
-            return Xen
+            return "Xen"
         else:
             return None
 
@@ -1983,3 +1984,105 @@ def CalculateNetmask(startIP, endIP):
     end_ip_int = IPToInteger(endIP)
     mask_int = 0xFFFFFFFF ^ start_ip_int ^ end_ip_int
     return IntegerToIP(mask_int)
+
+def ffs(num):
+    """Find the lowest order bit that is set
+
+    Args:
+        num: the number to search
+
+    Returns:
+        The 0-based index of the lowest order bit that is set, or None if no bits are set
+    """
+    if num == 0:
+        return None
+    i = 0
+    while (num % 2) == 0:
+        i += 1
+        num = num >> 1
+    return i
+
+def NetmaskToCIDR(netmask):
+    """Convert dotted-quad netmask to CIDR
+
+    Args:
+        netmask: the string netmask to convert
+
+    Returns:
+        The CIDR number corresponding to the netmask
+    """
+    packed = socket.inet_pton(socket.AF_INET, netmask)
+    int_mask = struct.unpack('!I', packed)[0]
+    lsb = ffs(int_mask)
+    if lsb is None:
+        return 0
+    cidr_mask = 32 - ffs(int_mask)
+    return cidr_mask
+
+def CIDRToNetmask(cidrMask):
+    """Convert a CIDR netmask to dotted-quad string
+
+    Args:
+        cidrMask: the CIDR netmask to convert
+
+    Returns:
+        The dotted-quad string corresponding to the CIDR mask
+    """
+    bits = 0
+    for i in xrange(32 - cidrMask, 32):
+        bits |= (1 << i)
+    return socket.inet_ntoa(struct.pack('>I', bits))
+
+# Implement inet_pton and inet_ntop for Windows
+# From https://gist.github.com/nnemkin/4966028 with minor modifications
+if platform.system().lower().startswith("win"):
+    class sockaddr(ctypes.Structure):
+        _fields_ = [("sa_family", ctypes.c_short),
+                    ("__pad1", ctypes.c_ushort),
+                    ("ipv4_addr", ctypes.c_byte * 4),
+                    ("ipv6_addr", ctypes.c_byte * 16),
+                    ("__pad2", ctypes.c_ulong)]
+
+    WSAStringToAddressA = ctypes.windll.ws2_32.WSAStringToAddressA
+    WSAAddressToStringA = ctypes.windll.ws2_32.WSAAddressToStringA
+
+    def inet_pton(address_family, ip_string):
+        addr = sockaddr()
+        addr.sa_family = address_family
+        addr_size = ctypes.c_int(ctypes.sizeof(addr))
+
+        if WSAStringToAddressA(ip_string, address_family, None, ctypes.byref(addr), ctypes.byref(addr_size)) != 0:
+            raise socket.error(ctypes.FormatError())
+
+        if address_family == socket.AF_INET:
+            return ctypes.string_at(addr.ipv4_addr, 4)
+        if address_family == socket.AF_INET6:
+            return ctypes.string_at(addr.ipv6_addr, 16)
+
+        raise socket.error('unknown address family')
+
+    def inet_ntop(address_family, packed_ip):
+        addr = sockaddr()
+        addr.sa_family = address_family
+        addr_size = ctypes.c_int(ctypes.sizeof(addr))
+        ip_string = ctypes.create_string_buffer(128)
+        ip_string_size = ctypes.c_int(ctypes.sizeof(addr))
+
+        if address_family == socket.AF_INET:
+            if len(packed_ip) != ctypes.sizeof(addr.ipv4_addr):
+                raise socket.error('packed IP wrong length for inet_ntoa')
+            ctypes.memmove(addr.ipv4_addr, packed_ip, 4)
+        elif address_family == socket.AF_INET6:
+            if len(packed_ip) != ctypes.sizeof(addr.ipv6_addr):
+                raise socket.error('packed IP wrong length for inet_ntoa')
+            ctypes.memmove(addr.ipv6_addr, packed_ip, 16)
+        else:
+            raise socket.error('unknown address family')
+
+        if WSAAddressToStringA(ctypes.byref(addr), addr_size, None, ip_string, ctypes.byref(ip_string_size)) != 0:
+            raise socket.error(ctypes.FormatError())
+
+        return ip_string[:ip_string_size.value]
+
+    socket.inet_pton = inet_pton
+    socket.inet_ntop = inet_ntop
