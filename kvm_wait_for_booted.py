@@ -152,9 +152,9 @@ class KvmWaitForBootedAction(ActionBase):
         if vmNames is None:
             #get list of VM names
             mylog.info("No list of VM names provided. Trying to get a full list from hypervisor")
-            vm_names = kvm_list_vm_names.Get(vmhost=vmHost, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False)
+            vmNames = kvm_list_vm_names.Get(vmhost=vmHost, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, debug=False)
 
-            if vm_names == False:
+            if vmNames == False:
                 mylog.error("Could not get a list of VMs from the hypervisor")
                 return False
 
@@ -162,9 +162,9 @@ class KvmWaitForBootedAction(ActionBase):
         mylog.info("Connecting to " + vmHost)
         try:
             if connection == "ssh":
-                conn = libvirt.openReadOnly("qemu+ssh://" + vmhost + "/system")
+                conn = libvirt.open("qemu+ssh://" + vmHost + "/system")
             elif connection == "tcp":
-                conn = libvirt.openReadOnly("qemu+tcp://" + vmhost + "/system")
+                conn = libvirt.open("qemu+tcp://" + vmHost + "/system")
             else:
                 mylog.error("There was an error connecting to libvirt on " + vmHost + " wrong connection type: " + connection)
                 return False
@@ -179,10 +179,10 @@ class KvmWaitForBootedAction(ActionBase):
         while not all_good:
 
             #get a list of VMs that are not currently on
-            new_vm_names = self.checkVMstatusOn(conn, vm_names)
+            new_vm_names = self.checkVMstatusOn(conn, vmNames)
 
             #if all the VMs are on then return true
-            if new_vm_names == True and self.checkPingVMStatus(conn, vmHost, hostUser, hostPass, vm_names) == True:
+            if new_vm_names == True and self.checkPingVMStatus(conn, vmHost, hostUser, hostPass, vmNames) == True:
                 mylog.passed("All the VMs are powered on")
                 return True
 
