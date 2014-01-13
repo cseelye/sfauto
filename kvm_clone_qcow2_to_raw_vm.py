@@ -194,7 +194,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
 
         mylog.step("Waiting for the VM to boot")
         vmNames = [vmName]
-        if kvm_wait_for_booted.Execute(vmHost. hostUser. hostPass, connection, vmNames) == False:
+        if kvm_wait_for_booted.Execute(vmHost, hostUser, hostPass, connection, vmNames) == False:
             mylog.error("Failed waiting for " + vmName + " to boot")
             return False
 
