@@ -39,10 +39,12 @@ import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 import libvirt
+import kvm_wait_for_booted
 try:
     import xml.etree.cElementTree as ElementTree
 except ImportError:
     import xml.etree.ElementTree as ElementTree
+
 
 
 class KvmCloneQcow2ToRawVmAction(ActionBase):
@@ -190,18 +192,14 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
             mylog.error("There was and error trying to power on the VM. Message: " + str(e))
             return False
 
-        mylog.step("Waiting 2 minutes for the VM to boot")
-        time.sleep(120)
-
-        [state, maxmem, mem, ncpu, cputime] = newvm.info()
-        if state == libvirt.VIR_DOMAIN_RUNNING:
-            mylog.info("The VM has powered on successfully")
-
-        elif state == libvirt.VIR_DOMAIN_SHUTOFF:
-            mylog.error("The VM has not powered on successfully")
+        mylog.step("Waiting for the VM to boot")
+        vmNames = [vmName]
+        if kvm_wait_for_booted.Execute(vmHost. hostUser. hostPass, connection, vmNames) == False:
+            mylog.error("Failed waiting for " + vmName + " to boot")
             return False
 
-
+        #let the first boot script to run
+        time.sleep(120)
         mylog.step("Now powering off the VM")
 
         try:
