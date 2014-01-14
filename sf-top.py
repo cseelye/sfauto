@@ -471,7 +471,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     process_names2pids = dict()
     process_pids2names = dict()
     process_pids2disks = dict()
-    stdin, stdout, stderr = ssh.exec_command("\\ps -eo comm,pid,args --no-headers | \\egrep '^block|^slice|^master|^service_manager|^sfnetwd|^sfconfig|^java.+zookeeper'")
+    stdin, stdout, stderr = ssh.exec_command("\\ps -eo comm,pid,args --no-headers | \\egrep '^bulkvolume|^block|^slice|^master|^service_manager|^sfnetwd|^sfconfig|^java.+zookeeper'")
     data = stdout.readlines()
     for line in data:
         m = re.search(r'(\S+)\s+(\d+).+localdisk=(\S+)', line)
