@@ -110,6 +110,12 @@ class XenShutdownVmsAction(ActionBase):
                 self.RaiseFailureEvent(message="Could not find VM '" + vm_name + "'")
                 return False
             vm_ref = vm_ref[0]
+            try:
+                vm = session.xenapi.VM.get_record(vm_ref)
+            except XenAPI.Failure as e:
+                mylog.error("Could not get VM record - " + str(e))
+                self.RaiseFailureEvent(message=str(e), exception=e)
+                return False
             if vm["power_state"] == "Halted":
                 mylog.passed(vm_name + " is already shut down")
                 return True
