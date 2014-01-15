@@ -83,7 +83,7 @@ class XenPoweroffVmsAction(ActionBase):
         if not results[VmName]:
             mylog.error("  " + VmName + ": Failed to power off")
 
-    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_xen,  host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, parallel_thresh=sfdefaults.xenapi_parallel_calls_thresh, parallel_max=sfdefaults.xenapi_parallel_calls_max, debug=False):
+    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vm_list_input=None, vmhost=sfdefaults.vmhost_xen,  host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, parallel_thresh=sfdefaults.xenapi_parallel_calls_thresh, parallel_max=sfdefaults.xenapi_parallel_calls_max, debug=False):
         """
         Power on VMs
         """
@@ -139,12 +139,22 @@ class XenPoweroffVmsAction(ActionBase):
             return False
 
         matched_vms = dict()
+        if vm_list_input:
+            res = set(vm_list_input).intersection(vm_list.keys())
+            res = list(res)
+            notFound = set(vm_list_input) - set(vm_list.keys())
+            notFound = list(notFound)
+            if len(notFound) > 0:
+                mylog.error(str(len(notFound)) + " VMs were not found: " + ", ".join(notFound))
+            for vname in res:
+                matched_vms[vname] = vm_list[vname]
+
         for vname in sorted(vm_list.keys()):
             if vm_regex:
                 m = re.search(vm_regex, vname)
                 if m:
                     matched_vms[vname] = vm_list[vname]
-            else:
+            elif vm_list_input is None:
                 matched_vms[vname] = vm_list[vname]
 
             if vm_count > 0 and len(matched_vms) >= vm_count:
@@ -201,6 +211,7 @@ if __name__ == '__main__':
     parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the single VM to power off")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match names of VMs to power off")
     parser.add_option("--vm_count", type="int", dest="vm_count", default=0, help="the number of matching VMs to power off (0 to use all)")
+    parser.add_option("--vm_list", action="list", dest="vm_list_input", default=None, help="A list of VMs that you want to power off")
     parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=sfdefaults.xenapi_parallel_calls_thresh, help="do not use multiple threads unless there are more than this many [%default]")
     parser.add_option("--parallel_max", type="int", dest="parallel_max", default=sfdefaults.xenapi_parallel_calls_max, help="the max number of threads to use [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -208,7 +219,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vmhost, options.host_user, options.host_pass, options.parallel_thresh, options.parallel_max, options.debug):
+        if Execute(options.vm_name, options.vm_regex, options.vm_count, options.vm_list_input, options.vmhost, options.host_user, options.host_pass, options.parallel_thresh, options.parallel_max, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
