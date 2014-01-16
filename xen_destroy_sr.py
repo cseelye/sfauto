@@ -58,7 +58,7 @@ class XenDestroySrAction(ActionBase):
         else:
             mylog.error("Could not find SR matching " + sr_name)
             return False
-        
+
      # Get a list of PBDs for the SR
         pbd_ref_list = sr['PBDs']
         pbd_list = dict()
@@ -107,7 +107,8 @@ class XenDestroySrAction(ActionBase):
         mylog.passed("Successfully unplugged SR " + sr['name_label'])
 
         try:
-            session.xenapi.SR.destroy(sr_ref)
+            session.xenapi.SR.forget(sr_ref)
+            #session.xenapi.SR.destroy(sr_ref)
         except XenAPI.Failure as e:
             mylog.error("Could not Destroy the SR " + sr_name + " Error: " + str(e))
             return False
@@ -158,7 +159,7 @@ class XenDestroySrAction(ActionBase):
             else:
                 mylog.error("Could not find SR matching " + sr_name)
                 return False
-            
+
             # Get a list of PBDs for the SR
             pbd_ref_list = sr['PBDs']
             pbd_list = dict()
@@ -207,7 +208,8 @@ class XenDestroySrAction(ActionBase):
             mylog.passed("Successfully unplugged SR " + sr['name_label'])
 
             try:
-                session.xenapi.SR.destroy(sr_ref)
+                session.xenapi.SR.forget(sr_ref)
+                #session.xenapi.SR.destroy(sr_ref)
             except XenAPI.Failure as e:
                 mylog.error("Could not Destroy the SR " + sr_name + " Error: " + str(e))
                 return False
@@ -215,7 +217,7 @@ class XenDestroySrAction(ActionBase):
             return True
 
 
-        #if the sr_regex was specified 
+        #if the sr_regex was specified
         else:
             srList = None
             #get a list of the SRs
@@ -271,7 +273,7 @@ class XenDestroySrAction(ActionBase):
                         self._threads.append(th)
 
                     #run all the threads
-                    allgood = libsf.ThreadRunner(self._threads, results, parallel_calls)`
+                    allgood = libsf.ThreadRunner(self._threads, results, parallel_calls)
                     if allgood:
                         mylog.passed("All SRs were destroyed on 2nd run")
                         return True
@@ -280,7 +282,7 @@ class XenDestroySrAction(ActionBase):
                         return False
 
 
-            
+
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
 libsf.PopulateActionModule(sys.modules[__name__])
