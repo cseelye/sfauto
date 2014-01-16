@@ -96,7 +96,7 @@ class XenDeleteVmsAction(ActionBase):
         else:
             mylog.error("  " + vm_name + ": Failed to delete")
 
-    def Execute(self, vm_name=None, vm_regex=None, vm_count=0, vmhost=sfdefaults.vmhost_xen, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, parallel_thresh=sfdefaults.xenapi_parallel_calls_thresh, parallel_max=sfdefaults.xenapi_parallel_calls_max, debug=False):
+    def Execute(self, vm_name=None, vm_regex=None, vm_list_input=None, vm_count=0, vmhost=sfdefaults.vmhost_xen, host_user=sfdefaults.host_user, host_pass=sfdefaults.host_pass, parallel_thresh=sfdefaults.xenapi_parallel_calls_thresh, parallel_max=sfdefaults.xenapi_parallel_calls_max, debug=False):
         """
         Delete VMs
         """
@@ -140,6 +140,7 @@ class XenDeleteVmsAction(ActionBase):
                 return False
             vm['ref'] = vm_ref
             matched_vms[vm['name_label']] = vm
+
         else:
             mylog.info("Searching for matching VMs")
             try:
@@ -149,16 +150,28 @@ class XenDeleteVmsAction(ActionBase):
                 self.RaiseFailureEvent(message=str(e), exception=e)
                 return False
 
+                if vm_list_input:
+                    res = set(vm_list_input).intersection(vm_list.keys())
+                    res = list(res)
+                    notFound = set(vm_list_input) - set(vm_list.keys())
+                    notFound = list(notFound)
+                    if len(notFound) > 0:
+                        mylog.error(str(len(notFound)) + " VMs were not found: " + ", ".join(notFound))
+                    for vname in res:
+                        matched_vms[vname] = vm_list[vname]
+
             for vname in sorted(vm_list.keys()):
                 if vm_regex:
+                    mylog.info("Using regex: " + vm_regex)
                     m = re.search(vm_regex, vname)
                     if m:
                         matched_vms[vname] = vm_list[vname]
-                else:
+                elif vm_list_input is None:
                     matched_vms[vname] = vm_list[vname]
 
                 if vm_count > 0 and len(matched_vms) >= vm_count:
                     break
+
 
         if len(matched_vms.keys()) <= 0:
             mylog.info("No VMs found")
@@ -211,6 +224,7 @@ if __name__ == '__main__':
     parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to delete")
     parser.add_option("--vm_regex", type="string", dest="vm_regex", default=None, help="the regex to match names of VMs to delete")
     parser.add_option("--vm_count", type="int", dest="vm_count", default=0, help="the number of matching VMs to delete (0 to use all)")
+    parser.add_option("--vm_list", action="list", dest="vm_list_input", default=None, help="A list of VMs that you want to power off")
     parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=sfdefaults.xenapi_parallel_calls_thresh, help="do not use multiple threads unless there are more than this many [%default]")
     parser.add_option("--parallel_max", type="int", dest="parallel_max", default=sfdefaults.xenapi_parallel_calls_max, help="the max number of threads to use [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -218,7 +232,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(vm_name=options.vm_name, vm_regex=options.vm_regex, vm_count=options.vm_count, vmhost=options.vmhost, host_user=options.host_user, host_pass=options.host_pass, parallel_thresh=options.parallel_thresh, parallel_max=options.parallel_max, debug=options.debug):
+        if Execute(vm_name=options.vm_name, vm_regex=options.vm_regex, vm_list_input=options.vm_list_input, vm_count=options.vm_count, vmhost=options.vmhost, host_user=options.host_user, host_pass=options.host_pass, parallel_thresh=options.parallel_thresh, parallel_max=options.parallel_max, debug=options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
