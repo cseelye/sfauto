@@ -12,7 +12,7 @@ Display size can be changed with --columns and --compact
 """
 
 # cover a couple different ways of doing this
-__version__ = '2.4'
+__version__ = '2.5'
 VERSION = __version__
 version = __version__
 
@@ -397,7 +397,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     command += ";\\free -o"
     command += ";touch -t " + timestamp + " /tmp/timestamp;echo newcores=`find /sf -maxdepth 1 -name \"core*\" -newer /tmp/timestamp | wc -l`"
     command += ";echo allcores=`ls -1 /sf/core* | wc -l`"
-    command += ";\\cat /proc/mounts | \\egrep '^/dev|pendingDirtyBlocks'"
+    command += ";sudo \\cat /proc/mounts | \\egrep '^/dev|pendingDirtyBlocks'"
     command += ";grep nodeID /etc/solidfire.json"
     ver_string = ""
     volumes = dict()
@@ -471,7 +471,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     process_names2pids = dict()
     process_pids2names = dict()
     process_pids2disks = dict()
-    stdin, stdout, stderr = ssh.exec_command("\\ps -eo comm,pid,args --no-headers | \\egrep '^bulkvolume|^block|^slice|^master|^service_manager|^sfnetwd|^sfconfig|^java.+zookeeper'")
+    stdin, stdout, stderr = ssh.exec_command("sudo \\ps -eo comm,pid,args --no-headers | \\egrep '^bulkvolume|^block|^slice|^master|^service_manager|^sfnetwd|^sfconfig|^java.+zookeeper'")
     data = stdout.readlines()
     for line in data:
         m = re.search(r'(\S+)\s+(\d+).+localdisk=(\S+)', line)
@@ -523,17 +523,17 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     sample_interval = 2
     command = ""
     command += "\\ifconfig | \\egrep -i 'eth|bond|lo|inet|RX bytes';"
-    command += "\\grep sd /proc/diskstats"
+    command += "sudo \\grep sd /proc/diskstats"
     if len(usage.Processes.keys()) > 0:
-        command += ";\\grep bytes"
+        command += ";sudo \\grep bytes"
         for pid in usage.Processes.iterkeys():
             command += " /proc/" + str(pid) + "/io"
     command += ";"
-    command += "\\top -b -d " + str(sample_interval) + " -n 2;"
+    command += "sudo \\top -b -d " + str(sample_interval) + " -n 2;"
     command += "\\ifconfig | \\egrep -i 'eth|bond|lo|inet|RX bytes|dropped|MTU';"
-    command += "\\grep sd /proc/diskstats"
+    command += "sudo \\grep sd /proc/diskstats"
     if len(usage.Processes.keys()) > 0:
-        command += ";\\grep bytes"
+        command += ";sudo \\grep bytes"
         for pid in usage.Processes.iterkeys():
             command += " /proc/" + str(pid) + "/io"
     stdin, stdout, stderr = ssh.exec_command(command)
@@ -705,7 +705,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     #start_time = datetime.datetime.now()
     command = ""
     for pid in usage.Processes.iterkeys():
-        command += "echo " + str(pid) + " = `\\grep VmRSS /proc/" + str(pid) + "/status`;"
+        command += "echo " + str(pid) + " = `sudo \\grep VmRSS /proc/" + str(pid) + "/status`;"
     command = command.strip(";")
     stdin, stdout, stderr = ssh.exec_command(command)
     data = stdout.readlines()
@@ -724,7 +724,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     #start_time = datetime.datetime.now()
     current_time = 0
     system_boot_time = 0
-    stdin, stdout, stderr = ssh.exec_command("echo CurrentDate=`date +%s`;cat /proc/stat")
+    stdin, stdout, stderr = ssh.exec_command("echo CurrentDate=`date +%s`;sudo cat /proc/stat")
     data = stdout.readlines()
     for line in data:
         m = re.search(r"CurrentDate=(\d+)", line)
@@ -742,7 +742,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     #start_time = datetime.datetime.now()
     command = ""
     for pid in usage.Processes.keys():
-        command += "\\cat /proc/" + str(pid) + "/stat;"
+        command += "sudo \\cat /proc/" + str(pid) + "/stat;"
     command = command.strip(";")
     stdin, stdout, stderr = ssh.exec_command(command)
     data = stdout.readlines()
