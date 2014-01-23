@@ -206,6 +206,8 @@ class ClusterInfo:
         self.NodeCount = 0
         self.LastGc = GCInfo()
         self.ClusterRepCount = 2
+        self.NVRAMFaultsWarn = []
+        self.NVRAMFaultsError = []
 
 class GCInfo(object):
     """
@@ -789,6 +791,11 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
 
     info = ClusterInfo()
 
+    node_list = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'ListAllNodes', {})
+    nodeID2nodeName = {}
+    for node in node_list["nodes"]:
+        nodeID2nodeName[node["nodeID"]] = node["name"]
+
     log.debug("checking node info")
 
     info.NodeCount = len(pNodesInfo.keys())
@@ -945,7 +952,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
 
     if sf_version == 3 and info.TotalSpace > 0:
         full = info.TotalSpace - (3600 * 1000 * 1000 * 1000)
-        # account for binary/si mismatch in solidfire calculation
+        # account for binary/si mismatch in solidfire calculation in Be and earlier
         full = int(float(full) / float(1024*1024*1024*1024) * float(1000*1000*1000*1000))
         info.ClusterFullThreshold = full
     elif sf_version >= 4:
@@ -971,6 +978,18 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     else:
         current_faults = set()
         for fault in result["faults"]:
+            if fault["code"] == "nodeHardwareFault" and "NVRAM" in fault["details"]:
+                m = re.search("{(.+)}", fault["details"])
+                if m:
+                    if fault["nodeID"] in nodeID2nodeName:
+                        nv_fault = nodeID2nodeName[fault["nodeID"]] + " NVRAM " + m.group(1)
+                    else:
+                        nv_fault = "NodeID " + str(fault["nodeID"]) + " NVRAM " + m.group(1)
+                    if fault["severity"] == "warning":
+                        info.NVRAMFaultsWarn.append(nv_fault)
+                    else:
+                        info.NVRAMFaultsError.append(nv_fault)
+
             if fault["code"] in faultWhitelist:
                 if fault["code"] not in info.WhitelistClusterFaults:
                     info.WhitelistClusterFaults.append(fault["code"])
@@ -1849,6 +1868,20 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
                 print " " + fault,
             screen.reset()
 
+    # NVRAM specific faults
+    if len(pClusterInfo.NVRAMFaultsError) > 0:
+        screen.set_color(ConsoleColors.RedFore)
+        for fault in pClusterInfo.NVRAMFaultsError:
+            current_line += 1
+            screen.gotoXY(pStartX + 1, pStartY + current_line)
+            print " " + fault
+    if len(pClusterInfo.NVRAMFaultsWarn) > 0:
+        screen.set_color(ConsoleColors.YellowFore)
+        for fault in pClusterInfo.NVRAMFaultsWarn:
+            current_line += 1
+            screen.gotoXY(pStartX + 1, pStartY + current_line)
+            print " " + fault
+
     # 'bad' events
     if (len(pClusterInfo.OldEvents) > 0):
         current_line += 1
@@ -2316,6 +2349,8 @@ if __name__ == '__main__':
                 cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices.keys())/2
                 if cluster_cell_height > cell_height or len(cluster_results[mvip].SliceServices.keys()) > 20:
                     cluster_cell_width = cell_width * 2 - 1
+
+            log.debug("cell_height = %d, cluster_cell_height = %d, cell_width = %d, cluster_cell_width = %d" % (cell_height, cluster_cell_height, cell_width, cluster_cell_width))
 
             # Determine table height, based on cell height, columns, number of nodes + cell for cluster info
             previous_table_height = table_height
