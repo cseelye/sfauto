@@ -2354,7 +2354,7 @@ if __name__ == '__main__':
 
             # Determine table height, based on cell height, columns, number of nodes + cell for cluster info
             previous_table_height = table_height
-            if compact:
+            if compact or not showclusterinfo:
                 table_height =  math.ceil(float(len(node_ips)) / float(columns)) * (cell_height + 1) + originy
             else:
                 if cluster_cell_width > cell_width:
