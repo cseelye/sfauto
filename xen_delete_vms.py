@@ -106,6 +106,13 @@ class XenDeleteVmsAction(ActionBase):
         else:
             mylog.hideDebug()
 
+        selection = [vm_name, vm_regex, vm_list_input]
+        selection = [a for a in selection if a != None]
+        if len(selection) != 1:
+            mylog.error("Incorrect selection. Please only use 1 option 'vm_name', 'vm_regex', or 'vm_list'")
+            return False
+
+
         # Connect to the host/pool
         mylog.info("Connecting to " + vmhost)
         session = None
@@ -159,10 +166,11 @@ class XenDeleteVmsAction(ActionBase):
                         mylog.error(str(len(notFound)) + " VMs were not found: " + ", ".join(notFound))
                     for vname in res:
                         matched_vms[vname] = vm_list[vname]
+                else:
+                    mylog.info("Using regex: " + vm_regex)
 
             for vname in sorted(vm_list.keys()):
                 if vm_regex:
-                    mylog.info("Using regex: " + vm_regex)
                     m = re.search(vm_regex, vname)
                     if m:
                         matched_vms[vname] = vm_list[vname]
