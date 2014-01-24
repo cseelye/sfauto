@@ -98,6 +98,16 @@ class LocalTimezone(datetime.tzinfo):
         tt = time.localtime(stamp)
         return tt.tm_isdst > 0
 
+class UTCTimezone(datetime.tzinfo):
+    def utcoffset(self, dt):
+        return datetime.timedelta(0)
+
+    def tzname(self, dt):
+        return "UTC"
+
+    def dst(self, dt):
+        return datetime.timedelta(0)
+
 class NodeInfo:
     def __init__(self):
         self.Timestamp = time.time()
@@ -117,6 +127,7 @@ class NodeInfo:
         self.ClusterMaster = False
         self.Processes = dict()
         self.Nics = dict()
+        self.Uptime = 0
 
 class ProcessResourceUsage:
     def __init__(self):
@@ -392,17 +403,18 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     # Get the hostname, sf version, node memory usage, core files, mounts
     #
     #start_time = datetime.datetime.now()
-    timestamp = TimestampToStr(START_TIME, "%Y%m%d%H%M.%S")
+    start_timestamp = TimestampToStr(START_TIME, "%Y%m%d%H%M.%S", UTCTimezone())
     command = ""
     command += "echo hostname=`\\hostname`"
     command += ";/sf/bin/sfapp --Version -laAll 0"
     command += ";\\free -o"
-    command += ";touch -t " + timestamp + " /tmp/timestamp;echo newcores=`find /sf -maxdepth 1 -name \"core*\" -newer /tmp/timestamp | wc -l`"
+    command += ";touch -t " + start_timestamp + " /tmp/timestamp;echo newcores=`find /sf -maxdepth 1 -name \"core*\" -newer /tmp/timestamp | wc -l`"
     command += ";echo allcores=`ls -1 /sf/core* | wc -l`"
     command += ";sudo \\cat /proc/mounts | \\egrep '^/dev|pendingDirtyBlocks'"
     command += ";grep nodeID /etc/solidfire.json"
     ver_string = ""
     volumes = dict()
+    #log.debug(command)
     stdin, stdout, stderr = ssh.exec_command(command)
     data = stdout.readlines()
     #log.debug("\n".join(data))
@@ -735,6 +747,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         m = re.search(r"btime\s+(\d+)", line)
         if (m):
             system_boot_time = int(m.group(1))
+    usage.Uptime = current_time - system_boot_time
     #time_time = datetime.datetime.now() - start_time
     #time_time = time_time.microseconds + time_time.seconds * 1000000
 
@@ -1305,24 +1318,28 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
 
     if (top.EnsembleNode):
         print "*",
+    else:
+        print " ",
     if (top.ClusterMaster):
         print "^",
+    else:
+        print " ",
+
+    print " Up: " + SecondsToElapsedStr(top.Uptime),
     screen.reset()
+
     if (top.CoresTotal > 0):
         screen.set_color(ConsoleColors.YellowFore)
     if (top.CoresSinceStart > 0):
         screen.set_color(ConsoleColors.RedFore)
     if (top.CoresTotal > 0 or top.CoresSinceStart > 0):
-        if pCompact:
-            print " [Cores]",
-        else:
-            print " [CoreFiles]",
+        print " [Cores]",
 
     screen.reset()
     if pCompact:
-        update_str = TimestampToStr(top.Timestamp)
+        update_str = TimestampToStr(top.Timestamp, "%m-%d %H:%M:%S")
     else:
-        update_str = ' Updated: ' + TimestampToStr(top.Timestamp)
+        update_str = ' Refresh: ' + TimestampToStr(top.Timestamp, "%m-%d %H:%M:%S")
     screen.gotoXY(startx + cell_width - len(update_str) - 2, starty + current_line)
     if time.time() - top.Timestamp > 60:
         screen.set_color(ConsoleColors.YellowFore)
@@ -2027,6 +2044,11 @@ def SingleNodeThread(log, pResults, pNodeIp, pNodeUser, pNodePass, pKeyFile=None
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         top = GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile)
         pResults[pNodeIp] = top
+    except IOError as e:
+        if e.errno == 4:
+            pass
+        else:
+            log.debug("exception: " + str(e) + " - " + traceback.format_exc())
     except Exception as e:
         log.debug("exception: " + str(e) + " - " + traceback.format_exc())
 
