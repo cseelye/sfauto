@@ -336,21 +336,21 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
             sys.exit(1)
         else:
             if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
-                log.debug("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
+                log.debug("Failed calling " + pMethodName + " - HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
                 return None
             else:
-                log.debug("HTTPError: " + str(e.code))
+                log.debug("Failed calling " + pMethodName + " - HTTPError: " + str(e.code))
                 return None
     except urllib2.URLError as e:
-        log.debug("URLError on " + rpc_url + " : " + str(e.reason))
+        log.debug("Failed calling " + pMethodName + " - URLError on " + rpc_url + " : " + str(e.reason))
         return None
     except httplib.BadStatusLine as e:
-        log.debug("httplib.BadStatusLine: " + str(e))
+        log.debug("Failed calling " + pMethodName + " - httplib.BadStatusLine: " + str(e))
         return None
     except KeyboardInterrupt:
         raise
     except Exception as e:
-        log.debug("Unhandled exception in CallApiMethod: " + str(e) + " - " + traceback.format_exc())
+        log.debug("Failed calling " + pMethodName + " - Unhandled exception in CallApiMethod: " + str(e) + " - " + traceback.format_exc())
         return None
 
     if (api_resp != None):
@@ -1549,7 +1549,7 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     screen.set_color(ConsoleColors.CyanFore)
     print ' Cluster Name: ' + pClusterInfo.ClusterName
     screen.reset()
-    update_str = ' Updated: ' + TimestampToStr(pClusterInfo.Timestamp)
+    update_str = ' Refresh: ' + TimestampToStr(pClusterInfo.Timestamp)
     screen.gotoXY(pStartX + pCellWidth - len(update_str) - 2, pStartY + current_line)
     print update_str
     screen.reset()
@@ -2164,6 +2164,7 @@ class FallbackTerminal:
     def gotoXY(self, x, y): pass
     def reset(self): pass
     def clear(self): pass
+    def set_title(self): pass
 
 START_TIME = time.time()
 LOCAL_TZ = LocalTimezone()
@@ -2311,6 +2312,7 @@ if __name__ == '__main__':
     previous_cell_height = 0
     table_height = 0
     clear_table = False
+    cluster_name = None
     try:
         while True:
             #screen.gotoXY(originx, originy)
@@ -2346,6 +2348,15 @@ if __name__ == '__main__':
                             break
                     if mvip:
                         break
+
+            if mvip and not cluster_name:
+                api_result = CallApiMethod(log, mvip, api_user, api_pass, 'GetClusterInfo', {})
+                if api_result:
+                    cluster_name = api_result["clusterInfo"]["name"]
+                    if platform.system().lower() == 'windows':
+                        screen.set_title(cluster_name)
+                    else:
+                        sys.stdout.write("\x1b]2;" + cluster_name + "\x07")
 
             # Start the cluster info thread if we haven't already
             if showclusterinfo and mvip and ("ClusterInfoThread" not in all_threads or all_threads["ClusterInfoThread"] == None):
