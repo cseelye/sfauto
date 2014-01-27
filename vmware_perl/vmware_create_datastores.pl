@@ -144,7 +144,8 @@ eval
 
         my @pieces = split(/\./, $iqn);
         my $datastore_name = pop @pieces;
-        $datastore_name = pop(@pieces) . "." . $datastore_name;
+        #$datastore_name = pop(@pieces) . "." . $datastore_name;
+        $datastore_name = pop(@pieces);# . "." . $datastore_name;
 
         mylog::info("Creating datastore $datastore_name on disk $canonical_name...");
         push (@return_disk_list, $datastore_name);
