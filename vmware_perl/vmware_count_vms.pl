@@ -91,11 +91,17 @@ eval
     my $count = 0;
     foreach my $vm (@$vm_list)
     {
+        # my $name = $vm->name;
+        # mylog::debug("Found $name");
+        # if ($name =~ /^${vm_prefix}0*(\d+)$/i)
+        # {
+        #     $count = $count + 1;
+        # }
         my $name = $vm->name;
         mylog::debug("Found $name");
-        if ($name =~ /^${vm_prefix}0*(\d+)$/i)
+        if ($name =~ m/$vm_prefix/)
         {
-            $count++;
+            $count = $count + 1;
         }
     }
 
