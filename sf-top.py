@@ -113,6 +113,7 @@ class NodeInfo:
         self.Timestamp = time.time()
         self.Hostname = 'Unknown'
         self.SfVersion = 'Unknown'
+        self.SfVersionStringRaw = 'Unknown'
         self.TotalMemory = 0
         self.UsedMemory = 0
         self.CacheMemory = 0
@@ -465,16 +466,32 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     # sfapp Debug Version: 4.08 sfdev: 1.91 Revision: 58220b8bd90a Build date: 2012-01-07 14:28 Tag: TSIP4v1
     # sfapp BuildType=Release UC Release=lithium Version=3.45 sfdev=1.92 Revision=a7ca42f12f32 BuildDate=2012-02-13@12:20
     # sfapp BuildType=Release,UC Release=lithium Version=3.49 sfdev=1.93 Revision=80c48b6aab2f BuildDate=2012-02-21@14:22
-    ver_string = re.sub(r"sfapp\s+", "", ver_string)
-    ver_string = re.sub(r"BuildType=", "", ver_string)
-    ver_string = re.sub(r"Release=\S+\s+", "", ver_string)
-    ver_string = re.sub(r"Version", "Ver", ver_string)
-    ver_string = re.sub(r"sfdev:\s+\d+\.\d+\s+", "", ver_string)
-    ver_string = re.sub(r"sfdev=\d+\.\d+\s+", "", ver_string)
-    ver_string = re.sub(r"Revision", "Rev", ver_string)
-    ver_string = re.sub(r"md5=\S+\s+", "", ver_string)
-    #ver_string = re.sub("Build date: ", "", ver_string)
-    usage.SfVersion = ver_string.strip()
+    # sfapp BuildType=Release Element=boron Release=boron ReleaseShort=boron Version=5.1256 sfdev=5.18-p3 Repository=boron Revision=b2eb203dfaf6 BuildDate=2013-09-10@17:28 md5=d1e1ebf84d4f6de7293be55fed59e39b
+    # sfapp BuildType=Release,UC,CXXFLAGS Element=carbon Release=carbon-joe-merklesyncing ReleaseShort=carbon-joe-merklesyncing Version=6.325 sfdev=6.21 Repository=joe-merklesyncing Revision=80614a6c4dfc BuildDate=2014-01-28@08:56 Tag='[joe-merklesyncing]' CXXFLAGS=-Wno-unused-local-typedefs md5=8f0e4bf47a994d5e982155e301f6bc86
+    usage.SfVersionStringRaw = ver_string
+    ver_info = {}
+    parts = re.split("\s+", ver_string)
+    for part in parts:
+        if "=" not in part:
+            continue
+        key, value = part.split("=")
+        ver_info[key] = value
+
+    disp_parts = []
+    if "Version" in ver_info:
+        disp_parts.append(ver_info["Version"])
+    if "Repository" in ver_info:
+        disp_parts.append(ver_info["Repository"])
+    if "Revision" in ver_info:
+        disp_parts.append(ver_info["Revision"])
+    if "BuildDate" in ver_info:
+        disp_parts.append(ver_info["BuildDate"])
+    if "Tag" in ver_info:
+        disp_parts.append(ver_info["Tag"].strip("'"))
+    if "BuildType" in ver_info:
+        disp_parts.append(ver_info["BuildType"])
+    usage.SfVersion = ",".join(disp_parts)
+
     #time_ver = datetime.datetime.now() - start_time
     #time_ver = time_ver.microseconds + time_ver.seconds * 1000000
 
@@ -817,7 +834,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     for node_ip in pNodesInfo.keys():
         if pNodesInfo[node_ip] == None:
             continue
-        m = re.search(r'Ver=(\d+\.\d+)', pNodesInfo[node_ip].SfVersion)
+        m = re.search(r'Version=(\d+\.\d+)', pNodesInfo[node_ip].SfVersionStringRaw)
         if m:
             ver_str = m.group(1)
             pieces = ver_str.split(".")
@@ -1584,7 +1601,7 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         screen.set_color(ConsoleColors.YellowFore)
     else:
         screen.set_color(ConsoleColors.GreenFore)
-    print "%-2d" % pClusterInfo.BSCount,
+    print "%-2d / %d" % (pClusterInfo.BSCount, pClusterInfo.ExpectedBSCount),
     screen.set_color(ConsoleColors.WhiteFore)
     print "  SS count: ",
     screen.reset()
@@ -1592,7 +1609,7 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         screen.set_color(ConsoleColors.YellowFore)
     else:
         screen.set_color(ConsoleColors.GreenFore)
-    print "%-2d" % pClusterInfo.SSCount
+    print "%-2d / %d" % (pClusterInfo.SSCount, pClusterInfo.ExpectedSSCount)
 
     # accounts, volumes, iSCSI sessions, IOPs
     current_line += 1
