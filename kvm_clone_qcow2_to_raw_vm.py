@@ -82,7 +82,7 @@ class KvmCloneQcow2ToRawVmAction(ActionBase):
 
         try:
             vm_xml = ElementTree.parse("kvm_template_xml.xml")
-        except IOError as e:
+        except Exception as e:
             mylog.error("Could not open template XML file. Message: " + str(e))
             return False
 
