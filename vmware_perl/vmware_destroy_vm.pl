@@ -20,10 +20,60 @@ my %opts = (
         required => 0,
         default => Opts::get_option("server"),
     },
+    datacenter => {
+        type => "=s",
+        help => "Name of the datacenter to search",
+        required => 0,
+    },
+    folder => {
+        type => "=s",
+        help => "Name of vm folder to search",
+        required => 0,
+    },
+    pool => {
+        type => "=s",
+        help => "Name of resource pool to search",
+        required => 0,
+    },
+    cluster => {
+        type => "=s",
+        help => "Name of ESX cluster to search",
+        required => 0,
+    },
+    recurse => {
+        type => "",
+        help => "Include VMs in subfolders/pools",
+        required => 0,
+    },
     vm_name => {
         type => "=s",
-        help => "The name of the virtual machine to register",
-        required => 1,
+        help => "The name of the virtual machine",
+        required => 0,
+    },
+    vm_regex => {
+        type => "=s",
+        help => "The regex to match names of virtual machines",
+        required => 0,
+    },
+    vm_count => {
+        type => "=s",
+        help => "The number of matching virtual machines",
+        required => 0,
+    },
+    vm_power => {
+        type => "=s",
+        help => "The power state to match VMs (on, off)",
+        required => 0,
+    },
+    csv => {
+        type => "",
+        help => "Display a minimal output that is formatted as a comma separated list",
+        required => 0,
+    },
+    bash => {
+        type => "",
+        help => "Display a minimal output that is formatted as a space separated list",
+        required => 0,
     },
     result_address => {
         type => "=s",
@@ -48,9 +98,19 @@ if (scalar(@ARGV) < 1)
 Opts::parse();
 my $vsphere_server = Opts::get_option("mgmt_server");
 Opts::set_option("server", $vsphere_server);
+my $dc_name = Opts::get_option("datacenter");
+my $folder_name = Opts::get_option("folder");
+my $pool_name = Opts::get_option('pool');
+my $cluster_name = Opts::get_option('cluster');
+my $recurse = Opts::get_option('recurse');
 my $vm_name = Opts::get_option('vm_name');
-my $result_address = Opts::get_option('result_address');
+my $vm_regex = Opts::get_option('vm_regex');
+my $vm_count = Opts::get_option('vm_count');
+my $vm_power = Opts::get_option('vm_power');
 my $enable_debug = Opts::get_option('debug');
+my $csv = Opts::get_option('csv');
+my $bash = Opts::get_option('bash');
+my $result_address = Opts::get_option('result_address');
 Opts::validate();
 
 
@@ -72,19 +132,50 @@ if ($@){
    exit 1;
 }
 
-eval {
 
-    mylog::info("Destroying VM '$vm_name'");
-    
-    my $vm = Vim::find_entity_view(view_type => 'VirtualMachine', filter => {'name' => qr/^$vm_name$/i});
-    if (!$vm){
-        mylog::error("Could not find the VM '$vm_name'");
+
+my @vm_list;
+eval
+{
+    @vm_list = libvmware::SearchForVms(datacenter_name => $dc_name, cluster_name => $cluster_name, pool_name => $pool_name, folder_name => $folder_name, recurse => $recurse, vm_name => $vm_name, vm_regex => $vm_regex, vm_count => $vm_count, vm_powerstate => $vm_power);
+    if (scalar(@vm_list) <= 0)
+    {
+        mylog::warn("There are no matching VMs");
         exit 1;
     }
+};
+if ($@)
+{
+    libvmware::DisplayFault("Error", $@);
+    exit 1;
+}
 
-    #$vm->UnregisterVM;
-    $vm->Destroy();
+# Get VM names
+my @vm_names;
+foreach my $vm_mor (@vm_list)
+{
+    my $vm = Vim::get_view(mo_ref => $vm_mor, properties => ['name']);
+    push @vm_names, $vm->name;
+}
+@vm_names = sort @vm_names;
 
+
+
+eval {
+
+    foreach my $vm_name (@vm_names)
+    {
+        mylog::info("Destroying VM '$vm_name'");
+
+        my $vm = Vim::find_entity_view(view_type => 'VirtualMachine', filter => {'name' => qr/^$vm_name$/i});
+        if (!$vm){
+            mylog::error("Could not find the VM '$vm_name'");
+            exit 1;
+        }
+
+        #$vm->UnregisterVM;
+        $vm->Destroy();
+    }
 
 };
 if ($@) {
