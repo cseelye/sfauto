@@ -12,7 +12,7 @@ Display size can be changed with --columns and --compact
 """
 
 # cover a couple different ways of doing this
-__version__ = '2.5'
+__version__ = '2.6'
 VERSION = __version__
 version = __version__
 
@@ -211,6 +211,7 @@ class ClusterInfo:
         self.LastGcDiscarded = 0
         self.SliceServices = dict()
         self.SfMajorVersion = 0
+        self.CustomBinary = False
         self.ExpectedBSCount = 0
         self.ExpectedSSCount = 0
         self.AvailableDriveCount = 0
@@ -220,6 +221,7 @@ class ClusterInfo:
         self.ClusterRepCount = 2
         self.NVRAMFaultsWarn = []
         self.NVRAMFaultsError = []
+        self.MultipleMvips = False
 
 class GCInfo(object):
     """
@@ -412,13 +414,13 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     command += ";touch -t " + start_timestamp + " /tmp/timestamp;echo newcores=`find /sf -maxdepth 1 -name \"core*\" -newer /tmp/timestamp | wc -l`"
     command += ";echo allcores=`ls -1 /sf/core* | wc -l`"
     command += ";sudo \\cat /proc/mounts | \\egrep '^/dev|pendingDirtyBlocks'"
-    command += ";grep nodeID /etc/solidfire.json"
+    command += ";sudo grep nodeID /etc/solidfire.json"
     ver_string = ""
     volumes = dict()
     #log.debug(command)
     stdin, stdout, stderr = ssh.exec_command(command)
     data = stdout.readlines()
-    #log.debug("\n".join(data))
+    #log.debug("".join(data))
     for line in data:
         m = re.search(r'^hostname=(.+)', line)
         if (m):
@@ -821,96 +823,84 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
 
     info = ClusterInfo()
 
-    node_list = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'ListAllNodes', {})
+    # table of nodeID => name
     nodeID2nodeName = {}
-    for node in node_list["nodes"]:
-        nodeID2nodeName[node["nodeID"]] = node["name"]
+    node_list = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'ListAllNodes', {})
+    if node_list:
+        for node in node_list["nodes"]:
+            nodeID2nodeName[node["nodeID"]] = node["name"]
 
     log.debug("checking node info")
-
     info.NodeCount = len(pNodesInfo.keys())
 
-    sf_version = 0
-    for node_ip in pNodesInfo.keys():
-        if pNodesInfo[node_ip] == None:
-            continue
-        m = re.search(r'Version=(\d+\.\d+)', pNodesInfo[node_ip].SfVersionStringRaw)
-        if m:
-            ver_str = m.group(1)
-            pieces = ver_str.split(".")
-            sf_version = int(pieces[0])
-            break
-    info.SfMajorVersion = sf_version
-
-    # find the cluster master
-    master = None
-    for node_ip in pNodesInfo.keys():
-        if pNodesInfo[node_ip] == None: continue
-        for nic_name in pNodesInfo[node_ip].Nics.keys():
-            if (re.search(r'eth0:', nic_name)):
-                master = pNodesInfo[node_ip].Hostname
-                break
-            if (re.search(r'bond0:', nic_name)):
-                master = pNodesInfo[node_ip].Hostname
-                break
-            if (re.search(r'bond1g:', nic_name, re.IGNORECASE)):
-                master = pNodesInfo[node_ip].Hostname
-                break
-        if master != None:
-            break
-    if (master != None):
-        info.ClusterMaster = master
-
-    # compare node software versions
-    same = True
-    debug = False
-    for n1 in pNodesInfo.keys():
-        if pNodesInfo[n1] == None: continue
-        if "debug" in pNodesInfo[n1].SfVersion.lower():
-            debug = True
-        for n2 in pNodesInfo.keys():
-            if pNodesInfo[n2] == None: continue
-            if pNodesInfo[n1].SfVersion != pNodesInfo[n2].SfVersion:
-                same = False
-    info.SameSoftwareVersions = same
-    info.DebugSoftware = debug
-
-    # Core files
-    for node_ip in pNodesInfo.keys():
-        if pNodesInfo[node_ip] == None: continue
-        if pNodesInfo[node_ip].CoresSinceStart > 0:
-            info.NewCores.append(pNodesInfo[node_ip].Hostname)
-        elif pNodesInfo[node_ip].CoresTotal - pNodesInfo[node_ip].CoresSinceStart > 0:
-            info.OldCores.append(pNodesInfo[node_ip].Hostname)
-
-    # NVRAM mount
-    for node_ip in pNodesInfo.keys():
-        if pNodesInfo[node_ip] == None: continue
-        if not pNodesInfo[node_ip].NvramMounted:
-            info.NvramNotMounted.append(pNodesInfo[node_ip].Hostname)
-        if "ram" in pNodesInfo[node_ip].NvramDevice:
-            info.NvramRamdrive.append(pNodesInfo[node_ip].Hostname)
-
-    # Expected service counts
+    # Loop through the node objects looking for various things
+    info.SfMajorVersion = 0
+    ver = None
+    mvip_count = 0
     info.ExpectedBSCount = 0
     info.ExpectedSSCount = 0
     for node_ip in pNodesInfo.keys():
-        if pNodesInfo[node_ip] == None: continue
-        if pNodesInfo[node_ip].NodeId == 0:
+        if pNodesInfo[node_ip] == None:
             continue
-        if info.SfMajorVersion >= 6:
-            drive_config = CallApiMethod(log, node_ip, pApiUser, pApiPass, "GetDriveConfig", {}, version=6.0, port=442)
-            if drive_config:
-                info.ExpectedBSCount += drive_config["driveConfig"]["numBlockExpected"]
-                info.ExpectedSSCount += drive_config["driveConfig"]["numSliceExpected"]
-        else:
-            info.ExpectedSSCount += 2
-            info.ExpectedBSCount += 9
-            if pNodesInfo[node_ip].TotalMemory < 100 * 1024 * 1024 * 1024:
-                # SF3010 have one more BS drive than 6010 or 9010
-                info.ExpectedBSCount += 1
+        node = pNodesInfo[node_ip]
+
+        # Major version of sfapp
+        if info.SfMajorVersion == 0:
+            m = re.search(r'Version=(\d+\.\d+)', node.SfVersionStringRaw)
+            if m:
+                ver_str = m.group(1)
+                pieces = ver_str.split(".")
+                info.SfMajorVersion = int(pieces[0])
+
+        # Look for different sfapp versions on the nodes
+        if ver == None:
+            ver = node.SfVersionStringRaw
+        if node.SfVersionStringRaw != ver:
+            info.SameSoftwareVersions = False
+
+        # Look for debug builds
+        if "Debug" in node.SfVersionStringRaw:
+            info.DebugSoftware = True
+
+        # Look for custom binaries
+        if "Tag" in node.SfVersionStringRaw or "UC" in node.SfVersionStringRaw or "CXXFLAGS" in node.SfVersionStringRaw:
+            info.CustomBinary = True
+
+        # Check for nodes that have the MVIP online
+        for nic_name in node.Nics.keys():
+            if node.Nics[nic_name].IpAddress == pMvip:
+                mvip_count += 1
+
+        # Check for core files on nodes
+        if node.CoresSinceStart > 0:
+            info.NewCores.append(node.Hostname)
+        elif node.CoresTotal - node.CoresSinceStart > 0:
+            info.OldCores.append(node.Hostname)
+
+        # Check NVRAM mount
+        if not node.NvramMounted:
+            info.NvramNotMounted.append(node.Hostname)
+        if "ram" in node.NvramDevice:
+            info.NvramRamdrive.append(node.Hostname)
+
+        # Expected service counts
+        if node.NodeId > 0:
+            if info.SfMajorVersion >= 6:
+                drive_config = CallApiMethod(log, node_ip, pApiUser, pApiPass, "GetDriveConfig", {}, version=6.0, port=442)
+                if drive_config:
+                    info.ExpectedBSCount += drive_config["driveConfig"]["numBlockExpected"]
+                    info.ExpectedSSCount += drive_config["driveConfig"]["numSliceExpected"]
+            else:
+                info.ExpectedSSCount += 2
+                info.ExpectedBSCount += 9
+                if node.TotalMemory < 100 * 1024 * 1024 * 1024:
+                    # SF3010 have one more BS drive than 6010 or 9010
+                    info.ExpectedBSCount += 1
 
     log.debug("Expecting " + str(info.ExpectedBSCount) + " BServices and " + str(info.ExpectedSSCount) + " SServices")
+    if mvip_count > 1:
+        info.MultipleMvips = True
+
 
     log.debug("gathering cluster info")
 
@@ -924,6 +914,11 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     info.Svip = result['clusterInfo']['svip']
     info.UniqueId = result['clusterInfo']['uniqueID']
     info.ClusterRepCount = result['clusterInfo']['repCount']
+
+    if result['clusterInfo']['mvipNodeID'] in nodeID2nodeName:
+        info.ClusterMaster = nodeID2nodeName[result['clusterInfo']['mvipNodeID']]
+    else:
+        info.ClusterMaster = "nodeID " + str(result['clusterInfo']['mvipNodeID'])
 
     result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'GetClusterCapacity', {})
     if result is None:
@@ -980,12 +975,12 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     info.TSCount = ts_count
     info.MSCount = ms_count
 
-    if sf_version == 3 and info.TotalSpace > 0:
+    if info.SfMajorVersion == 3 and info.TotalSpace > 0:
         full = info.TotalSpace - (3600 * 1000 * 1000 * 1000)
         # account for binary/si mismatch in solidfire calculation in Be and earlier
         full = int(float(full) / float(1024*1024*1024*1024) * float(1000*1000*1000*1000))
         info.ClusterFullThreshold = full
-    elif sf_version >= 4:
+    elif info.SfMajorVersion >= 4:
         result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'GetClusterFullThreshold', {})
         if result:
             info.ClusterFullThreshold = result["fullness"]
@@ -1039,45 +1034,46 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
     if info.SfMajorVersion >= 5:
         # Get the slice assignments report
         result = HttpRequest(log, "https://" + pMvip + "/reports/slices.json", pApiUser, pApiPass)
-        slice_report = json.loads(result)
+        if result:
+            slice_report = json.loads(result)
 
-        # Make sure there are no unhealthy services
-        if "services" in slice_report:
-            for ss in slice_report["services"]:
-                if ss["health"] != "good":
-                    log.debug("Slice sync - one or more SS are unhealthy")
-                    info.SliceSyncing = "Yes"
-                    break
+            # Make sure there are no unhealthy services
+            if "services" in slice_report:
+                for ss in slice_report["services"]:
+                    if ss["health"] != "good":
+                        log.debug("Slice sync - one or more SS are unhealthy")
+                        info.SliceSyncing = "Yes"
+                        break
 
-        # Make sure there are no volumes with multiple live secondaries or any dead secondaries
-        if "slices" in slice_report:
-            for vol in slice_report["slices"]:
-                if "liveSecondaries" not in vol:
-                    log.debug("Slice sync - one or more volumes have no live secondaries")
-                    info.SliceSyncing = "Yes"
-                    break
-                if len(vol["liveSecondaries"]) > 1:
-                    log.debug("Slice sync - one or more volumes have multiple live secondaries")
-                    info.SliceSyncing = "Yes"
-                    break
-                if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
-                    log.debug("Slice sync - one or more volumes have dead secondaries")
-                    info.SliceSyncing = "Yes"
-                    break
-        if "slice" in slice_report:
-            for vol in slice_report["slice"]:
-                if "liveSecondaries" not in vol:
-                    log.debug("Slice sync - one or more volumes have no live secondaries")
-                    info.SliceSyncing = "Yes"
-                    break
-                if len(vol["liveSecondaries"]) > 1:
-                    log.debug("Slice sync - one or more volumes have multiple live secondaries")
-                    info.SliceSyncing = "Yes"
-                    break
-                if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
-                    log.debug("Slice sync - one or more volumes have dead secondaries")
-                    info.SliceSyncing = "Yes"
-                    break
+            # Make sure there are no volumes with multiple live secondaries or any dead secondaries
+            if "slices" in slice_report:
+                for vol in slice_report["slices"]:
+                    if "liveSecondaries" not in vol:
+                        log.debug("Slice sync - one or more volumes have no live secondaries")
+                        info.SliceSyncing = "Yes"
+                        break
+                    if len(vol["liveSecondaries"]) > 1:
+                        log.debug("Slice sync - one or more volumes have multiple live secondaries")
+                        info.SliceSyncing = "Yes"
+                        break
+                    if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
+                        log.debug("Slice sync - one or more volumes have dead secondaries")
+                        info.SliceSyncing = "Yes"
+                        break
+            if "slice" in slice_report:
+                for vol in slice_report["slice"]:
+                    if "liveSecondaries" not in vol:
+                        log.debug("Slice sync - one or more volumes have no live secondaries")
+                        info.SliceSyncing = "Yes"
+                        break
+                    if len(vol["liveSecondaries"]) > 1:
+                        log.debug("Slice sync - one or more volumes have multiple live secondaries")
+                        info.SliceSyncing = "Yes"
+                        break
+                    if "deadSecondaries" in vol and len(vol["deadSecondaries"]) > 0:
+                        log.debug("Slice sync - one or more volumes have dead secondaries")
+                        info.SliceSyncing = "Yes"
+                        break
     else:
         sync_html = HttpRequest(log, "https://" + pMvip + "/reports/slicesyncing", pApiUser, pApiPass)
         if (sync_html != None and "table" in sync_html):
@@ -1139,31 +1135,45 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
             if ("GCStarted" in event["message"]):
                 gc_info = GCInfo()
                 gc_info.StartTime = ParseTimestamp(event['timeOfReport'])
-                m = re.search(r"GC generation:(\d+).+participatingSServices={(.+)}.+eligibleBSs={(.+)}", event["details"])
-                if m:
-                    gc_info.Generation = int(m.group(1))
-                    gc_info.ParticipatingSSSet = set(map(int, m.group(2).split(",")))
-                    gc_info.EligibleBSSet = set(map(int, m.group(3).split(",")))
+                if isinstance(event["details"], basestring):
+                    m = re.search(r"GC generation:(\d+).+participatingSServices={(.+)}.+eligibleBSs={(.+)}", event["details"])
+                    if m:
+                        gc_info.Generation = int(m.group(1))
+                        gc_info.ParticipatingSSSet = set(map(int, m.group(2).split(",")))
+                        gc_info.EligibleBSSet = set(map(int, m.group(3).split(",")))
+                        gc_objects[gc_info.Generation] = gc_info
+                elif isinstance(event["details"], dict):
+                    gc_info.Generation = event["details"]["generation"]
+                    gc_info.ParticipatingSSSet = set(event["details"]["participatingSS"])
+                    gc_info.EligibleBSSet = set(event["details"]["eligibleBS"])
                     gc_objects[gc_info.Generation] = gc_info
 
             if ("GCRescheduled" in event["message"]):
-                m = re.search(r"GC rescheduled:(\d+)", event["details"])
-                if m:
-                    generation = int(m.group(1))
-                    if generation in gc_objects:
-                        gc_objects[generation].Rescheduled = True
-                        gc_objects[generation].EndTime = ParseTimestamp(event['timeOfReport'])
-                    else:
-                        gc_info = GCInfo()
-                        gc_info.Generation = generation
-                        gc_info.StartTime = ParseTimestamp(event['timeOfReport'])
-                        gc_info.Rescheduled = True
-                        gc_objects[gc_info.Generation] = gc_info
+                if isinstance(event["details"], basestring):
+                    m = re.search(r"GC rescheduled:(\d+)", event["details"])
+                    if m:
+                        generation = int(m.group(1))
+                elif isinstance(event["details"], dict):
+                    generation = event["details"]["generation"]
+
+                if generation in gc_objects:
+                    gc_objects[generation].Rescheduled = True
+                    gc_objects[generation].EndTime = ParseTimestamp(event['timeOfReport'])
+                else:
+                    gc_info = GCInfo()
+                    gc_info.Generation = generation
+                    gc_info.StartTime = ParseTimestamp(event['timeOfReport'])
+                    gc_info.Rescheduled = True
+                    gc_objects[gc_info.Generation] = gc_info
 
             if ("GCCompleted" in event["message"]):
-                pieces = event["details"].split(" ")
-                generation = int(pieces[0])
-                blocks_discarded = int(pieces[1])
+                if isinstance(event["details"], basestring):
+                    pieces = event["details"].split(" ")
+                    generation = int(pieces[0])
+                    blocks_discarded = int(pieces[1])
+                elif isinstance(event["details"], dict):
+                    generation = event["details"]["generation"]
+                    blocks_discarded = event["details"]["discardedBlocks"]
                 service_id = int(event["serviceID"])
                 end_time = ParseTimestamp(event['timeOfReport'])
                 if generation in gc_objects:
@@ -1171,6 +1181,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
                     gc_objects[generation].DiscardedBytes += (blocks_discarded * 4096)
                     if end_time > gc_objects[generation].EndTime:
                         gc_objects[generation].EndTime = end_time
+
         gc_list = []
         for gen in sorted(gc_objects.keys()):
             gc_list.append(gc_objects[gen])
@@ -1209,7 +1220,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
         if drive["status"] == "available":
             info.AvailableDriveCount += 1
         if drive["status"] == "failed":
-                    info.FailedDriveCount += 1
+            info.FailedDriveCount += 1
 
     return info
 
@@ -1601,7 +1612,7 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         screen.set_color(ConsoleColors.YellowFore)
     else:
         screen.set_color(ConsoleColors.GreenFore)
-    print "%-2d / %d" % (pClusterInfo.BSCount, pClusterInfo.ExpectedBSCount),
+    print "%d/%d" % (pClusterInfo.BSCount, pClusterInfo.ExpectedBSCount),
     screen.set_color(ConsoleColors.WhiteFore)
     print "  SS count: ",
     screen.reset()
@@ -1609,7 +1620,7 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         screen.set_color(ConsoleColors.YellowFore)
     else:
         screen.set_color(ConsoleColors.GreenFore)
-    print "%-2d / %d" % (pClusterInfo.SSCount, pClusterInfo.ExpectedSSCount)
+    print "%d/%d" % (pClusterInfo.SSCount, pClusterInfo.ExpectedSSCount)
 
     # accounts, volumes, iSCSI sessions, IOPs
     current_line += 1
@@ -1823,11 +1834,16 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         screen.set_color(ConsoleColors.RedFore)
         print " Software versions do not match on all cluster nodes"
         screen.reset()
-    if (pClusterInfo.DebugSoftware):
+    if pClusterInfo.DebugSoftware or pClusterInfo.CustomBinary:
         current_line += 1
         screen.gotoXY(pStartX + 1, pStartY + current_line)
         screen.set_color(ConsoleColors.YellowFore)
-        print " Debug software running on cluster"
+        if pClusterInfo.DebugSoftware and pClusterInfo.CustomBinary:
+            print " Running debug build custom binary"
+        elif pClusterInfo.CustomBinary:
+            print " Running custom binary"
+        elif pClusterInfo.DebugSoftware:
+            print " Running debug build"
         screen.reset()
 
     # NVRAM mount
@@ -1870,52 +1886,6 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
         print " "
         screen.reset()
 
-    # cluster faults
-    if len(pClusterInfo.WhitelistClusterFaults) > 0:
-        current_line += 1
-        screen.gotoXY(pStartX + 1, pStartY + current_line)
-        screen.set_color(ConsoleColors.WhiteFore)
-        print " Whitelisted Faults:",
-        screen.reset()
-        for fault in pClusterInfo.WhitelistClusterFaults:
-            print " " + fault,
-        print " "
-
-        if len(pClusterInfo.ClusterFaultsWarn) + len(pClusterInfo.ClusterFaultsError) + len(pClusterInfo.ClusterFaultsCrit) > 0:
-            current_line += 1
-            screen.gotoXY(pStartX + 1, pStartY + current_line)
-            screen.set_color(ConsoleColors.WhiteFore)
-            print " Cluster Faults:",
-
-            screen.set_color(fg=ConsoleColors.YellowFore, bk=ConsoleColors.RedBack)
-            for fault in pClusterInfo.ClusterFaultsCrit:
-                print " " + fault,
-            screen.reset()
-
-            screen.set_color(ConsoleColors.RedFore)
-            for fault in pClusterInfo.ClusterFaultsError:
-                print " " + fault,
-            screen.reset()
-
-            screen.set_color(ConsoleColors.YellowFore)
-            for fault in pClusterInfo.ClusterFaultsWarn:
-                print " " + fault,
-            screen.reset()
-
-    # NVRAM specific faults
-    if len(pClusterInfo.NVRAMFaultsError) > 0:
-        screen.set_color(ConsoleColors.RedFore)
-        for fault in pClusterInfo.NVRAMFaultsError:
-            current_line += 1
-            screen.gotoXY(pStartX + 1, pStartY + current_line)
-            print " " + fault
-    if len(pClusterInfo.NVRAMFaultsWarn) > 0:
-        screen.set_color(ConsoleColors.YellowFore)
-        for fault in pClusterInfo.NVRAMFaultsWarn:
-            current_line += 1
-            screen.gotoXY(pStartX + 1, pStartY + current_line)
-            print " " + fault
-
     # 'bad' events
     if (len(pClusterInfo.OldEvents) > 0):
         current_line += 1
@@ -1953,6 +1923,57 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
             print " %d Available Drives" % pClusterInfo.AvailableDriveCount
         else:
             print " %d Available Drive" % pClusterInfo.AvailableDriveCount
+
+    # cluster faults
+    if len(pClusterInfo.WhitelistClusterFaults) > 0:
+        current_line += 1
+        screen.gotoXY(pStartX + 1, pStartY + current_line)
+        screen.set_color(ConsoleColors.WhiteFore)
+        print " Whitelisted Faults:",
+        screen.reset()
+        for fault in pClusterInfo.WhitelistClusterFaults:
+            print " " + fault,
+        print " "
+
+        if len(pClusterInfo.ClusterFaultsWarn) + len(pClusterInfo.ClusterFaultsError) + len(pClusterInfo.ClusterFaultsCrit) > 0:
+            current_line += 1
+            screen.gotoXY(pStartX + 1, pStartY + current_line)
+            screen.set_color(ConsoleColors.WhiteFore)
+            print " Cluster Faults:",
+
+            screen.set_color(fg=ConsoleColors.YellowFore, bk=ConsoleColors.RedBack)
+            for fault in pClusterInfo.ClusterFaultsCrit:
+                print " " + fault,
+            screen.reset()
+
+            screen.set_color(ConsoleColors.RedFore)
+            for fault in pClusterInfo.ClusterFaultsError:
+                print " " + fault,
+            screen.reset()
+
+            screen.set_color(ConsoleColors.YellowFore)
+            for fault in pClusterInfo.ClusterFaultsWarn:
+                print " " + fault,
+            screen.reset()
+
+    # NVRAM specific faults
+    if len(pClusterInfo.NVRAMFaultsError) > 0 or len(pClusterInfo.NVRAMFaultsWarn) > 0:
+        current_line += 1
+        screen.gotoXY(pStartX + 1, pStartY + current_line)
+        screen.set_color(ConsoleColors.WhiteFore)
+        print " NVRAM Faults:"
+        if len(pClusterInfo.NVRAMFaultsError) > 0:
+            screen.set_color(ConsoleColors.RedFore)
+            for fault in pClusterInfo.NVRAMFaultsError:
+                current_line += 1
+                screen.gotoXY(pStartX + 1, pStartY + current_line)
+                print "  " + fault
+        if len(pClusterInfo.NVRAMFaultsWarn) > 0:
+            screen.set_color(ConsoleColors.YellowFore)
+            for fault in pClusterInfo.NVRAMFaultsWarn:
+                current_line += 1
+                screen.gotoXY(pStartX + 1, pStartY + current_line)
+                print "  " + fault
 
 previous_cluster_columns = ""
 def LogClusterResult(pOutputDir, pClusterInfo):
@@ -2397,10 +2418,10 @@ if __name__ == '__main__':
 
             if showclusterinfo and cluster_results.get(mvip):
                 cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices.keys())/2
-                if cluster_cell_height > cell_height or len(cluster_results[mvip].SliceServices.keys()) > 20:
+                if (cell_height > 0 and cluster_cell_height > cell_height) or len(cluster_results[mvip].SliceServices.keys()) > 20:
                     cluster_cell_width = cell_width * 2 - 1
 
-            log.debug("cell_height = %d, cluster_cell_height = %d, cell_width = %d, cluster_cell_width = %d" % (cell_height, cluster_cell_height, cell_width, cluster_cell_width))
+            #log.debug("cell_height = %d, cluster_cell_height = %d, cell_width = %d, cluster_cell_width = %d" % (cell_height, cluster_cell_height, cell_width, cluster_cell_width))
 
             # Determine table height, based on cell height, columns, number of nodes + cell for cluster info
             previous_table_height = table_height
