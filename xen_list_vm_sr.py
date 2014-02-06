@@ -97,14 +97,23 @@ class XenListVmSrAction(ActionBase):
                 if vbd["type"] == "Disk":
                     vdi_ref = vbd['VDI']
                     mylog.debug("Trying to get the vdi from the vdi_ref")
-                    vdi = session.xenapi.VDI.get_record(vdi_ref)
+                    try:
+                        vdi = session.xenapi.VDI.get_record(vdi_ref)
+                    except XenAPI.Failure as e:
+                        mylog.error("Could not get the VDI from the VBD")
+                        return False
                     sr_ref = vdi["SR"]
                     mylog.debug("Trying to get the SR from the sr_ref")
-                    sr = session.xenapi.SR.get_record(sr_ref)
+                    try:
+                        sr = session.xenapi.SR.get_record(sr_ref)
+                    except XenAPI.Failure as e:
+                        mylog.error("Could not get the SR from the VDI")
+                        return False
                     sr_name = sr['name_label']
                     sr_name_temp = sr_name.split('.')[:-1][0]
             except libxen.XenError as e:
                 mylog.error("Could not get the information for the SR")
+                return False
 
         if sr_name is None:
             mylog.error("error Could not find SR name")
