@@ -64,6 +64,7 @@ class XenListVmSrAction(ActionBase):
         mylog.info("Connecting to " + vmhost)
         session = None
         mylog.info("Connecting to the Xen Server")
+
         try:
             session = libxen.Connect(vmhost, host_user, host_pass)
         except libxen.XenError as e:
@@ -74,6 +75,9 @@ class XenListVmSrAction(ActionBase):
         mylog.info("Trying to find the VM ref")
         try:
             vm_ref = session.xenapi.VM.get_by_name_label(vm_name)
+            if not vm_ref or len(vm_ref) <= 0:
+                mylog.error("Could not find the source VM " + vm_name)
+                return False
         except libxen.XenError as e:
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
