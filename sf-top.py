@@ -112,7 +112,7 @@ class NodeInfo:
     def __init__(self):
         self.Timestamp = time.time()
         self.Hostname = 'Unknown'
-        self.SfVersion = 'Unknown'
+        self.SfVersion = dict()
         self.SfVersionStringRaw = 'Unknown'
         self.TotalMemory = 0
         self.UsedMemory = 0
@@ -129,6 +129,7 @@ class NodeInfo:
         self.Processes = dict()
         self.Nics = dict()
         self.Uptime = 0
+        self.EnsembleLeader = False
 
 class ProcessResourceUsage:
     def __init__(self):
@@ -222,6 +223,7 @@ class ClusterInfo:
         self.NVRAMFaultsWarn = []
         self.NVRAMFaultsError = []
         self.MultipleMvips = False
+        self.EnsembleLeader = 'Unknown'
 
 class GCInfo(object):
     """
@@ -367,6 +369,8 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
 
     if (response_obj == None or 'error' in response_obj):
         log.debug("Missing or error response from cluster")
+        if 'error' in response_obj:
+            log.debug(response_str)
         return None
 
     return response_obj['result']
@@ -477,22 +481,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         if "=" not in part:
             continue
         key, value = part.split("=")
-        ver_info[key] = value
-
-    disp_parts = []
-    if "Version" in ver_info:
-        disp_parts.append(ver_info["Version"])
-    if "Repository" in ver_info:
-        disp_parts.append(ver_info["Repository"])
-    if "Revision" in ver_info:
-        disp_parts.append(ver_info["Revision"])
-    if "BuildDate" in ver_info:
-        disp_parts.append(ver_info["BuildDate"])
-    if "Tag" in ver_info:
-        disp_parts.append(ver_info["Tag"].strip("'"))
-    if "BuildType" in ver_info:
-        disp_parts.append(ver_info["BuildType"])
-    usage.SfVersion = ",".join(disp_parts)
+        usage.SfVersion[key] = value.strip("'")
 
     #time_ver = datetime.datetime.now() - start_time
     #time_ver = time_ver.microseconds + time_ver.seconds * 1000000
@@ -788,6 +777,21 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     #time_uptime = datetime.datetime.now() - start_time
     #time_uptime = time_uptime.microseconds + time_uptime.seconds * 1000000
 
+    if usage.EnsembleNode:
+        zk_pid = process_names2pids["zookeeper"]
+        # Find the IP and port ZK is listening on
+        command = "sudo lsof -np " + str(zk_pid) + " | grep TCP | grep LISTEN | grep -v '*' | awk '{print $9}' | sort | head -1 | tr ':' ' '"
+        stdin, stdout, stderr = ssh.exec_command(command)
+        data = stdout.readlines()
+        ip_port = data[0].strip()
+        # Query the mode of this ZK node
+        command = "echo stat | sudo nc " + ip_port + " | grep Mode | awk '{print $2}'"
+        stdin, stdout, stderr = ssh.exec_command(command)
+        data = stdout.readlines()
+        mode = data[0].strip()
+        if "leader" in mode:
+            usage.EnsembleLeader = True
+
     ssh.close()
     time_total = datetime.datetime.now() - begin
     time_total = time_total.microseconds + time_total.seconds * 1000000
@@ -903,6 +907,14 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
 
 
     log.debug("gathering cluster info")
+
+    # Find the ensemble leader
+    result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'GetEnsembleConfig', {"force" : True}, version=5.0)
+    if result:
+        for node in result["nodes"]:
+            if node["result"]["serverStats"]["Mode"].lower() == "leader":
+                info.EnsembleLeader = node["result"]["nodeInfo"]["name"]
+                break
 
     # get basic cluster info
     result = CallApiMethod(log, pMvip, pApiUser, pApiPass, 'GetClusterInfo', {})
@@ -1154,7 +1166,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
                     if m:
                         generation = int(m.group(1))
                 elif isinstance(event["details"], dict):
-                    generation = event["details"]["generation"]
+                    generation = event["details"]["paramGCGeneration"]
 
                 if generation in gc_objects:
                     gc_objects[generation].Rescheduled = True
@@ -1309,7 +1321,7 @@ def LPadString(pStringToPad, pDesiredLength, pPadCharacter):
         string = pPadCharacter + string
     return string
 
-def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellContent):
+def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfappVerDisplay, pCellContent):
 
     top = pCellContent
     cell_width = pCellWidth
@@ -1331,8 +1343,8 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
     screen.gotoXY(startx + 1, starty + current_line)
     screen.set_color(ConsoleColors.CyanFore)
     print ' %-8s' % (top.Hostname),
-    if not pCompact:
-        print '%-15s' % (node_ip),
+    #if not pCompact:
+    #    print '%-15s' % (node_ip),
     if top.NodeId > 0:
         if pCompact:
             print "[%s]" % top.NodeId,
@@ -1344,16 +1356,17 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
         else:
             print " Pending",
 
+    specials = ""
     if (top.EnsembleNode):
-        print "*",
-    else:
-        print " ",
+        specials += "*"
     if (top.ClusterMaster):
-        print "^",
-    else:
-        print " ",
+        specials += " ^"
+    if (top.EnsembleLeader):
+        specials += " !"
+    specials = specials.strip()
+    print "%-5s" % specials,
 
-    print " Up: " + SecondsToElapsedStr(top.Uptime),
+    print "  Up: " + SecondsToElapsedStr(top.Uptime),
     screen.reset()
 
     if (top.CoresTotal > 0):
@@ -1378,7 +1391,13 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pCellC
     current_line += 1
     screen.gotoXY(startx + 1, starty + current_line)
     screen.reset()
-    display_ver = top.SfVersion
+
+    ver_parts = []
+    for key in pSfappVerDisplay:
+        if key in top.SfVersion:
+            ver_parts.append(top.SfVersion[key])
+
+    display_ver = ",".join(ver_parts)
     if len(display_ver) > 86:
         display_ver = display_ver[:86]
     print ' %s' % (display_ver)
@@ -1577,7 +1596,7 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     screen.set_color(ConsoleColors.CyanFore)
     print ' Cluster Name: ' + pClusterInfo.ClusterName
     screen.reset()
-    update_str = ' Refresh: ' + TimestampToStr(pClusterInfo.Timestamp)
+    update_str = ' Refresh: ' + TimestampToStr(pClusterInfo.Timestamp, "%m-%d %H:%M:%S")
     screen.gotoXY(pStartX + pCellWidth - len(update_str) - 2, pStartY + current_line)
     print update_str
     screen.reset()
@@ -1592,7 +1611,11 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
     screen.set_color(ConsoleColors.WhiteFore)
     print " SVIP: ",
     screen.reset()
-    print "%-15s" % pClusterInfo.Svip
+    print "%-15s" % pClusterInfo.Svip,
+    screen.set_color(ConsoleColors.WhiteFore)
+    print " Ensemble Leader: ",
+    screen.reset()
+    print pClusterInfo.EnsembleLeader
 
     # cluster master, uid, bs count, ss count
     current_line += 1
@@ -2231,6 +2254,7 @@ if __name__ == '__main__':
     parser.add_option("--output_dir", type="string", dest="output_dir", default="sf-top-out", help="the directory to save exported data")
     parser.add_option("--fault_whitelist", action="list", dest="fault_whitelist", default=None, help="ignore these faults when displaying cluster faults")
     parser.add_option("--nopending", action="store_false", dest="pending_nodes", default=True, help="do not gather/show pending node info (active nodes only)")
+    parser.add_option("--sfapp_disp", action="list", dest="sfapp_disp", default=None, help="the list of sfapp version elements to display [%Version,Repository,Revision,BuildDate,BuildType]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="write detailed debug info to a log file")
 
     (options, args) = parser.parse_args()
@@ -2255,6 +2279,9 @@ if __name__ == '__main__':
     if fault_whitelist == None:
         fault_whitelist = sfdefaults.fault_whitelist
     monitor_pending_nodes = options.pending_nodes
+    sfapp_disp = options.sfapp_disp
+    if sfapp_disp == None:
+        sfapp_disp = ['Version','Repository','Revision','BuildDate','BuildType']
 
     log = DebugLog()
     log.Enable = options.debug
@@ -2417,11 +2444,8 @@ if __name__ == '__main__':
                     cell_height = node_cell_height
 
             if showclusterinfo and cluster_results.get(mvip):
-                cluster_cell_height = 9 + len(cluster_results[mvip].SliceServices.keys())/2
-                if (cell_height > 0 and cluster_cell_height > cell_height) or len(cluster_results[mvip].SliceServices.keys()) > 20:
+                if len(cluster_results[mvip].SliceServices.keys()) > 20:
                     cluster_cell_width = cell_width * 2 - 1
-
-            #log.debug("cell_height = %d, cluster_cell_height = %d, cell_width = %d, cluster_cell_width = %d" % (cell_height, cluster_cell_height, cell_width, cluster_cell_width))
 
             # Determine table height, based on cell height, columns, number of nodes + cell for cluster info
             previous_table_height = table_height
@@ -2463,7 +2487,7 @@ if __name__ == '__main__':
 
                 # Draw a table cell
                 try:
-                    DrawNodeInfoCell(cell_x, cell_y, cell_width, cell_height, compact, node_results[node_ip])
+                    DrawNodeInfoCell(cell_x, cell_y, cell_width, cell_height, compact, sfapp_disp, node_results[node_ip])
                 except KeyboardInterrupt: raise
                 except Exception as e:
                     log.debug("exception in DrawNodeInfoCell: " + str(e) + " - " + traceback.format_exc())
