@@ -307,6 +307,9 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
             else:
                 log.debug("HTTPError: " + str(e.code))
                 return None
+    except socket.error as e:
+        log.debug("Failed calling " + pMethodName + " - socket error on " + pUrl + " : " + str(e))
+        return None
     except urllib2.URLError as e:
         log.debug("URLError on " + rpc_url + " : " + str(e.reason))
         return None
@@ -346,6 +349,9 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
             else:
                 log.debug("Failed calling " + pMethodName + " - HTTPError: " + str(e.code))
                 return None
+    except socket.error as e:
+        log.debug("Failed calling " + pMethodName + " - socket error on " + pMvip + " : " + str(e))
+        return None
     except urllib2.URLError as e:
         log.debug("Failed calling " + pMethodName + " - URLError on " + rpc_url + " : " + str(e.reason))
         return None
@@ -783,14 +789,16 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         command = "sudo lsof -np " + str(zk_pid) + " | grep TCP | grep LISTEN | grep -v '*' | awk '{print $9}' | sort | head -1 | tr ':' ' '"
         stdin, stdout, stderr = ssh.exec_command(command)
         data = stdout.readlines()
-        ip_port = data[0].strip()
-        # Query the mode of this ZK node
-        command = "echo stat | sudo nc " + ip_port + " | grep Mode | awk '{print $2}'"
-        stdin, stdout, stderr = ssh.exec_command(command)
-        data = stdout.readlines()
-        mode = data[0].strip()
-        if "leader" in mode:
-            usage.EnsembleLeader = True
+        if data:
+            ip_port = data[0].strip()
+            # Query the mode of this ZK node
+            command = "echo stat | sudo nc " + ip_port + " | grep Mode | awk '{print $2}'"
+            stdin, stdout, stderr = ssh.exec_command(command)
+            data = stdout.readlines()
+            if data:
+                mode = data[0].strip()
+                if "leader" in mode:
+                    usage.EnsembleLeader = True
 
     ssh.close()
     time_total = datetime.datetime.now() - begin
@@ -889,13 +897,14 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
 
         # Expected service counts
         if node.NodeId > 0:
+            drive_config = None
             if info.SfMajorVersion >= 6:
                 drive_config = CallApiMethod(log, node_ip, pApiUser, pApiPass, "GetDriveConfig", {}, version=6.0, port=442)
                 if drive_config:
                     info.ExpectedBSCount += drive_config["driveConfig"]["numBlockExpected"]
                     info.ExpectedSSCount += drive_config["driveConfig"]["numSliceExpected"]
-            else:
-                info.ExpectedSSCount += 2
+            if not drive_config:
+                info.ExpectedSSCount += 1
                 info.ExpectedBSCount += 9
                 if node.TotalMemory < 100 * 1024 * 1024 * 1024:
                     # SF3010 have one more BS drive than 6010 or 9010
@@ -1228,11 +1237,12 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
 
     # Look for failed/available drives
     result = CallApiMethod(log, pMvip, pApiUser, pApiPass, "ListDrives", {})
-    for drive in result["drives"]:
-        if drive["status"] == "available":
-            info.AvailableDriveCount += 1
-        if drive["status"] == "failed":
-            info.FailedDriveCount += 1
+    if result:
+        for drive in result["drives"]:
+            if drive["status"] == "available":
+                info.AvailableDriveCount += 1
+            if drive["status"] == "failed":
+                info.FailedDriveCount += 1
 
     return info
 
@@ -1570,6 +1580,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
         # next lines - network table
         current_line += 1
         screen.gotoXY(startx + 1, starty + current_line)
+        #log.debug(top.Hostname + " network header starting at " + str(startx+1) + "," + str(starty+current_line))
         screen.set_color(ConsoleColors.WhiteFore)
         print '....%9s.%15s..%11s..%11s..%17s..%4s.......' % ("......NIC", ".....IP Address", ".........RX", ".........TX", "......MAC address", ".MTU")
         screen.reset()
@@ -1579,6 +1590,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
             current_line += 1
             screen.gotoXY(startx + 1, starty + current_line)
             display_name = top.Nics[nic_name].Name
+            #log.debug(top.Hostname + " " + display_name + " starting at " + str(startx+1) + "," + str(starty+current_line))
             if not top.Nics[nic_name].Up: display_name += "*"
             print '    %9s %15s  %9s/s  %9s/s  %17s  %4d' % (display_name, top.Nics[nic_name].IpAddress, HumanizeBytes(top.Nics[nic_name].RxThroughput), HumanizeBytes(top.Nics[nic_name].TxThroughput), top.Nics[nic_name].MacAddress, top.Nics[nic_name].Mtu)
 
@@ -2254,7 +2266,7 @@ if __name__ == '__main__':
     parser.add_option("--output_dir", type="string", dest="output_dir", default="sf-top-out", help="the directory to save exported data")
     parser.add_option("--fault_whitelist", action="list", dest="fault_whitelist", default=None, help="ignore these faults when displaying cluster faults")
     parser.add_option("--nopending", action="store_false", dest="pending_nodes", default=True, help="do not gather/show pending node info (active nodes only)")
-    parser.add_option("--sfapp_disp", action="list", dest="sfapp_disp", default=None, help="the list of sfapp version elements to display [%Version,Repository,Revision,BuildDate,BuildType]")
+    parser.add_option("--sfapp_disp", action="list", dest="sfapp_disp", default=None, help="the list of sfapp version elements to display [Version,Repository,Revision,BuildDate,BuildType]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="write detailed debug info to a log file")
 
     (options, args) = parser.parse_args()
@@ -2524,16 +2536,16 @@ if __name__ == '__main__':
             # Check to see if the node list has changed
             if options.mvip:
                 log.debug("Refreshing list of nodes")
-                node_ips = []
                 api_result = CallApiMethod(log, mvip, api_user, api_pass, 'ListAllNodes', {})
                 if api_result:
+                    node_ips = []
                     for node_info in api_result["nodes"]:
                         node_ips.append(str(node_info["mip"]))
                     if monitor_pending_nodes:
                         for node_info in api_result["pendingNodes"]:
                             node_ips.append(str(node_info["mip"]))
 
-                    if set(node_ips) != previous_node_list:
+                    if len(node_ips) > 0 and set(node_ips) != previous_node_list:
                         log.debug("Detected change in node list")
                         clear_table = True
                         for name, th in all_threads.items():
