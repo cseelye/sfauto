@@ -469,11 +469,16 @@ class mylog:
 
     # Log everything to the platform appropriate syslog
     if platform.system().lower().startswith("win"):
-        eventlog_formatter = logging.Formatter("%(levelname)s %(message)s") # prepend with ident and our severities
-        eventlog = NTEventLogHandler("sftest")
-        eventlog.setLevel(logging.DEBUG)
-        eventlog.setFormatter(eventlog_formatter)
-        sftestlog.addHandler(eventlog)
+        import pywintypes
+        try:
+            eventlog_formatter = logging.Formatter("%(levelname)s %(message)s") # prepend with ident and our severities
+            eventlog = NTEventLogHandler("sftest")
+            eventlog.setLevel(logging.DEBUG)
+            eventlog.setFormatter(eventlog_formatter)
+            sftestlog.addHandler(eventlog)
+        except pywintypes.error:
+            # Probably not running as administrator
+            pass
     else:
         syslog_formatter = logging.Formatter("%(name)s: %(levelname)s %(message)s") # prepend with ident and our severities
         syslog_address = "/dev/log"
