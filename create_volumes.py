@@ -45,6 +45,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
+import math
 
 class CreateVolumesAction(ActionBase):
     class Events:
@@ -153,7 +154,20 @@ class CreateVolumesAction(ActionBase):
             for vol_num in range(volume_start, volume_start + volume_count):
                 volume_names.append(volume_prefix + "%05d" % vol_num)
 
-            if create_single:
+            #get the cluster version so we know which API method to use
+            cluster_version = None
+            try:
+                result = libsf.CallApiMethod(mvip, username, password, 'GetClusterVersionInfo', {})
+                cluster_version = result["clusterVersion"]
+                cluster_version = float(cluster_version)
+                mylog.debug("The cluster version is {}".format(cluster_version))
+                cluster_version = math.floor(cluster_version)
+            except libsf.SfError as e:
+                mylog.error("Failed to get cluster version: " + str(e))
+                cluster_version = 6.0
+
+            #if the version is 5.0 or we are creating a single volume then use the CreateVolume method
+            if create_single or cluster_version == 5.0:
                 for vol_name in volume_names:
                     params = {}
                     params["name"] = vol_name
@@ -172,6 +186,7 @@ class CreateVolumesAction(ActionBase):
                         self.RaiseFailureEvent(message=str(e), exception=e)
                         return False
                     mylog.info("Created volume " + vol_name)
+
             else:
                 params = {}
                 params["names"] = volume_names
