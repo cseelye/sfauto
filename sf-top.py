@@ -12,7 +12,7 @@ Display size can be changed with --columns and --compact
 """
 
 # cover a couple different ways of doing this
-__version__ = '2.6'
+__version__ = '2.7'
 VERSION = __version__
 version = __version__
 
@@ -130,6 +130,9 @@ class NodeInfo:
         self.Nics = dict()
         self.Uptime = 0
         self.EnsembleLeader = False
+        self.NodeType = 'Unknown'
+        self.SlabMemory = 0
+        self.FcHbas = dict()
 
 class ProcessResourceUsage:
     def __init__(self):
@@ -171,6 +174,18 @@ class NicResourceUsage:
         self.RxDropped = 0
         self.Mtu = 0
         self.Up = False
+
+class FcHbaResourceUsage:
+    def __init__(self):
+        self.Host = 'Unknown'
+        self.Model = 'Unknown'
+        self.PortWWN = 'Unknown'
+        self.LinkState = 'Unknown'
+        self.LinkSpeed = 'Unknown'
+        self.TxFrames = 0
+        self.RxFrames = 0
+        self.TxFrameThroughput = 0
+        self.RxFrameThroughput = 0
 
 class ClusterInfo:
     def __init__(self):
@@ -413,12 +428,14 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     usage = NodeInfo()
 
     #
-    # Get the hostname, sf version, node memory usage, core files, mounts
+    # Get the node type, slab mem usage, hostname, sf version, node memory usage, core files, mounts
     #
     #start_time = datetime.datetime.now()
     start_timestamp = TimestampToStr(START_TIME, "%Y%m%d%H%M.%S", UTCTimezone())
     command = ""
-    command += "echo hostname=`\\hostname`"
+    command += "sudo /sf/bin/sfplatform | \\grep NODE_TYPE"
+    command += ";\\cat /proc/meminfo | \\grep Slab"
+    command += ";echo hostname=`\\hostname`"
     command += ";/sf/bin/sfapp --Version -laAll 0"
     command += ";\\free -o"
     command += ";touch -t " + start_timestamp + " /tmp/timestamp;echo newcores=`find /sf -maxdepth 1 -name \"core*\" -newer /tmp/timestamp | wc -l`"
@@ -432,6 +449,14 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     data = stdout.readlines()
     #log.debug("".join(data))
     for line in data:
+        m = re.search(r'^NODE_TYPE=(.+)', line)
+        if m:
+            usage.NodeType = m.group(1)
+            continue
+        m = re.search(r'^Slab:\s+(\d+)', line)
+        if m:
+            usage.SlabMemory = int(m.group(1)) * 1024
+            continue
         m = re.search(r'^hostname=(.+)', line)
         if (m):
             usage.Hostname = m.group(1)
@@ -499,7 +524,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     process_names2pids = dict()
     process_pids2names = dict()
     process_pids2disks = dict()
-    stdin, stdout, stderr = ssh.exec_command("sudo \\ps -eo comm,pid,args --no-headers | \\egrep '^bulkvolume|^block|^slice|^master|^service_manager|^sfnetwd|^sfconfig|^java.+zookeeper'")
+    stdin, stdout, stderr = ssh.exec_command("sudo \\ps -eo comm,pid,args --no-headers | \\egrep '^iscsid|^dsm_sa_snmpd|^bulkvolume|^block|^slice|^master|^service_manager|^sfnetwd|^sfconfig|^java.+zookeeper'")
     data = stdout.readlines()
     for line in data:
         m = re.search(r'(\S+)\s+(\d+).+localdisk=(\S+)', line)
@@ -549,6 +574,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     #
     #start_time = datetime.datetime.now()
     sample_interval = 2
+    base_fc_path = "/sys/class/fc_host"
     command = ""
     command += "\\ifconfig | \\egrep -i 'eth|bond|lo|inet|RX bytes';"
     command += "sudo \\grep sd /proc/diskstats"
@@ -557,15 +583,21 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         for pid in usage.Processes.iterkeys():
             command += " /proc/" + str(pid) + "/io"
     command += ";"
+    if usage.NodeType == "SFFC":
+        command += "for host in `ls " + base_fc_path + "`; do echo \"HOST='$host' MODEL='`cat " + base_fc_path + "/$host/device/scsi_host/$host/model_name`' WWN='`cat " + base_fc_path + "/$host/device/fc_host/$host/port_name`' LINK_STATE='`cat " + base_fc_path + "/$host/device/scsi_host/$host/link_state`' LINK_SPEED='`cat " + base_fc_path + "/$host/speed`' TX_FRAMES='`cat " + base_fc_path + "/$host/statistics/tx_frames`' RX_FRAMES='`cat " + base_fc_path + "/$host/statistics/rx_frames`'\"; done;"
     command += "sudo \\top -b -d " + str(sample_interval) + " -n 2;"
     command += "\\ifconfig | \\egrep -i 'eth|bond|lo|inet|RX bytes|dropped|MTU';"
+    if usage.NodeType == "SFFC":
+        command += "for host in `ls " + base_fc_path + "`; do echo \"HOST='$host' MODEL='`cat " + base_fc_path + "/$host/device/scsi_host/$host/model_name`' WWN='`cat " + base_fc_path + "/$host/device/fc_host/$host/port_name`' LINK_STATE='`cat " + base_fc_path + "/$host/device/scsi_host/$host/link_state`' LINK_SPEED='`cat " + base_fc_path + "/$host/speed`' TX_FRAMES='`cat " + base_fc_path + "/$host/statistics/tx_frames`' RX_FRAMES='`cat " + base_fc_path + "/$host/statistics/rx_frames`'\"; done;"
     command += "sudo \\grep sd /proc/diskstats"
     if len(usage.Processes.keys()) > 0:
         command += ";sudo \\grep bytes"
         for pid in usage.Processes.iterkeys():
             command += " /proc/" + str(pid) + "/io"
+    #log.debug(command)
     stdin, stdout, stderr = ssh.exec_command(command)
     data = stdout.readlines()
+    #log.debug("".join(data))
     current_nic_name = ""
     #current_nic = NicResourceUsage()
     top_frame = 0
@@ -619,6 +651,33 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
             if "UP" in line:
                 usage.Nics[current_nic_name].Up = True
             continue
+
+        # Parse FC HBA lines
+        m = re.search(r"HOST='(.+?)'\s+MODEL='(.+?)'\s+WWN='(.+?)'\s+LINK_STATE='(.+?)'\sLINK_SPEED='(.+?)'\s+TX_FRAMES='(.+?)'\s+RX_FRAMES='(.+?)'", line)
+        if m:
+            fc_host = m.group(1)
+            if fc_host not in usage.FcHbas.keys():
+                fc = FcHbaResourceUsage()
+                fc.Model = m.group(2)
+                # convert WWN to nicer format
+                ugly_wwn = m.group(3)
+                pretty_wwn = ''
+                for i in range(2, 2*8+2, 2):
+                    pretty_wwn += ':' + ugly_wwn[i:i+2]
+                fc.PortWWN = pretty_wwn[1:]
+                link_state = m.group(4)
+                if "-" in link_state:
+                    link_state = link_state[:-link_state.index("-")-1]
+                fc.LinkState = link_state
+                fc.LinkSpeed = m.group(5).replace("Gbit", "Gb")
+                fc.TxFrames = int(m.group(6), 16)
+                fc.RxFrames = int(m.group(7), 16)
+                usage.FcHbas[fc_host] = fc
+            else:
+                usage.FcHbas[fc_host].TxFrameThroughput = float(int(m.group(6), 16) - usage.FcHbas[fc_host].TxFrames) / sample_interval
+                usage.FcHbas[fc_host].RxFrameThroughput = float(int(m.group(7), 16) - usage.FcHbas[fc_host].RxFrames) / sample_interval
+                usage.FcHbas[fc_host].TxFrames = int(m.group(6), 16)
+                usage.FcHbas[fc_host].RxFrames = int(m.group(7), 16)
 
         # Parse diskstatus, io lines
         # /proc/diskstats has lines like this for each device/partition:
@@ -800,6 +859,12 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
                 if "leader" in mode:
                     usage.EnsembleLeader = True
 
+    #if usage.NodeType == "SFFC":
+    #    base_fc_path = "/sys/class/fc_host"
+    #    command = "for host in `ls " + base_fc_path + "`; do echo \"HOST=$host MODEL=`cat " + base_fc_path + "/$host/device/scsi_host/$host/model_name` LINK_STATE=`cat " + base_fc_path + "/$host/device/scsi_host/$host/link_state` LINK_SPEED=`cat " + base_fc_path + "/$host/speed`  TX_FRAMES='`cat " + base_fc_path + "/$host/statistics/tx_frames`' RX_FRAMES='`cat " + base_fc_path + "/$host/statistics/rx_frames`'\"; done"
+
+
+
     ssh.close()
     time_total = datetime.datetime.now() - begin
     time_total = time_total.microseconds + time_total.seconds * 1000000
@@ -890,7 +955,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
             info.OldCores.append(node.Hostname)
 
         # Check NVRAM mount
-        if not node.NvramMounted:
+        if not node.NvramMounted and node.NodeType != "SFFC":
             info.NvramNotMounted.append(node.Hostname)
         if "ram" in node.NvramDevice:
             info.NvramRamdrive.append(node.Hostname)
@@ -1485,16 +1550,21 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
         else:
             screen.set_color(ConsoleColors.GreenFore)
 
-
         print '%5.1f%%' % (mem_pct),
         screen.reset()
-        print ' (%s / %s, %s cache)' % (HumanizeBytes(top.UsedMemory, 0, 'MiB'), HumanizeBytes(top.TotalMemory, 0, 'MiB'), HumanizeBytes(top.CacheMemory, 0, 'MiB'))
+        print ' (%s / %s, %s cache)' % (HumanizeBytes(top.UsedMemory, 0, 'MiB'), HumanizeBytes(top.TotalMemory, 0, 'MiB'), HumanizeBytes(top.CacheMemory, 0, 'MiB')),
+
+        screen.reset()
+        screen.set_color(ConsoleColors.WhiteFore)
+        print ' Slab: ',
+        screen.reset()
+        print HumanizeBytes(top.SlabMemory)
 
     # process table
     #header line
     header = ""
     header += "."
-    header += LPadString("Process", 16, ".")
+    header += LPadString("Process", 19, ".")
     header += ".."
     header += LPadString("PID", 5, ".")
     header += ".."
@@ -1508,7 +1578,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
         header += LPadString("Rd/s", 11, ".")
         header += ".."
         header += LPadString("Wr/s", 11, ".")
-        header += ".."
+        header += "."
     header += "." * (cell_width - len(header) - 2)
     current_line += 1
     screen.gotoXY(startx + 1, starty + current_line)
@@ -1532,7 +1602,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
             fmt_str = "%%%ds (%%s)" % (13 - len(top.Processes[pid].DiskDevice))
             line += (fmt_str % (top.Processes[pid].ProcessName, top.Processes[pid].DiskDevice))
         else:
-            line += ('%16s' % top.Processes[pid].ProcessName)
+            line += ('%19s' % top.Processes[pid].ProcessName)
         line += ('  %5d' % top.Processes[pid].Pid)
         line += ('  %4d%%' % top.Processes[pid].CpuUsage)
         line += ('  %11s' % HumanizeBytes(top.Processes[pid].ResidentMemory, 2))
@@ -1593,6 +1663,24 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
             #log.debug(top.Hostname + " " + display_name + " starting at " + str(startx+1) + "," + str(starty+current_line))
             if not top.Nics[nic_name].Up: display_name += "*"
             print '    %9s %15s  %9s/s  %9s/s  %17s  %4d' % (display_name, top.Nics[nic_name].IpAddress, HumanizeBytes(top.Nics[nic_name].RxThroughput), HumanizeBytes(top.Nics[nic_name].TxThroughput), top.Nics[nic_name].MacAddress, top.Nics[nic_name].Mtu)
+
+        # next lines - fc table
+        if len(top.FcHbas.keys()) > 0:
+            current_line += 1
+            screen.gotoXY(startx + 1, starty + current_line)
+            screen.set_color(ConsoleColors.WhiteFore)
+            print '....Host....Model..................PortWWN........LinkState...........RX...........TX..',
+            screen.reset()
+            for fc_host in sorted(top.FcHbas.keys()):
+                hba = top.FcHbas[fc_host]
+                current_line += 1
+                screen.gotoXY(startx + 1, starty + current_line)
+                link_state = hba.LinkState
+                if "up" in link_state.lower():
+                    link_state = link_state + " - " + hba.LinkSpeed
+                print ' %6s  %7s  %23s  %15s   %5s Fr/s   %5s Fr/s' % (fc_host, hba.Model, hba.PortWWN, link_state, HumanizeDecimal(hba.RxFrameThroughput), HumanizeDecimal(hba.TxFrameThroughput)),
+
+
 
 def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo):
     if (pClusterInfo == None):
@@ -1749,9 +1837,9 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
             screen.set_color(ConsoleColors.RedFore)
         if pClusterInfo.CompressionPercent > 400:
             screen.set_color(ConsoleColors.YellowFore)
-        print "%0.02fx" % (float(pClusterInfo.CompressionPercent)/100),
+        print "%0.02fx" % (float(pClusterInfo.CompressionPercent)/100)
     else:
-        print "0.00",
+        print "0.00"
     screen.reset()
 
     # GC info
@@ -2068,7 +2156,7 @@ def LogNodeResult(pOutputDir, pNodeIp, pNodeInfo):
     filename = pOutputDir + "/" + TimestampToStr(START_TIME, "%Y-%m-%d-%H-%M-%S", LOCAL_TZ) + '_node_' + pNodeIp + ".csv"
 
     # Figure out the column order
-    columns = 'Timestamp,Time,Hostname,SfVersion,TotalCPU,TotalMem,TotalUsedMem,'
+    columns = 'Timestamp,Time,Hostname,SfVersion,TotalCPU,TotalMem,TotalUsedMem,SlabMem,'
     for pid in sorted(top.Processes.iterkeys(), key=lambda pid:top.Processes[pid].ProcessName):
         columns += (top.Processes[pid].ProcessName + ' CPU,' + top.Processes[pid].ProcessName + ' ResidentMem,' + top.Processes[pid].ProcessName + ' Uptime,')
     for nic_name in sorted(top.Nics.keys()):
@@ -2090,7 +2178,6 @@ def LogNodeResult(pOutputDir, pNodeIp, pNodeInfo):
         log.write(columns + "\n")
         log.close()
 
-
     with open(filename, 'a') as log:
         log.write("\"" + str(top.Timestamp) + "\"")
         log.write(",\"" + TimestampToStr(pNodeInfo.Timestamp) + "\"")
@@ -2099,6 +2186,7 @@ def LogNodeResult(pOutputDir, pNodeIp, pNodeInfo):
         log.write(",\"" + str(top.TotalCpu) + "\"")
         log.write(",\"" + str(top.TotalMemory) + "\"")
         log.write(",\"" + str(top.UsedMemory) + "\"")
+        log.write(",\"" + str(top.SlabMemory) + "\"")
         for pid in sorted(top.Processes.iterkeys(), key=lambda pid:top.Processes[pid].ProcessName):
             log.write(",\"" + str(top.Processes[pid].CpuUsage) + "\"")
             log.write(",\"" + str(top.Processes[pid].ResidentMemory) + "\"")
@@ -2125,7 +2213,7 @@ def SingleNodeThread(log, pResults, pNodeIp, pNodeUser, pNodePass, pKeyFile=None
     except Exception as e:
         log.debug("exception: " + str(e) + " - " + traceback.format_exc())
 
-def GatherNodeInfoThread(log, pNodeResults, pInterval, pNodeIpList, pNodeUser, pNodePass, pKeyFile=None):
+def GatherNodeInfoThread(log, pNodeResults, pInterval, pApiUser, pApiPass, pNodeIpList, pNodeUser, pNodePass, pKeyFile=None):
     try:
         manager = multiprocessing.Manager()
         node_results = manager.dict()
@@ -2151,7 +2239,7 @@ def GatherNodeInfoThread(log, pNodeResults, pInterval, pNodeIpList, pNodeUser, p
                             break
                     if alldone: break
                     # Kill any threads that haven't finished within 20 sec
-                    if time.time() - start_time > 20:
+                    if time.time() - start_time > 30:
                         for th in node_threads:
                             if th.is_alive():
                                 log.debug("terminating " + th.name + " process " + str(th.pid))
@@ -2394,7 +2482,7 @@ if __name__ == '__main__':
         while True:
             #screen.gotoXY(originx, originy)
             if "GatherNodeInfoThread" not in all_threads or all_threads["GatherNodeInfoThread"] == None:
-                th = multiprocessing.Process(target=GatherNodeInfoThread, name="GatherNodeInfoThread", args=(log, node_results, interval, node_ips, ssh_user, ssh_pass, keyfile))
+                th = multiprocessing.Process(target=GatherNodeInfoThread, name="GatherNodeInfoThread", args=(log, node_results, interval, api_user, api_pass, node_ips, ssh_user, ssh_pass, keyfile))
                 th.start()
                 log.debug("started GatherNodeInfoThread process " + str(th.pid))
                 all_threads["GatherNodeInfoThread"] = th
@@ -2452,6 +2540,8 @@ if __name__ == '__main__':
                     node_cell_height = 4 + 1 + (len(node_results[node_ip].Processes.keys()) - 2) + 1
                 else:
                     node_cell_height = 4 + 1 + len(node_results[node_ip].Processes.keys()) + 1 + (len(node_results[node_ip].Nics.keys()) - 4) - 1
+                    if len(node_results[node_ip].FcHbas.keys()) > 0:
+                        node_cell_height += 1 + len(node_results[node_ip].FcHbas.keys())
                 if (node_cell_height > cell_height):
                     cell_height = node_cell_height
 
