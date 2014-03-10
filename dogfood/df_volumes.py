@@ -22,9 +22,9 @@ for volume in volume_list['volumes']:
 volume_stats = libsf.CallApiMethod(config["mvip"], config["username"], config["password"], "ListVolumeStatsByVolume", {} )
 
 print
-print "%15s   %-13s   %-13s" % ("Volume Name", "Used Capacity", "Provisioned Capacity")
+print "%18s   %-13s   %-13s" % ("Volume Name", "Used Capacity", "Provisioned Capacity")
 print
 
 for volume in reversed(sorted(volume_stats["volumeStats"], key=lambda v: v["nonZeroBlocks"])):
-    print "%15s   %-13s   %-13s" % (id2name[volume["volumeID"]], libsf.HumanizeBytes(volume["nonZeroBlocks"]*4096), libsf.HumanizeBytes(volume["volumeSize"]))
+    print "%18s   %-13s   %-13s" % (id2name[volume["volumeID"]], libsf.HumanizeBytes(volume["nonZeroBlocks"]*4096), libsf.HumanizeBytes(volume["volumeSize"]))
 print

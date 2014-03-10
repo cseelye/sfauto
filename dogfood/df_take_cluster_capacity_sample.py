@@ -9,6 +9,7 @@ import time
 
 sys.path.append("..")
 import lib.libsf as libsf
+from lib.libsf import mylog
 
 mylog.info("Starting " + " ".join(sys.argv))
 
@@ -19,7 +20,7 @@ with open("dogfood_config.json", "r") as f:
 # Get volume stats from cluster
 cluster_stats = libsf.CallApiMethod(config["mvip"], config["username"], config["password"], "GetClusterCapacity", {} )
 
-db = MySQLdb.connect(host="192.168.154.10", user="root", passwd="solidfire", db="dogfood")
+db = MySQLdb.connect(host="192.168.154.50", user="root", passwd="solidfire", db="dogfood")
 cursor = db.cursor(MySQLdb.cursors.DictCursor)
 
 # Get the list of columns from the table - these are the keys to look for in the result from the cluster

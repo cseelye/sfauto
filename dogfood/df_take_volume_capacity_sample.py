@@ -8,6 +8,7 @@ import time
 
 sys.path.append("..")
 import lib.libsf as libsf
+from lib.libsf import mylog
 
 mylog.info("Starting " + " ".join(sys.argv))
 
@@ -17,14 +18,13 @@ with open("dogfood_config.json", "r") as f:
 
 # Get volume stats from cluster
 volume_stats = libsf.CallApiMethod(config["mvip"], config["username"], config["password"], "ListVolumeStatsByVolume", {} )
-print "Inserting stats with timestamp " + str(calendar.timegm(datetime.datetime.strptime(volume_stats["volumeStats"][0]["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ").utctimetuple()))
 
-db = MySQLdb.connect(host="192.168.154.10", user="root", passwd="solidfire", db="dogfood")
+db = MySQLdb.connect(host="192.168.154.50", user="root", passwd="solidfire", db="dogfood")
 cursor = db.cursor(MySQLdb.cursors.DictCursor)
 
 # Get the list of columns from the table - these are the keys to look for in the result from the cluster
 keys = []
-sql = "SHOW COLUMNS FROM cluster_capacity"
+sql = "SHOW COLUMNS FROM volume_capacity"
 cursor.execute(sql)
 row = cursor.fetchone()
 while row is not None:
@@ -57,7 +57,7 @@ while row is not None:
 sql = "INSERT INTO volume_capacity ( `" + "`,`".join(sorted(keys)) + "` ) VALUES ( " + ",".join(['%s' for i in xrange(len(keys))]) + " )"
 mylog.info(sql)
 
-mylog.info("Inserting stats with timestamp " + str(calendar.timegm(datetime.datetime.strptime(cluster_stats["clusterCapacity"]["timestamp"], "%Y-%m-%dT%H:%M:%SZ").utctimetuple())))
+mylog.info("Inserting stats with timestamp " + str(calendar.timegm(datetime.datetime.strptime(volume_stats["volumeStats"][0]["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ").utctimetuple())))
 for volume in volume_stats["volumeStats"]:
     values = []
     for k in keys:

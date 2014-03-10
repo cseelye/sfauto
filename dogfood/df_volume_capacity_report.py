@@ -9,19 +9,19 @@ import xlsxwriter
 
 sys.path.append("..")
 import lib.libsf as libsf
-
+from lib.libsf import mylog
 
 # Get the volume stats from the database
 volumes = {}
-db = MySQLdb.connect(host="192.168.154.10", user="root", passwd="solidfire", db="dogfood")
+db = MySQLdb.connect(host="192.168.154.50", user="root", passwd="solidfire", db="dogfood")
 cursor = db.cursor(MySQLdb.cursors.DictCursor)
-sql = "SELECT volumeID,nonZeroBlocks,statTime FROM volume_capacity"
+sql = "SELECT volumeID,nonZeroBlocks,timestamp FROM volume_capacity"
 cursor.execute(sql)
 row = cursor.fetchone()
 while row is not None:
     volume_id = row['volumeID']
     sample = {}
-    sample["statTime"] = row['statTime']
+    sample["timestamp"] = row['timestamp']
     sample["nonZeroBlocks"] = row['nonZeroBlocks']
     if volume_id not in volumes:
         volumes[volume_id] = []
@@ -72,11 +72,11 @@ try:
             continue
         print "volumeID=" + str(vid)
         samples = volumes[vid]
-        samples = sorted(samples, key=lambda s: s['statTime'])
+        samples = sorted(samples, key=lambda s: s['timestamp'])
         for s in samples:
             if col == 0:
-                worksheet.write(row, col, s["statTime"])
-                worksheet.write_datetime(row, col+1, datetime.datetime.fromtimestamp(s["statTime"]), date_format)
+                worksheet.write(row, col, s["timestamp"])
+                worksheet.write_datetime(row, col+1, datetime.datetime.fromtimestamp(s["timestamp"]), date_format)
                 worksheet.write(row, col+2, float(s["nonZeroBlocks"])*4096.0/1000000000.0, num_format)
             else:
                 worksheet.write(row, col, float(s["nonZeroBlocks"])*4096.0/1000000000.0, num_format)
