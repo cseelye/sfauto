@@ -1511,6 +1511,18 @@ class SfClient:
             return sorted(devices)
 
         elif self.RemoteOs == OsType.Linux:
+            # First look for multipath devices
+            retcode, stdout, stderr = self.ExecuteCommand("multipath -l | grep SolidFir | awk '{print $3}' | sort");
+            if retcode == 0:
+                dev_list = []
+                for line in stdout.split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    dev_list.append(line)
+                mylog.debug(dev_list)
+                return sorted(dev_list, key=lambda x: int(re.findall(r'\d+$', x)[0]))
+
             retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m session -P 3 | egrep 'Target:|State:|disk'");
             if retcode != 0: raise ClientError("Could not get volume list: " + stderr)
             new_volume = None

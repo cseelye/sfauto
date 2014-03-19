@@ -109,12 +109,13 @@ class CreateVdbenchInputAction(ActionBase):
             host_number = 1
             for client_ip in client_ips:
                 client = clients[client_ip]
-                mylog.info("Querying connected iSCSI volumes on " + client.Hostname + "")
+                mylog.info("Querying connected volumes on " + client.Hostname + "")
                 devices = client.GetVdbenchDevices()
                 if volume_start <= 0:
                     volume_start = 1
                 if volume_end <= 0:
                     volume_end = len(devices)
+                outfile.write("\n# sd devices for host hd" + str(host_number) + " (" + client_ip + ")\n")
                 for sd_number in xrange(volume_start, volume_end + 1):
                     device = devices[sd_number - 1]
                     outfile.write("sd=sd" + str(host_number) + "_" + str(sd_number) + ",host=hd" + str(host_number))
@@ -141,10 +142,6 @@ class CreateVdbenchInputAction(ActionBase):
             return True
         except KeyboardInterrupt:
             raise
-        except Exception as e:
-            mylog.error("Error creating vdbench file: " + str(e))
-            self.RaiseFailureEvent(message=str(e), exception=e)
-            return False
 
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
