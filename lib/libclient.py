@@ -1519,8 +1519,7 @@ class SfClient:
                     line = line.strip()
                     if not line:
                         continue
-                    dev_list.append(line)
-                mylog.debug(dev_list)
+                    dev_list.append("/dev/" + line)
                 return sorted(dev_list, key=lambda x: int(re.findall(r'\d+$', x)[0]))
 
             retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m session -P 3 | egrep 'Target:|State:|disk'");
