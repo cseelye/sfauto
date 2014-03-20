@@ -68,10 +68,11 @@ logger.setLevel(logging.FATAL)
 
 class LocalTimezone(datetime.tzinfo):
     STDOFFSET = datetime.timedelta(seconds = -time.timezone)
+
     if time.daylight:
         DSTOFFSET = datetime.timedelta(seconds = -time.altzone)
     else:
-        DSTOFFSET = LocalTimezone.STDOFFSET
+        DSTOFFSET = STDOFFSET
 
     DSTDIFF = DSTOFFSET - STDOFFSET
 
@@ -1331,9 +1332,6 @@ def HumanizeDecimal(pNumber, pPrecision=1, pSuffix=None):
     if (pNumber == None):
         return "0"
 
-    if (abs(pNumber) < 1000):
-        return str(pNumber)
-
     converted = float(pNumber)
     suffix_index = 0
     suffix = [' ', 'k', 'M', 'G', 'T']
@@ -1669,7 +1667,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
             current_line += 1
             screen.gotoXY(startx + 1, starty + current_line)
             screen.set_color(ConsoleColors.WhiteFore)
-            print '....Host....Model..................PortWWN........LinkState...........RX...........TX..',
+            print '..Host....Model..................PortWWN........LinkState............RX.............TX.'
             screen.reset()
             for fc_host in sorted(top.FcHbas.keys()):
                 hba = top.FcHbas[fc_host]
@@ -1678,7 +1676,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
                 link_state = hba.LinkState
                 if "up" in link_state.lower():
                     link_state = link_state + " - " + hba.LinkSpeed
-                print ' %6s  %7s  %23s  %15s   %5s Fr/s   %5s Fr/s' % (fc_host, hba.Model, hba.PortWWN, link_state, HumanizeDecimal(hba.RxFrameThroughput), HumanizeDecimal(hba.TxFrameThroughput)),
+                print '%6s  %7s  %23s  %15s  %7s Fr/s   %7s Fr/s' % (fc_host, hba.Model, hba.PortWWN, link_state, HumanizeDecimal(hba.RxFrameThroughput), HumanizeDecimal(hba.TxFrameThroughput))
 
 
 
