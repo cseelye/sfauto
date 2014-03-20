@@ -2091,3 +2091,17 @@ if platform.system().lower().startswith("win"):
 
     socket.inet_pton = inet_pton
     socket.inet_ntop = inet_ntop
+
+def HumanizeWWN(hexWWN):
+    """Convert a hex WWN (0x10000090fa34ad72) to a pretty format (10:00:00:90:fa:34:ad:72)
+
+    Args:
+        hexWWN: the WWN in hex format
+
+    Returns:
+        The prettified string version of the WWN
+    """
+    pretty = ''
+    for i in range(2, 2*8+2, 2):
+        pretty += ':' + hexWWN[i:i+2]
+    return pretty[1:]

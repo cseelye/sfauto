@@ -16,8 +16,8 @@ When run as a script, the following options/env variables apply:
 
 
 from optparse import OptionParser
+import re
 import sys
-import logging
 import lib.libsf as libsf
 from lib.libsf import mylog
 from lib.libclient import SfClient, ClientError, OsType
@@ -30,9 +30,6 @@ class ShowClientHbasAction(ActionBase):
         """
         Events that this action defines
         """
-        BEFORE_CLIENT = "BEFORE_CLIENT"
-        AFTER_CLIENT = "AFTER_CLIENT"
-        CLIENT_FAILED = "CLIENT_FAILED"
 
     def __init__(self):
         super(self.__class__, self).__init__(self.__class__.Events)
@@ -55,7 +52,9 @@ class ShowClientHbasAction(ActionBase):
             clientIPs = sfdefaults.client_ips
         self.ValidateArgs(locals())
         if debug:
-            mylog.console.setLevel(logging.DEBUG)
+            mylog.showDebug()
+        else:
+            mylog.hideDebug()
 
         mylog.info("Gathering info from clients...")
         info = {}
@@ -75,6 +74,8 @@ class ShowClientHbasAction(ActionBase):
                 if not line:
                     continue
                 host = line
+                m = re.search("(\d+)", host)
+                host_num = m.group(1)
                 hbas[host] = {}
                 cmd = "[ -e /sys/class/fc_host/" + host + "/device/scsi_host/" + host + "/modeldesc ] && cat /sys/class/fc_host/" + host + "/device/scsi_host/" + host + "/modeldesc || cat /sys/class/fc_host/" + host + "/device/scsi_host/" + host + "/model_desc"
                 return_code1, stdout1, stderr1 = client.ExecuteCommand(cmd)
@@ -91,6 +92,15 @@ class ShowClientHbasAction(ActionBase):
                 if "-" in link_state:
                     link_state = link_state[:link_state.index("-")-1].strip()
                 hbas[host]['link'] = link_state
+                cmd = "for port in `ls -1d /sys/class/fc_remote_ports/rport-" + host_num + "*`; do a=$(cat $port/roles); if [[ $a == *Target* ]]; then cat $port/port_name; fi; done"
+                return_code1, stdout1, stderr1 = client.ExecuteCommand(cmd)
+                hbas[host]['targets'] = []
+                for line1 in stdout1.split("\n"):
+                    line1 = line1.strip()
+                    if not line1:
+                        continue
+                    hbas[host]['targets'].append(libsf.HumanizeWWN(line1.strip()))
+
             info[client_ip] = hbas
 
         for ip in info.keys():
@@ -100,6 +110,8 @@ class ShowClientHbasAction(ActionBase):
             for host in sorted(hbas.keys()):
                 hba = hbas[host]
                 mylog.info("  " + host + "  " + hba['desc'] + "  " + hba['wwn'] + "  " + hba['link'] + "  " + hba['speed'])
+                for targ in hba['targets']:
+                    mylog.info("    Target " + targ)
 
 
         return True
