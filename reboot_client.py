@@ -110,7 +110,7 @@ if __name__ == '__main__':
 
     # Parse command line arguments
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
-    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=",".join(sfdefaults.client_ips), help="the IP addresses of the clients")
+    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=None, help="the IP addresses of the clients")
     parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -134,4 +134,3 @@ if __name__ == '__main__':
     except:
         mylog.exception("Unhandled exception")
         sys.exit(1)
-
