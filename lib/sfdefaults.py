@@ -54,6 +54,7 @@ vdbench_dedupratio = 1              # IO dedup ratio
 vdbench_run_time = "800h"           # How long to run IO
 vdbench_interval = 10               # How often to report results
 vdbench_threads = 4                 # Queue depth per device
+vdbench_warmup = 0                 # How long to warmup before recording results
 vdbench_data_vaidation = True       # Use data validation
 nfs_ip = "192.168.154.7"            # The IP address of the main NFS datastore
 nfs_mount_point = "/mnt/nfs"        # The mount point for the NFS datastore
@@ -182,4 +183,3 @@ def PrintDefaults():
     defaults = GetDefaults()
     for name in sorted(defaults.keys()):
         print "%20s" % name + "  =>  " + str(defaults[name])
-

@@ -60,7 +60,7 @@ class CreateVdbenchInputAction(ActionBase):
                             "filename" : None},
             args)
 
-    def Execute(self, client_ips, filename, data_errors=sfdefaults.vdbench_data_errors, compratio=sfdefaults.vdbench_compratio, dedupratio=sfdefaults.vdbench_dedupratio, workload=sfdefaults.vdbench_workload, run_time=sfdefaults.vdbench_run_time, interval=sfdefaults.vdbench_interval, threads=sfdefaults.vdbench_threads, datavalidation=sfdefaults.vdbench_data_vaidation, volume_start=0, volume_end=0, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+    def Execute(self, client_ips, filename, data_errors=sfdefaults.vdbench_data_errors, compratio=sfdefaults.vdbench_compratio, dedupratio=sfdefaults.vdbench_dedupratio, workload=sfdefaults.vdbench_workload, run_time=sfdefaults.vdbench_run_time, interval=sfdefaults.vdbench_interval, threads=sfdefaults.vdbench_threads, warmup=sfdefaults.vdbench_warmup, datavalidation=sfdefaults.vdbench_data_vaidation, volume_start=0, volume_end=0, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
         """
         Create a vdbench input file
         """
@@ -135,7 +135,10 @@ class CreateVdbenchInputAction(ActionBase):
                 outfile.flush()
                 host_number += 1
 
-            outfile.write("rd=default,iorate=max,elapsed=" + str(run_time) + ",interval=" + str(interval) + ",threads=" + str(threads) + "\n")
+            outfile.write("rd=default,iorate=max,elapsed=" + str(run_time) + ",interval=" + str(interval) + ",threads=" + str(threads))
+            if warmup > 0:
+                outfile.write(",warmup=" + str(warmup))
+            outfile.write("\n")
             outfile.write("rd=rd1,wd=wd*" + "\n")
             outfile.flush()
             outfile.close()
@@ -155,23 +158,24 @@ if __name__ == '__main__':
     parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=sfdefaults.client_ips, help="the IP addresses of the clients")
     parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
-    parser.add_option("--filename", type="string", dest="filename", default=sfdefaults.vdbench_inputfile, help="the file to create")
-    parser.add_option("--data_errors", type="string", dest="data_errors", default=sfdefaults.vdbench_data_errors, help="the workload specification")
-    parser.add_option("--compratio", type="int", dest="compratio", default=sfdefaults.vdbench_compratio, help="the compression ratio to use")
-    parser.add_option("--dedupratio", type="int", dest="dedupratio", default=sfdefaults.vdbench_dedupratio, help="the dedupratio ratio to use")
-    parser.add_option("--workload", type="string", dest="workload", default=sfdefaults.vdbench_workload, help="the workload specification")
-    parser.add_option("--run_time", type="string", dest="run_time", default=sfdefaults.vdbench_run_time, help="the run time (how long to run vdbench/IO)")
-    parser.add_option("--interval", type="int", dest="interval", default=sfdefaults.vdbench_interval, help="how often to report results to the screen")
-    parser.add_option("--threads", type="int", dest="threads", default=sfdefaults.vdbench_threads, help="how many threads per sd (queue depth)")
-    parser.add_option("--nodatavalidation", action="store_false", dest="datavalidation", default=True, help="skip data validation")
-    parser.add_option("--volume_start", type="int", dest="volume_start", default=0, help="sd number to start at")
-    parser.add_option("--volume_end", type="int", dest="volume_end", default=0, help="sd number to finish at (0 means all sds)")
+    parser.add_option("--filename", type="string", dest="filename", default=sfdefaults.vdbench_inputfile, help="the file to create [%default]")
+    parser.add_option("--data_errors", type="string", dest="data_errors", default=sfdefaults.vdbench_data_errors, help="the workload specification [%default]")
+    parser.add_option("--compratio", type="int", dest="compratio", default=sfdefaults.vdbench_compratio, help="the compression ratio to use [%default]")
+    parser.add_option("--dedupratio", type="int", dest="dedupratio", default=sfdefaults.vdbench_dedupratio, help="the dedupratio ratio to use [%default]")
+    parser.add_option("--workload", type="string", dest="workload", default=sfdefaults.vdbench_workload, help="the workload specification [%default]")
+    parser.add_option("--run_time", type="string", dest="run_time", default=sfdefaults.vdbench_run_time, help="the run time (how long to run vdbench/IO) [%default]")
+    parser.add_option("--interval", type="int", dest="interval", default=sfdefaults.vdbench_interval, help="how often to report results to the screen [%default]")
+    parser.add_option("--threads", type="int", dest="threads", default=sfdefaults.vdbench_threads, help="how many threads per sd (queue depth) [%default]")
+    parser.add_option("--warmup", type="int", dest="warmup", default=sfdefaults.vdbench_warmup, help="how long a warmup period [%default]")
+    parser.add_option("--nodatavalidation", action="store_false", dest="datavalidation", default=True, help="skip data validation [%default]")
+    parser.add_option("--volume_start", type="int", dest="volume_start", default=0, help="sd number to start at [%default]")
+    parser.add_option("--volume_end", type="int", dest="volume_end", default=0, help="sd number to finish at (0 means all sds) [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.client_ips, options.filename, options.data_errors, options.compratio, options.dedupratio, options.workload, options.run_time, options.interval, options.threads, options.datavalidation, options.volume_start, options.volume_end, options.client_user, options.client_pass, options.debug):
+        if Execute(options.client_ips, options.filename, options.data_errors, options.compratio, options.dedupratio, options.workload, options.run_time, options.interval, options.threads, options.warmup, options.datavalidation, options.volume_start, options.volume_end, options.client_user, options.client_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
