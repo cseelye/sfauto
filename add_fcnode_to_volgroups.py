@@ -30,7 +30,7 @@ import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
 
-class AddFcnodeToVolgroupAction(ActionBase):
+class AddFcnodeToVolgroupsAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -104,9 +104,13 @@ class AddFcnodeToVolgroupAction(ActionBase):
         # For each group, create the new list of IQNs and modify the group
         for vag in fc_groups:
             mylog.info("  Adding IQNs to " + vag["name"])
+            # get the current list of iscsi initators minus all FC iqns
+            iscsi_initiators = []
+            for init in vag["iscsiInitiators"]:
+                if cluster_id + ".fc" in init:
+                    continue
+                iscsi_initiators.append(init)
             for node_id in fc_node_ids:
-            #for vag in fc_groups:
-                iscsi_initiators = []
                 for fc_initiator in vag["fibreChannelInitiators"]:
                     iqn = "iqn.2010-01.com.solidfire:{0}.fc{1}.{2}".format(cluster_id, node_id, fc_initiator.lower())
                     iscsi_initiators.append(iqn)
