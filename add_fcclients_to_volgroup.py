@@ -36,9 +36,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog, SfError
 from lib.libclient import ClientError, SfClient
 import lib.sfdefaults as sfdefaults
-import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
-from lib.datastore import SharedValues
 
 class AddFcclientsToVolgroupAction(ActionBase):
     class Events:

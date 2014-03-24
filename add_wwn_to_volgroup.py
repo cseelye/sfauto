@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 """
-This action will remove all FC clients from a volume group
+This action will add a Fc WWN to a volume access group
 
 When run as a script, the following options/env variables apply:
     --mvip              The managementVIP of the cluster
@@ -12,6 +12,8 @@ When run as a script, the following options/env variables apply:
 
     --pass              The cluster admin password
     SFPASS env var
+
+    --wwn               The WWN to add to the group
 
     --volgroup_name     The name of the volume group
 
@@ -26,7 +28,7 @@ from lib.libsf import mylog, SfError
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 
-class ClearFcclientsFromVolgroupAction(ActionBase):
+class AddWwnToVolgroupAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -40,14 +42,14 @@ class ClearFcclientsFromVolgroupAction(ActionBase):
         libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
                             "username" : None,
                             "password" : None,
-                            },
+                            "wwn" : None},
             args)
         if not args["volgroup_name"] and args["volgroup_id"] <= 0:
             raise libsf.SfArgumentError("Please specify a volgroup name or ID")
 
-    def Execute(self, mvip=sfdefaults.mvip, volgroup_name=None, volgroup_id=0, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, wwn=None, mvip=sfdefaults.mvip, volgroup_name=None, volgroup_id=0, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
-        Remove all FC clients from the specified volume access group
+        Add the specified clients to the specified volume access group
         """
         self.ValidateArgs(locals())
         if debug:
@@ -64,11 +66,20 @@ class ClearFcclientsFromVolgroupAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
-        # Add the WWNs to the volume group
-        mylog.info("Removing all client WWNs from group")
+        normalized_wwn = wwn.replace(":", "").lower()
+
+        full_wwn_list = volgroup["fibreChannelInitiators"]
+        full_wwn_list = [x.lower() for x in full_wwn_list]
+        if normalized_wwn in full_wwn_list:
+            mylog.passed(wwn + " is already in group " + volgroup["name"])
+            return True
+        full_wwn_list.append(normalized_wwn)
+
+        # Add the WWN to the volume group
+        mylog.info("Adding " + normalized_wwn + " to group " + volgroup["name"])
         params = {}
         params["volumeAccessGroupID"] = volgroup["volumeAccessGroupID"]
-        params["fibreChannelInitiators"] = []
+        params["fibreChannelInitiators"] = full_wwn_list
         try:
             libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
         except libsf.SfApiError as e:
@@ -76,7 +87,7 @@ class ClearFcclientsFromVolgroupAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
-        mylog.passed("Successfully removed clients from group")
+        mylog.passed("Successfully added WWN to group")
         return True
 
 # Instantate the class and add its attributes to the module
@@ -91,6 +102,7 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster [%default]")
+    parser.add_option("--wwn", type="string", dest="wwn", default=None, help="WWN to add to the group")
     parser.add_option("--volgroup_name", type="string", dest="volgroup_name", default=None, help="the name of the group")
     parser.add_option("--volgroup_id", type="int", dest="volgroup_id", default=0, help="the ID of the group")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -98,7 +110,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.volgroup_name, options.volgroup_id, options.username, options.password, options.debug):
+        if Execute(options.wwn, options.mvip, options.volgroup_name, options.volgroup_id, options.username, options.password, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

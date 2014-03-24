@@ -1,7 +1,9 @@
 #!/usr/bin/python
 
 """
-This action will remove all FC clients from a volume group
+This action will remove clients from a volume access group
+
+The action connects to each specified client, queries the FC WWNs, then removes those WWNs from the volume access group on the cluster
 
 When run as a script, the following options/env variables apply:
     --mvip              The managementVIP of the cluster
@@ -13,6 +15,15 @@ When run as a script, the following options/env variables apply:
     --pass              The cluster admin password
     SFPASS env var
 
+    --client_ips        The IP addresses of the clients
+    SFCLIENT_IPS env var
+
+    --client_user       The username for the client
+    SFCLIENT_USER env var
+
+    --client_pass       The password for the client
+    SFCLIENT_PASS env var
+
     --volgroup_name     The name of the volume group
 
     --volgroup_id       The ID of the volume group
@@ -23,10 +34,11 @@ from optparse import OptionParser
 import logging
 import lib.libsf as libsf
 from lib.libsf import mylog, SfError
+from lib.libclient import ClientError, SfClient
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 
-class ClearFcclientsFromVolgroupAction(ActionBase):
+class RemoveFcclientsFromVolgroupAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -40,15 +52,17 @@ class ClearFcclientsFromVolgroupAction(ActionBase):
         libsf.ValidateArgs({"mvip" : libsf.IsValidIpv4Address,
                             "username" : None,
                             "password" : None,
-                            },
+                            "client_ips" : libsf.IsValidIpv4AddressList},
             args)
         if not args["volgroup_name"] and args["volgroup_id"] <= 0:
             raise libsf.SfArgumentError("Please specify a volgroup name or ID")
 
-    def Execute(self, mvip=sfdefaults.mvip, volgroup_name=None, volgroup_id=0, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, client_ips=None, volgroup_name=None, volgroup_id=0, username=sfdefaults.username, password=sfdefaults.password, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
         """
-        Remove all FC clients from the specified volume access group
+        Remove the specified clients from the specified volume access group
         """
+        if not client_ips:
+            client_ips = sfdefaults.client_ips
         self.ValidateArgs(locals())
         if debug:
             mylog.showDebug()
@@ -64,11 +78,38 @@ class ClearFcclientsFromVolgroupAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
+        # Get a list of initiator WWNs from the clients
+        remove_wwns = []
+        for client_ip in client_ips:
+            client = SfClient()
+            mylog.info("Connecting to client '" + client_ip + "'")
+            try:
+                client.Connect(client_ip, client_user, client_pass)
+            except ClientError as e:
+                mylog.error(e)
+                return False
+            wwns = client.GetWWNs()
+            mylog.info("  " + client.Hostname + " has WWNs " + ", ".join(map(libsf.HumanizeWWN, wwns)))
+
+            for wwn in wwns:
+                if wwn in remove_wwns:
+                    mylog.error("Duplicate WWN " + wwn)
+                    self.RaiseFailureEvent(message="Duplicate WWN " + wwn)
+                    return False
+            remove_wwns += wwns
+
+        full_wwn_list = volgroup["fibreChannelInitiators"]
+        full_wwn_list = [x.lower() for x in full_wwn_list]
+        for wwn in reversed(full_wwn_list):
+            if wwn in remove_wwns:
+                mylog.debug("Removing " + wwn)
+                full_wwn_list.remove(wwn)
+
         # Add the WWNs to the volume group
-        mylog.info("Removing all client WWNs from group")
+        mylog.info("Removing client WWNs from group")
         params = {}
         params["volumeAccessGroupID"] = volgroup["volumeAccessGroupID"]
-        params["fibreChannelInitiators"] = []
+        params["fibreChannelInitiators"] = full_wwn_list
         try:
             libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
         except libsf.SfApiError as e:
@@ -88,6 +129,9 @@ if __name__ == '__main__':
 
     # Parse command line arguments
     parser = OptionParser(option_class=libsf.ListOption, description=libsf.GetFirstLine(sys.modules[__name__].__doc__))
+    parser.add_option("-c", "--client_ips", action="list", dest="client_ips", default=None, help="the IP addresses of the clients")
+    parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
+    parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster [%default]")
@@ -98,7 +142,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.volgroup_name, options.volgroup_id, options.username, options.password, options.debug):
+        if Execute(options.mvip, options.client_ips, options.volgroup_name, options.volgroup_id, options.username, options.password, options.client_user, options.client_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

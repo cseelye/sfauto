@@ -2104,4 +2104,4 @@ def HumanizeWWN(hexWWN):
     pretty = ''
     for i in range(2, 2*8+2, 2):
         pretty += ':' + hexWWN[i:i+2]
-    return pretty[1:]
+    return pretty.strip(":")
