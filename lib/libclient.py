@@ -755,8 +755,24 @@ class SfClient:
         if self.RemoteOs == OsType.Linux:
             retcode, stdout, stderr = self.ExecuteCommand("cat /etc/iscsi/initiatorname.iscsi | cut -d'=' -f2")
             if retcode != 0:
-                return None
+                raise ClientError("Could not read initiator name: " + stderr)
             return stdout.strip()
+
+        else:
+            raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
+
+    def GetWWNs(self):
+        if self.RemoteOs == OsType.Linux:
+            retcode, stdout, stderr = self.ExecuteCommand("cat /sys/class/fc_host/*/port_name")
+            if retcode != 0:
+                raise ClientError("Could not read initiator names: " + stderr)
+            wwns = []
+            for line in stdout.strip().split("\n"):
+                #line = line.strip()
+                #if not line:
+                #    continue
+                wwns.append(line[line.index("x")+1:].lower())
+            return wwns
 
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))

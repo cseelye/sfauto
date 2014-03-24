@@ -1717,11 +1717,11 @@ def FindAccount(Mvip, Username, Password, AccountName=None, AccountId=None):
                 return account
         raise SfError("Could not find account with ID " + str(AccountId))
 
-def FindVolumeAccessGroup(Mvip, Username, Password, VagName=None, VagId=None):
+def FindVolumeAccessGroup(Mvip, Username, Password, VagName=None, VagId=None, ApiVersion=5.0):
     if not VagName and not VagId:
         raise SfError("Please specify either VagName or VagId")
 
-    vag_list = CallApiMethod(Mvip, Username, Password, "ListVolumeAccessGroups", {}, ApiVersion=5.0)
+    vag_list = CallApiMethod(Mvip, Username, Password, "ListVolumeAccessGroups", {}, ApiVersion=ApiVersion)
     if VagName:
         for vag in vag_list["volumeAccessGroups"]:
             if vag["name"].lower() == VagName.lower():
