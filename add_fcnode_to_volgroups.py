@@ -57,7 +57,7 @@ class AddFcnodeToVolgroupsAction(ActionBase):
         else:
             mylog.hideDebug()
 
-        mylog.info("Adding FC node IQNs to all FC volume access groups")
+        mylog.info("Looking for FC volume access groups and nodes")
 
         # Find all the volume groups with FC initiators in them
         fc_groups = []
@@ -69,12 +69,36 @@ class AddFcnodeToVolgroupsAction(ActionBase):
             return False
 
         for vag in all_groups["volumeAccessGroups"]:
+            fc = False
             if "fibreChannelInitiators" in vag and len(vag["fibreChannelInitiators"]) > 0:
+                fc = True
+            elif "initiators" in vag:
+                fc = False
+                for init in vag['initiators']:
+                    if init.startswith("iqn"):
+                        continue
+                    else:
+                        fc = True
+                        break
+            if fc:
                 fc_groups.append(vag)
 
         if len(fc_groups) <= 0:
             mylog.warning("There are no volume access groups with FC initiators in them")
             return True
+
+        # Separate initiators into FC and iSCSI
+        for group in fc_groups:
+            if "iscsiInitiators" not in group:
+                group["iscsiInitiators"] = []
+            if "fibreChannelInitiators" not in group:
+                group["fibreChannelInitiators"] = []
+            if "initiators" in group:
+                for init in group["initiators"]:
+                    if init.startswith("iqn") and init not in group["iscsiInitiators"]:
+                        group["iscsiInitiators"].append(init)
+                    elif init not in group["fibreChannelInitiators"]:
+                        group["fibreChannelInitiators"].append(init)
 
         # Find the FC nodes in the cluster
         fc_node_ids = []
@@ -101,7 +125,28 @@ class AddFcnodeToVolgroupsAction(ActionBase):
             return False
         cluster_id = result["clusterInfo"]["uniqueID"]
 
+        # First remove all FC node IQNs from all groups
+        mylog.info("Removing FC node IQNs from all groups")
+        for vag in fc_groups:
+            iscsi_initiators = []
+            for init in vag["iscsiInitiators"]:
+                if cluster_id + ".fc" in init:
+                    continue
+                iscsi_initiators.append(init)
+            all_initiators = iscsi_initiators + vag["fibreChannelInitiators"]
+            params = {}
+            params["volumeAccessGroupID"] = vag["volumeAccessGroupID"]
+            params["iscsiInitiators"] = iscsi_initiators
+            params["initiators"] = all_initiators
+            try:
+                libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
+            except libsf.SfApiError as e:
+                mylog.error(str(e))
+                self.RaiseFailureEvent(message=str(e), exception=e)
+                return False
+
         # For each group, create the new list of IQNs and modify the group
+        mylog.info("Adding FC node IQNs to all FC volume access groups")
         for vag in fc_groups:
             mylog.info("  Adding IQNs to " + vag["name"])
             # get the current list of iscsi initators minus all FC iqns
@@ -110,6 +155,7 @@ class AddFcnodeToVolgroupsAction(ActionBase):
                 if cluster_id + ".fc" in init:
                     continue
                 iscsi_initiators.append(init)
+            all_initiators = iscsi_initiators + vag["fibreChannelInitiators"]
             for node_id in fc_node_ids:
                 for fc_initiator in vag["fibreChannelInitiators"]:
                     iqn = "iqn.2010-01.com.solidfire:{0}.fc{1}.{2}".format(cluster_id, node_id, fc_initiator.lower())
@@ -118,6 +164,7 @@ class AddFcnodeToVolgroupsAction(ActionBase):
                 params = {}
                 params["volumeAccessGroupID"] = vag["volumeAccessGroupID"]
                 params["iscsiInitiators"] = iscsi_initiators
+                params["initiators"] = all_initiators
                 try:
                     libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
                 except libsf.SfApiError as e:
@@ -141,7 +188,7 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
-    parser.add_option("--debug", action="store_true", dest="debug", default=True, help="display more verbose messages")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:

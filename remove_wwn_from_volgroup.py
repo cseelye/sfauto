@@ -66,6 +66,18 @@ class RemoveWwnFromVolgroupAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
+        # Separate initiators into FC and iSCSI
+        if "iscsiInitiators" not in volgroup:
+            volgroup["iscsiInitiators"] = []
+        if "fibreChannelInitiators" not in volgroup:
+            volgroup["fibreChannelInitiators"] = []
+        if "initiators" in volgroup:
+            for init in volgroup["initiators"]:
+                if init.startswith("iqn") and init not in volgroup["iscsiInitiators"]:
+                    volgroup["iscsiInitiators"].append(init)
+                elif init not in volgroup["fibreChannelInitiators"]:
+                    volgroup["fibreChannelInitiators"].append(init)
+
         normalized_wwn = wwn.replace(":", "").lower()
 
         full_wwn_list = volgroup["fibreChannelInitiators"]
@@ -74,12 +86,14 @@ class RemoveWwnFromVolgroupAction(ActionBase):
             mylog.passed(wwn + " is not in group " + volgroup["name"])
             return True
         full_wwn_list.remove(normalized_wwn)
+        all_init_list = volgroup["iscsiInitiators"] + full_wwn_list
 
         # Add the WWN to the volume group
         mylog.info("Removing " + normalized_wwn + " from group " + volgroup["name"])
         params = {}
         params["volumeAccessGroupID"] = volgroup["volumeAccessGroupID"]
         params["fibreChannelInitiators"] = full_wwn_list
+        params["initiators"] = all_init_list
         try:
             libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
         except libsf.SfApiError as e:

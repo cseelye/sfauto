@@ -78,6 +78,18 @@ class AddFcclientsToVolgroupAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
+        # Separate initiators into FC and iSCSI
+        if "iscsiInitiators" not in volgroup:
+            volgroup["iscsiInitiators"] = []
+        if "fibreChannelInitiators" not in volgroup:
+            volgroup["fibreChannelInitiators"] = []
+        if "initiators" in volgroup:
+            for init in volgroup["initiators"]:
+                if init.startswith("iqn") and init not in volgroup["iscsiInitiators"]:
+                    volgroup["iscsiInitiators"].append(init)
+                elif init not in volgroup["fibreChannelInitiators"]:
+                    volgroup["fibreChannelInitiators"].append(init)
+
         # Get a list of initiator WWNs from the clients
         new_wwns = []
         for client_ip in client_ips:
@@ -105,12 +117,14 @@ class AddFcclientsToVolgroupAction(ActionBase):
                 mylog.debug(wwn + " is already in the volume group")
                 continue
             full_wwn_list.append(wwn)
+        all_init_list = volgroup["iscsiInitiators"] + full_wwn_list
 
         # Add the WWNs to the volume group
         mylog.info("Adding client WWNs to group")
         params = {}
         params["volumeAccessGroupID"] = volgroup["volumeAccessGroupID"]
         params["fibreChannelInitiators"] = full_wwn_list
+        params["initiators"] = all_init_list
         try:
             libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
         except libsf.SfApiError as e:

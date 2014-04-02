@@ -464,7 +464,7 @@ class mylog:
     silence = False
 
     logging.raiseExceptions = False
-    sftestlog = logging.getLogger("sftest-py")
+    sftestlog = logging.getLogger("sftest")
     sftestlog.setLevel(logging.DEBUG)
 
     # Log everything to the platform appropriate syslog
@@ -480,13 +480,23 @@ class mylog:
             # Probably not running as administrator
             pass
     else:
+        from logging.handlers import SysLogHandler
         syslog_formatter = logging.Formatter("%(name)s: %(levelname)s %(message)s") # prepend with ident and our severities
+        syslog = None
+        # Try to connect to syslog on the local unix socket
         syslog_address = "/dev/log"
-        if "darwin" in platform.system().lower(): syslog_address="/var/run/syslog"
-        syslog = SysLogHandler(address=syslog_address, facility=SysLogHandler.LOG_USER)
-        syslog.setLevel(logging.DEBUG)
-        syslog.setFormatter(syslog_formatter)
-        sftestlog.addHandler(syslog)
+        if "darwin" in platform.system().lower():
+            syslog_address="/var/run/syslog"
+        try:
+            syslog = SysLogHandler(address=syslog_address, facility=SysLogHandler.LOG_USER)
+        except socket.error:
+            # Try again with UDP
+            syslog = SysLogHandler(address=('localhost', 514), facility=SysLogHandler.LOG_USER)
+
+        if syslog:
+            syslog.setLevel(logging.DEBUG)
+            syslog.setFormatter(syslog_formatter)
+            sftestlog.addHandler(syslog)
 
     # Log info and above to screen with colors
     console_formatter = MultiFormatter('%(asctime)s: %(levelname)-7s %(message)s')
@@ -2102,6 +2112,10 @@ def HumanizeWWN(hexWWN):
         The prettified string version of the WWN
     """
     pretty = ''
-    for i in range(2, 2*8+2, 2):
+    if hexWWN.startswith('0x'):
+        start_index = 2
+    else:
+        start_index = 0
+    for i in range(start_index, 2*8+2, 2):
         pretty += ':' + hexWWN[i:i+2]
     return pretty.strip(":")

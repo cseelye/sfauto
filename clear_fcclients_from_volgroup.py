@@ -64,11 +64,23 @@ class ClearFcclientsFromVolgroupAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
-        # Add the WWNs to the volume group
-        mylog.info("Removing all client WWNs from group")
+        # Separate initiators into FC and iSCSI
+        if "iscsiInitiators" not in volgroup:
+            volgroup["iscsiInitiators"] = []
+        if "fibreChannelInitiators" not in volgroup:
+            volgroup["fibreChannelInitiators"] = []
+        if "initiators" in volgroup:
+            for init in volgroup["initiators"]:
+                if init.startswith("iqn") and init not in volgroup["iscsiInitiators"]:
+                    volgroup["iscsiInitiators"].append(init)
+                elif init not in volgroup["fibreChannelInitiators"]:
+                    volgroup["fibreChannelInitiators"].append(init)
+
+        mylog.info("Removing all FC WWNs from group")
         params = {}
         params["volumeAccessGroupID"] = volgroup["volumeAccessGroupID"]
         params["fibreChannelInitiators"] = []
+        params["initiators"] = volgroup["iscsiInitiators"]
         try:
             libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
         except libsf.SfApiError as e:
@@ -76,7 +88,7 @@ class ClearFcclientsFromVolgroupAction(ActionBase):
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
-        mylog.passed("Successfully removed clients from group")
+        mylog.passed("Successfully removed FC clients from group")
         return True
 
 # Instantate the class and add its attributes to the module
