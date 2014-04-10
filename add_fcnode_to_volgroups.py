@@ -23,12 +23,10 @@ When run as a script, the following options/env variables apply:
 import sys
 from optparse import OptionParser
 import lib.libsf as libsf
-from lib.libsf import mylog, SfError
+from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
-import logging
-import lib.libsfcluster as libsfcluster
 from lib.action_base import ActionBase
-from lib.datastore import SharedValues
+
 
 class AddFcnodeToVolgroupsAction(ActionBase):
     class Events:
@@ -158,8 +156,9 @@ class AddFcnodeToVolgroupsAction(ActionBase):
             all_initiators = iscsi_initiators + vag["fibreChannelInitiators"]
             for node_id in fc_node_ids:
                 for fc_initiator in vag["fibreChannelInitiators"]:
-                    iqn = "iqn.2010-01.com.solidfire:{0}.fc{1}.{2}".format(cluster_id, node_id, fc_initiator.lower())
+                    iqn = "iqn.2010-01.com.solidfire:{0}.fc{1}.{2}".format(cluster_id, node_id, fc_initiator.replace(':', '').lower())
                     iscsi_initiators.append(iqn)
+                all_initiators = iscsi_initiators + vag["fibreChannelInitiators"]
 
                 params = {}
                 params["volumeAccessGroupID"] = vag["volumeAccessGroupID"]
