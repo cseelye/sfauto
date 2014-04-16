@@ -149,9 +149,14 @@ class XenReturnToNormalAction(ActionBase):
 
         if xen_poweron_vms.Execute(vm_regex=vm_on_regex, vmhost=vmhost, host_user=host_user, host_pass=host_pass) == False:
             mylog.error("Could not power on the correct VMs")
+            return False
 
         if xen_poweroff_vms.Execute(vm_regex=vm_off_regex, vmhost=vmhost, host_user=host_user, host_pass=host_pass) == False:
             mylog.error("Could not power off the correct VMs")
+            return False
+
+        mylog.passed("The Xen Hypervisor is back to a 'normal' state")
+        return True
 
 
 # Instantate the class and add its attributes to the module
