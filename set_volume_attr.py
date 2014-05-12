@@ -137,7 +137,7 @@ if __name__ == '__main__':
     parser.add_option("--volume_id", type="int", dest="volume_id", default=0, help="the volume to modify")
     parser.add_option("--volume_count", type="int", dest="volume_count", default=0, help="the number of volumes to modify")
     parser.add_option("--attr", type="string", dest="attr", help="the attribute to set")
-    parser.add_option("--attr_value", type="string", dest="attr_value", help="the attribute to set")
+    parser.add_option("--attr_value", type="string", dest="attr_value", help="the value of the attribute to set")
     parser.add_option("--test", action="store_true", dest="test", default=False, help="show the volumes that would be modified but don't actually modify them")
     parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=sfdefaults.parallel_calls_thresh, help="do not thread calls unless there are more than this many [%default]")
     parser.add_option("--parallel_max", type="int", dest="parallel_max", default=sfdefaults.parallel_calls_max, help="the max number of threads to use [%default]")
