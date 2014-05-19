@@ -135,6 +135,7 @@ class ModifyVolgroupLunAssignmentsAction(ActionBase):
         params = {}
         params["volumeAccessGroupID"] = volgroup["volumeAccessGroupID"]
         params["volumeLunAssignments"] = lun_assignments
+        params["lunAssignments"] = lun_assignments
         try:
             libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroupLunAssignments", params, ApiVersion=6.1)
         except libsf.SfApiError as e:
