@@ -45,8 +45,10 @@ with open("dogfood_config.json", "r") as f:
 # Get volume IDs/names from cluster
 volume_list = libsf.CallApiMethod(config["mvip"], config["username"], config["password"], "ListActiveVolumes", {} )
 id2name = {}
+id2size = {}
 for volume in volume_list['volumes']:
     id2name[volume['volumeID']] = volume['name']
+    id2size[volume['volumeID']] = volume['totalSize']
 volume_ids = sorted(id2name.keys())
 cluster_capacity = libsf.CallApiMethod(config["mvip"], config["username"], config["password"], "GetClusterCapacity", {} )
 
@@ -54,6 +56,7 @@ cluster_capacity = libsf.CallApiMethod(config["mvip"], config["username"], confi
 workbook = xlsxwriter.Workbook("dogfood_volumes.xlsx")
 try:
     bold_format = workbook.add_format({'bold' : True})
+    italic_format = workbook.add_format({'italic' : True})
     num_format = workbook.add_format({'num_format' : '###0.0'})
     date_format = workbook.add_format({'num_format' : 'mmm dd'})
     percent_format = workbook.add_format({'num_format' : '#0.0%'})
@@ -136,38 +139,45 @@ try:
     col = 0
     worksheet3.write(row, col, "Volume", bold_format)
     col += 1
-    worksheet3.write(row, col, "GB Used", bold_format)
+    worksheet3.write(row, col, "Size (GB)", bold_format)
+    col += 1
+    worksheet3.write(row, col, "Used (GB)", bold_format)
     col += 1
     worksheet3.write(row, col, "Percent Used", bold_format)
 
-    worksheet3.set_column(0, 2, 14)
+    worksheet3.set_column(0, 3, 14)
 
     row = 1
     col = 0
-    worksheet3.write(row, col, "Total")
+    worksheet3.write(row, col, "Cluster Total", italic_format)
     col += 1
     worksheet3.write(row, col, float(cluster_capacity["clusterCapacity"]["maxUsedSpace"]) / 1000000000.0, num_format)
     col += 1
-    worksheet3.write(row, col, 1, percent_format)
+    worksheet3.write(row, col, float(cluster_capacity["clusterCapacity"]["usedSpace"]) / 1000000000.0, num_format)
+    # col += 1
+    # worksheet3.write(row, col, 1, percent_format)
 
     row += 1
     col = 0
     for vid in sorted(last_sample, key=last_sample.get, reverse=True):
         worksheet3.write(row, col, id2name[vid])
         col += 1
+        worksheet3.write(row, col, float(id2size[vid])/1000000000.0, num_format)
+        col += 1
         worksheet3.write(row, col, float(last_sample[vid])*4096.0/1000000000.0, num_format)
         col += 1
-        worksheet3.write(row, col, "=$B$" + str(row+1) + "/$B$2", percent_format)
+        worksheet3.write(row, col, "=$C$" + str(row+1) + "/$B$2", percent_format)
         
         row += 1
         col = 0
 
     col = 0
-    worksheet3.write(row, col, "Unused")
+    worksheet3.write(row, col, "Unused", italic_format)
     col += 1
-    worksheet3.write(row, col, "=B2 - SUM(B3:B" + str(maxcol-1) + ")", num_format)
     col += 1
-    worksheet3.write(row, col, "=B" + str(row+1) + "/B2", percent_format)
+    worksheet3.write(row, col, "=B2 - SUM(C3:C" + str(maxcol-1) + ")", num_format)
+    col += 1
+    worksheet3.write(row, col, "=C" + str(row+1) + "/B2", percent_format)
 
     chart = workbook.add_chart({"type" : "pie"})
     chart.add_series({
@@ -175,7 +185,7 @@ try:
         "categories" : [worksheet3.get_name(), 2, 0, 2 + len(volume_ids), 0],
         "values" : [worksheet3.get_name(), 2, 2, 2 + len(volume_ids), 2]
     })
-    worksheet3.insert_chart(0, 3, chart)
+    worksheet3.insert_chart(0, 4, chart)
 
 
 finally:
