@@ -51,7 +51,7 @@ volume_ids = sorted(id2name.keys())
 cluster_capacity = libsf.CallApiMethod(config["mvip"], config["username"], config["password"], "GetClusterCapacity", {} )
 
 # Create the workbook
-workbook = xlsxwriter.Workbook("dogfood_volumes2.xlsx")
+workbook = xlsxwriter.Workbook("dogfood_volumes.xlsx")
 try:
     bold_format = workbook.add_format({'bold' : True})
     num_format = workbook.add_format({'num_format' : '###0.0'})
