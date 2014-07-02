@@ -37,6 +37,7 @@ from lib.libsf import mylog, SfError
 from lib.libclient import ClientError, SfClient
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
+from lib.libsfcluster import SFCluster
 
 class AddFcclientsToVolgroupAction(ActionBase):
     class Events:
@@ -69,10 +70,19 @@ class AddFcclientsToVolgroupAction(ActionBase):
         else:
             mylog.hideDebug()
 
+        # Get the cluster version so we know which endpoint to use
+        cluster = SFCluster(mvip, username, password)
+        try:
+            api_version = cluster.GetAPIVersion()
+        except libsf.SfError as e:
+            mylog.error("Failed to get cluster version: " + str(e))
+            mylog.info("Assuming API version 7.0")
+            api_version = 7.0
+
         # Find the group
         mylog.info("Finding the volume group on the cluster")
         try:
-            volgroup = libsf.FindVolumeAccessGroup(mvip, username, password, VagName=volgroup_name, VagId=volgroup_id, ApiVersion=6.1)
+            volgroup = libsf.FindVolumeAccessGroup(mvip, username, password, VagName=volgroup_name, VagId=volgroup_id, ApiVersion=api_version)
         except libsf.SfError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
@@ -126,7 +136,7 @@ class AddFcclientsToVolgroupAction(ActionBase):
         params["fibreChannelInitiators"] = full_wwn_list
         params["initiators"] = all_init_list
         try:
-            libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
+            libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=api_version)
         except libsf.SfApiError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)

@@ -45,6 +45,7 @@ import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
+from lib.libsfcluster import SFCluster
 import math
 
 class CreateVolumesAction(ActionBase):
@@ -154,20 +155,17 @@ class CreateVolumesAction(ActionBase):
             for vol_num in range(volume_start, volume_start + volume_count):
                 volume_names.append(volume_prefix + "%05d" % vol_num)
 
-            #get the cluster version so we know which API method to use
-            cluster_version = None
+            # Get the cluster version so we know which API method to use
+            cluster = SFCluster(mvip, username, password)
             try:
-                result = libsf.CallApiMethod(mvip, username, password, 'GetClusterVersionInfo', {})
-                cluster_version = result["clusterVersion"]
-                cluster_version = float(cluster_version)
-                mylog.debug("The cluster version is {}".format(cluster_version))
-                cluster_version = math.floor(cluster_version)
+                api_version = cluster.GetAPIVersion()
             except libsf.SfError as e:
                 mylog.error("Failed to get cluster version: " + str(e))
-                cluster_version = 6.0
+                mylog.info("Assuming API version 6.0")
+                api_version = 6.0
 
-            #if the version is 5.0 or we are creating a single volume then use the CreateVolume method
-            if create_single or cluster_version == 5.0:
+            #if the version is 5.0 or we are creating single volumes at a time then use the CreateVolume method
+            if create_single or api_version < 6.0:
                 for vol_name in volume_names:
                     params = {}
                     params["name"] = vol_name
@@ -200,7 +198,7 @@ class CreateVolumesAction(ActionBase):
                 params["qos"] = qos
                 mylog.info("Creating volumes...")
                 try:
-                    libsf.CallApiMethod(mvip, username, password, "CreateMultipleVolumes", params, ApiVersion=6.0)
+                    libsf.CallApiMethod(mvip, username, password, "CreateMultipleVolumes", params, ApiVersion=api_version)
                 except libsf.SfError as e:
                     mylog.error(str(e))
                     self.RaiseFailureEvent(message=str(e), exception=e)

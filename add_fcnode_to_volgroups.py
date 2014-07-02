@@ -26,7 +26,7 @@ import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
-
+from lib.libsfcluster import SFCluster
 
 class AddFcnodeToVolgroupsAction(ActionBase):
     class Events:
@@ -57,10 +57,19 @@ class AddFcnodeToVolgroupsAction(ActionBase):
 
         mylog.info("Looking for FC volume access groups and nodes")
 
+        # Get the cluster version so we know which endpoint to use
+        cluster = SFCluster(mvip, username, password)
+        try:
+            api_version = cluster.GetAPIVersion()
+        except libsf.SfError as e:
+            mylog.error("Failed to get cluster version: " + str(e))
+            mylog.info("Assuming API version 7.0")
+            api_version = 7.0
+
         # Find all the volume groups with FC initiators in them
         fc_groups = []
         try:
-            all_groups = libsf.CallApiMethod(mvip, username, password, "ListVolumeAccessGroups", {}, ApiVersion=6.1)
+            all_groups = libsf.CallApiMethod(mvip, username, password, "ListVolumeAccessGroups", {}, ApiVersion=api_version)
         except libsf.SfApiError as e:
             mylog.error(str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
@@ -137,7 +146,7 @@ class AddFcnodeToVolgroupsAction(ActionBase):
             params["iscsiInitiators"] = iscsi_initiators
             params["initiators"] = all_initiators
             try:
-                libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
+                libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=api_version)
             except libsf.SfApiError as e:
                 mylog.error(str(e))
                 self.RaiseFailureEvent(message=str(e), exception=e)
@@ -165,7 +174,7 @@ class AddFcnodeToVolgroupsAction(ActionBase):
                 params["iscsiInitiators"] = iscsi_initiators
                 params["initiators"] = all_initiators
                 try:
-                    libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=6.1)
+                    libsf.CallApiMethod(mvip, username, password, "ModifyVolumeAccessGroup", params, ApiVersion=api_version)
                 except libsf.SfApiError as e:
                     mylog.error(str(e))
                     self.RaiseFailureEvent(message=str(e), exception=e)

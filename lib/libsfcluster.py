@@ -389,6 +389,21 @@ class SFCluster(object):
             version = version[:index]
             self.clipVersionAndMakeFloat(version)
 
+    def GetAPIVersion(self):
+        """
+        Get the highest API version this cluster supports
+        
+        Returns:
+            A floating point API version
+        """
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetAPI", {}, ApiVersion=1.0)
+        try:
+            return max(map(float, result['supportedVersions']))
+        except KeyError: # Pre-boron did not have this key in GetAPI
+            return 4.0
+        except ValueError: # Format must have changed, assume an early version
+            return 5.0
+
     def IsBinSyncing(self):
         """
         Check if the cluster is bin syncing
