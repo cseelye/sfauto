@@ -21,121 +21,6 @@ class StartClusterPairInfo(object):
             self.key = jsonResult["key"]
             self.ID = jsonResult["clusterPairID"]
 
-class ClusterVersion(object):
-    """
-    Object to hold and compare cluster versions
-    """
-    def __init__(self):
-        self.version = 0
-
-    #will return true if self is gt the input clusterVersion object
-    def gt(self, clusterVersion):
-        if (self.CompareTwoVersions(self.version, clusterVersion.version) == "gt"):
-            return True
-        return False
-
-    def gt(self, version):
-        if(self.CompareTwoVersions(self.version, version) == "gt"):
-            return True
-        return False
-
-    #will return true if self is lt the input clusterVersion object
-    def lt(self, clusterVersion):
-        if(self.CompareTwoVersions(self.version, clusterVersion.version) == "lt"):
-            return True
-        return False
-
-    def lt(self, version):
-        if(self.CompareTwoVersions(self.version, version) == "lt"):
-            return True
-        return False
-
-    #will return true if self is eq the input clusterVersion object
-    def eq(self, clusterVersion):
-        if(self.CompareTwoVersions(self.version, clusterVersion.version) == "eq"):
-            return True
-        return False
-
-    def eq(self, version):
-        if(self.CompareTwoVersions(self.version, version) == "eq"):
-            return True
-        return False
-
-    #returns the major version
-    def GetMajorVersion(self):
-        index = self.version.index('.')
-        return self.version[:index]
-
-    #returns everything but the major version
-    def GetMinorVersion(self):
-        index = self.version.index('.')
-        return self.version[index+1:]
-
-    #returns version
-    def GetVersion(self):
-        return self.version
-
-    #compares two versions
-    #returns lt, gt, or eq
-    def CompareTwoVersions(self, versionOne, versionTwo):
-
-        try:
-            oneIndex = versionOne.index('.')
-            twoIndex = versionTwo.index('.')
-        except ValueError:
-            if(versionOne > versionTwo):
-                return "gt"
-            if(versionOne < versionTwo):
-                return "lt"
-            if(versionOne == versionTwo):
-                return "eq"
-
-        if(versionOne[:oneIndex] > versionTwo[:twoIndex]):
-            return "gt"
-        if(versionOne[:oneIndex] < versionTwo[:twoIndex]):
-            return "lt"
-        if(versionOne[:oneIndex] == versionTwo[:twoIndex]):
-            versionOne = versionOne[oneIndex + 1:]
-            versionTwo = versionTwo[twoIndex + 1:]
-            return self.CompareTwoVersions(versionOne, versionTwo)
-
-#end ClusterVersion Class
-
-class ClusterTestInfo(object):
-    """
-    Holds information on how to stress a cluster
-    """
-
-    class ClusterServices(object):
-        """
-        Helper class that holds serviceType
-        """
-        def __init__(self, ServiceType, ServiceID, DriveID, NodeID):
-            self.ServiceType = ServiceType
-            self.ServiceID = ServiceID
-            self.DriveID = DriveID
-            self.NodeID = NodeID
-
-    def __init__(self):
-        self.Services = []
-        self.InGC = False
-        self.InSliceSync = False
-        self.InBinSync = False
-        self.NumberOfDrives = 0
-        self.NumberOfVolumes = 0
-
-
-    def AddServices(self, ServiceType, ServiceID, DriveID, NodeID):
-        temp = self.ClusterServices(ServiceType, ServiceID, DriveID, NodeID)
-        self.Services.append(temp)
-
-    def Sort(self):
-        self.Services.sort(key=lambda Services: self.Services[0].NodeID)
-
-
-
-#end ClusterTestInfo Class
-
 class GCInfo(object):
     """
     Data structure containing information about a GC cycle
@@ -373,22 +258,6 @@ class SFCluster(object):
                     return gc_info
             time.sleep(30)
 
-    def clipVersionAndMakeFloat(self, version):
-        """
-        Makes sure the version number is a float and clips periods from the end
-        turns 5.132.1 into 5.132
-        returns:
-                float of the version number
-        """
-
-        try:
-            float(version)
-            return float(version)
-        except ValueError:
-            index = version.rindex('.')
-            version = version[:index]
-            self.clipVersionAndMakeFloat(version)
-
     def GetAPIVersion(self):
         """
         Get the highest API version this cluster supports
@@ -411,13 +280,7 @@ class SFCluster(object):
         Returns:
             A boolean indicating if the cluster is syncing (True) or not (False)
         """
-        version = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterVersionInfo", {})
-        cluster_version = version['clusterVersion']
-        checkClusterVersion = ClusterVersion()
-        checkClusterVersion.version = cluster_version
-
-        #cluster_version = float(cluster_version)
-        if checkClusterVersion.gt("5.0"):
+        if self.GetAPIVersion() >= 5.0:
             # Get the bin assignments report
             result = libsf.HttpRequest("https://" + self.mvip + "/reports/bins.json", self.username, self.password)
             bin_report = json.loads(result)
@@ -451,12 +314,7 @@ class SFCluster(object):
         Returns:
             A boolean indicating if the cluster is syncing (True) or not (False)
         """
-        version = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterVersionInfo", {})
-        cluster_version = version['clusterVersion']
-        checkClusterVersion = ClusterVersion()
-        checkClusterVersion.version = cluster_version
-
-        if checkClusterVersion.gt("5.0"):
+        if self.GetAPIVersion() >= 5.0:
             # Get the slice assignments report
             result = libsf.HttpRequest("https://" + self.mvip + "/reports/slices.json", self.username, self.password)
             slice_report = json.loads(result)

@@ -819,10 +819,10 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
                 else:
                     last_error_code = str(e.code)
                     if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
-                        mylog.warning("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
+                        mylog.warning("HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]) + " " + Url)
                         last_error_mess = str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code])
                     else:
-                        mylog.warning("HTTPError: " + str(e.code))
+                        mylog.warning("HTTPError: " + str(e.code)  + " " + Url)
             except urllib2.URLError as e:
                 # Immediately fail for "network unreachable", "operation timed out", "connection refused"
                 if e.args and (e.args[0].errno == 51 or e.args[0].errno == 60 or e.args[0].errno == 111):
