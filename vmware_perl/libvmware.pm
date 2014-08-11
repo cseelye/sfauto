@@ -417,6 +417,51 @@ sub GetVmsInPool
     return @vm_list;
 }
 
+sub VMwareFindFCHbas
+{
+    my $vmhost = shift;
+    my $host_name = $vmhost->name;
+    my @fc_hbas = ();
+
+    mylog::debug("Searching for FC adapter on $host_name");
+    my $adapter_list = $vmhost->config->storageDevice->hostBusAdapter;
+    foreach my $adapter (@{$adapter_list})
+    {
+        # if ($adapter =~ /HostInternetScsiHba/){
+        #     print "Adapter $adapter\n";
+        #     print Data::Dumper->Dump([$adapter], ['adapter']);
+        # }
+        if ($adapter =~ /FibreChannel/){
+            mylog::debug("Found FC HBA $adapter");
+            push(@fc_hbas, $adapter);
+        }
+    }
+    if (@fc_hbas.length == 0){
+        die "Could not find any FC HBAs on $host_name";
+    }
+    return @fc_hbas;
+}
+
+sub VMwareRescanFC
+{
+    my $vmhost = shift;
+    my $host_name = $vmhost->name;
+
+    my @fc_hbas = VMwareFindFCHbas($vmhost);
+    # my $iscsi_hbas = VMwareFindIscsiHba($vmhost);
+    mylog::info("Starting rescan for " . @fc_hbas.length . " HBAs");
+    mylog::debug("Getting a reference to the storage manager");
+    my $storage_manager = Vim::get_view(mo_ref => $vmhost->configManager->storageSystem);
+    mylog::info("  Rescan HBAs...");
+    foreach my $fc_hba (@fc_hbas){
+        mylog::info("Rescaning Adapter: '$fc_hba'");
+        $storage_manager->RescanHba(hbaDevice => $fc_hba->device);
+    }
+    mylog::info("  Rescan VMFS...");
+    $storage_manager->RescanVmfs();
+    mylog::info("  Refresh storage system...");
+    $storage_manager->RefreshStorageSystem();
+}
 
 
 sub VMwareFindIscsiHba
