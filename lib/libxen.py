@@ -67,6 +67,37 @@ def GetIscsiTargets(XenSession, Host, Svip, ChapUser=None, ChapPass=None):
             target_list.append(iqn)
     return target_list
 
+def GetFCTargets(XenSession, Host):
+    sr_args = {}
+    sr_type = "lvmohba"
+    xml_str = None
+    try:
+        XenSession.xenapi.SR.probe(Host, sr_args, sr_type)
+    except XenAPI.Failure as e:
+        if e.details[0] == "SR_BACKEND_FAILURE_107":
+            xml_str = e.details[3]
+        else:
+            raise XenError("Could not discover FC volumes: " + str(e))
+
+    targets_xml = ElementTree.fromstring(xml_str)
+    mylog.debug("XML: {}".format(targets_xml))
+    target_list = []
+    for node in targets_xml.findall("BlockDevice"):
+        if node.findtext("vendor").strip() == "SolidFir":
+            serial   = node.findtext("serial").strip()
+            path     = node.findtext("path").strip()
+            lun      = node.findtext("lun").strip()
+            hba      = node.findtext("hba").strip()
+            numpaths = node.findtext("numpaths").strip()
+            size     = node.findtext("size").strip()
+            scsi_id  = node.findtext("SCSIid").strip()
+            obj = {"serial": serial, "path": path, "lun": lun, "hba": hba, "numpaths": numpaths,
+                   "size": size, "SCSIid": scsi_id}
+
+            target_list.append(obj)
+            mylog.debug("Found a SolidFire FC storage device with info {}".format(obj))
+    return target_list
+
 def GetScsiLun(XenSession, Host, TargetIqn, Svip, ChapUser=None, ChapPass=None):
     sr_args = {
             "target": Svip,
