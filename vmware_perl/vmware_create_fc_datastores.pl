@@ -133,13 +133,14 @@ if ($@)
 # my $volumes = $decoded->{result}->{volumes};
 
 # Find the iSCSI adapter in this host
-mylog::info("Searching for FC adapters on $host_name");
-my @fc_hbas = libvmware::VMwareFindFCHbas($vmhost);
+#mylog::info("Searching for FC adapters on $host_name");
+#my @fc_hbas = libvmware::VMwareFindFCHbas($vmhost);
 # foreach my $adapter (@fc_hbas){
 #     my $wwn = libvmware::TurnDecWWNToHexWWN($adapter->portWorldWideName);
 #     print "WWN: $wwn";
 # }
-# Find the disks without datastores and create them
+
+# Find the SolidFire disks without datastores and create them
 my @return_disk_list;
 eval
 {
@@ -148,25 +149,51 @@ eval
     my $disk_list = $datastore_manager->QueryAvailableDisksForVmfs();
     foreach my $disk (@{$disk_list})
     {
+        # Skip non-SF devices
+        if ($disk->canonicalName !~ /f47acc/)
+        {
+            mylog::debug("Skipping " . $disk->devicePath);
+            next;
+        }
+        mylog::debug("querying " . $disk->devicePath);
         #foreach my $vol (@{$volumes}){
 
             my $options_list = $datastore_manager->QueryVmfsDatastoreCreateOptions(devicePath => $disk->devicePath);
             my $create_option = $options_list->[0];
-            my $display_name = $disk->{displayName};
 
-            my $canonical_name = $create_option->spec->vmfs->extent->diskName;
-            my @pieces = split(/\./, $display_name);
-            my $canonical_name = pop @pieces;
+            my @pieces = split(/\./, $disk->canonicalName);
+            my $disk_serial = pop @pieces;
+            my $cluster_id = substr($disk_serial, 16, 8);
+            $cluster_id =~ s/([a-fA-F0-9][a-fA-F0-9])/chr(hex($1))/eg;
+            my $volume_id = substr($disk_serial, 24, 8);
+            $volume_id =~ s/^0+//;
+            $volume_id = hex($volume_id);
 
-            my $datastore_name = $canonical_name;
+            my $datastore_name = "volume-$volume_id";
 
-            mylog::info("Creating datastore $datastore_name on disk $canonical_name...");
+            mylog::info("Creating datastore $datastore_name on disk $disk->{canonicalName}...");
             push (@return_disk_list, $datastore_name);
             $create_option->spec->vmfs->volumeName($datastore_name);
-            my $newDatastore = $datastore_manager->CreateVmfsDatastore(spec => $create_option->spec);
-
+            my $newDatastore;
+            eval
+            {
+                $newDatastore = $datastore_manager->CreateVmfsDatastore(spec => $create_option->spec);
+            };
+            if ($@)
+            {
+                my $fault = $@;
+                if ($fault->detail && $fault->detail->faultMessage->[0]->message =~ /active VMKernel file system detected/)
+                {
+                    mylog::error($disk->{canonicalName} . " has an existing datastore");
+                }
+                else
+                {
+                    libvmware::DisplayFault("Creating datastore failed", $fault);
+                    exit 1;
+                }
+            }
             # if($account_id eq $vol->{accountID}){
-            #     print $vol->{scsiEUIDeviceID};
+            #     print $vol->{scsiEUIDeviceID}; # you actually want scsiNAADeviceID here to compare the to the VMware "cannonical name"
             #     print "\n";
             #     print $canonical_name;
             #     print "\n";
@@ -185,6 +212,7 @@ eval
 if ($@)
 {
     my $fault = $@;
+    #print Dumper($fault);
     libvmware::DisplayFault("Creating datastore failed", $fault);
     exit 1;
 }

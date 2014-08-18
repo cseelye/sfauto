@@ -44,9 +44,16 @@ sub FaultToString
     }
     else
     {
-        $ fault_str .= $fault->name . ": " . $fault->fault_string
+        $fault_str .= $fault->name . ": " . $fault->fault_string
     }
     $fault_str =~ s/(\s+$)//g;
+    if ($fault->detail && $fault->detail->faultMessage)
+    {
+        if (ref($fault->detail->faultMessage) eq 'ARRAY')
+        {
+            $fault_str .= ". " . $fault->detail->faultMessage->[0]->message;
+        }
+    }
     return $fault_str;
 }
 
@@ -432,7 +439,7 @@ sub VMwareFindFCHbas
         #     print Data::Dumper->Dump([$adapter], ['adapter']);
         # }
         if ($adapter =~ /FibreChannel/){
-            mylog::debug("Found FC HBA $adapter");
+            mylog::debug("Found FC HBA " . $adapter->device);
             push(@fc_hbas, $adapter);
         }
     }
@@ -452,9 +459,9 @@ sub VMwareRescanFC
     mylog::info("Starting rescan for " . @fc_hbas.length . " HBAs");
     mylog::debug("Getting a reference to the storage manager");
     my $storage_manager = Vim::get_view(mo_ref => $vmhost->configManager->storageSystem);
-    mylog::info("  Rescan HBAs...");
+    #mylog::info("  Rescan FC HBAs...");
     foreach my $fc_hba (@fc_hbas){
-        mylog::info("Rescaning Adapter: '$fc_hba'");
+        mylog::info("  " . $fc_hba->device);
         $storage_manager->RescanHba(hbaDevice => $fc_hba->device);
     }
     mylog::info("  Rescan VMFS...");
