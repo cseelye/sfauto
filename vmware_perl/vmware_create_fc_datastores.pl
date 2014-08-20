@@ -57,7 +57,7 @@ my %opts = (
 Opts::add_options(%opts);
 if (scalar(@ARGV) < 1)
 {
-   print "Find new iSCSI volumes and create datastores on them";
+   print "Find new FC volumes and create datastores on them";
    Opts::usage();
    exit 1;
 }
