@@ -159,6 +159,7 @@ class ChildScript(object):
         """
         Private thread to start a 0MQ listener to receive the result from the child script
         """
+        import zmq
         self.zmq_context = zmq.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
         self.zmq_port = self.zmq_socket.bind_to_random_port("tcp://*")
@@ -184,6 +185,7 @@ class ChildScript(object):
         """
         Private thread to run the child script and print the output to the screen
         """
+        import zmq
         ColorTerm.screen.reset()
         cmd_list = shlex.split(self.cmd)
         cmd_list.append("--result_address=tcp://127.0.0.1:" + str(self.zmq_port))
