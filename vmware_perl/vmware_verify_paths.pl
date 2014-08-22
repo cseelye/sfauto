@@ -153,7 +153,7 @@ foreach my $lun (@{$vmhost->config->storageDevice->scsiLun})
     $total_unhealthy_paths += $unhealthy_paths;
     if ($volume_paths - $unhealthy_paths < $expected_paths)
     {
-        mylog::error("Volume " . $lun->canonicalName . " (volumeID " . $volume_id . ") only has " . ($volume_paths - $unhealthy_paths) . " healthy paths but expected" . $expected_paths);
+        mylog::error("Volume " . $lun->canonicalName . " (volumeID " . $volume_id . ") only has " . ($volume_paths - $unhealthy_paths) . " healthy paths but expected " . $expected_paths);
         $allgood = 0;
     }
 }
