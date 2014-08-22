@@ -204,5 +204,6 @@ if ($allgood)
 }
 else
 {
+    mylog::error("Not all volumes were healthy");
     exit 1;
 }
