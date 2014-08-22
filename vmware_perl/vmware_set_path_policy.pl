@@ -144,7 +144,6 @@ foreach my $lun (@{$storage_manager->storageDeviceInfo->multipathInfo->lun})
         libvmware::DisplayFault("Setting path policy on $name failed", $fault);
         $allgood = 0;
     }
-    last;
 }
 
 if ($allgood)
