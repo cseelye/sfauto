@@ -156,6 +156,15 @@ foreach my $lun (@{$vmhost->config->storageDevice->scsiLun})
         mylog::error("Volume " . $lun->canonicalName . " (volumeID " . $volume_id . ") only has " . ($volume_paths - $unhealthy_paths) . " healthy paths but expected " . $expected_paths);
         $allgood = 0;
     }
+    
+    foreach my $message (@{$lun->operationalState})
+    {
+        if ($message =~ /error/i)
+        {
+            mylog::error("Volume " . $lun->canonicalName . " (volumeID " . $volume_id . ") is in an error state");
+            $allgood = 0;
+        }
+    }
 }
 if ($volume_count < $expected_volumes)
 {
