@@ -1,6 +1,8 @@
 import libsf
 from libsf import mylog
 from pyVim import connect
+from pyVmomi import vim, vmodl
+import requests.exceptions
 
 class VmwareError(Exception):
     def __init__(self, message, ex=None):
@@ -14,7 +16,7 @@ class VsphereConnection(object):
         self.server = server
         self.username = username
         self.password = password
-    
+
     def __enter__(self):
         try:
             self.service = connect.SmartConnect(host=self.server, user=self.username, pwd=self.password)
