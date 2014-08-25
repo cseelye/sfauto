@@ -33,3 +33,28 @@ class VsphereConnection(object):
     def __exit__(self, type, value, tb):
         mylog.debug("Disconnecting from vSphere " + self.server)
         connect.Disconnect(self.service)
+
+def FindHost(connection, hostNames, properties=None):
+    host_name_list = []
+    multiple_hosts = True
+    try:
+        host_name_list = list(hostNames)
+    except ValueError:
+        multiple_hosts = False
+        host_name_list.append(hostNames)
+
+    view_container = connection.content.viewManager.CreateContainerView(container=connection.content.rootFolder, type=[vim.HostSystem], recursive=True)
+    #if properties:
+    #    prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=[], type=specType)
+
+    host_list = []
+    for host in view_container.view:
+        if host.name in hostNames:
+            host_list.append(host)
+    if len(host_list) != len(hostNames):
+        raise VmwareError("Could not find all hosts")
+    if multiple_hosts:
+        return host_list
+    else:
+        return host_list[0]
+

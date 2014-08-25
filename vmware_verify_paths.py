@@ -44,7 +44,7 @@ class VmwareVerifyPathsAction(ActionBase):
         libsf.ValidateArgs({"mgmt_server" : libsf.IsValidIpv4Address,
                             "mgmt_user" : None,
                             "mgmt_pass" : None,
-                            "vmhost" : None,
+                            "vmhost" : libsf.IsValidIpv4AddressList,
                             "expected_volumes" : None,
                             "expected_paths" : None},
             args)
@@ -53,6 +53,8 @@ class VmwareVerifyPathsAction(ActionBase):
         """
         Set the multipath policy
         """
+        if vmhost == None:
+            vmhost = []
         self.ValidateArgs(locals())
         if debug:
             mylog.showDebug()
@@ -64,60 +66,61 @@ class VmwareVerifyPathsAction(ActionBase):
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
                 search_index = vsphere.content.searchIndex
 
-                # Find the requested host
-                mylog.info("Searching for host " + vmhost)
-                host = search_index.FindByIp(ip=vmhost, vmSearch=False)
-                if not host:
-                    mylog.error("Could not find host " + vmhost)
-                    return False
+                for host_ip in vmhost:
+                    # Find the requested host
+                    mylog.info("Searching for host " + host_ip)
+                    host = search_index.FindByIp(ip=host_ip, vmSearch=False)
+                    if not host:
+                        mylog.error("Could not find host " + host_ip)
+                        return False
 
-                mylog.info("Checking connected volumes")
-                allgood = True
-                lun2multipath = {}
-                if not host.config.storageDevice.multipathInfo.lun:
-                    mylog.error("No multipath LUNs detected")
-                    allgood = False
-                else:
-                    for mp in host.config.storageDevice.multipathInfo.lun:
-                        lun2multipath[mp.lun] = mp
-
-                volume_count = 0
-                total_paths = 0
-                total_unhealthy_paths = 0
-                total_unhealthy_volumes = 0
-                for lun in host.config.storageDevice.scsiLun:
-                    # skip non-SF devices
-                    if lun.vendor != "SolidFir":
-                        continue
-
-                    volume_count += 1
-                    key = lun.key
-                    mp = lun2multipath[key]
-                    pieces = lun.canonicalName.split('.')
-                    disk_serial = pieces[-1]
-                    volume_id = int(disk_serial[24:32].strip('0'), 16)
-
-                    volume_paths = len(mp.path)
-                    total_paths += volume_paths
-                    #if volume_paths < expected_paths:
-                    #    mylog.error("Volume {} (volumeID {}) only has {} paths but expected {}".format(lun.canonicalName, volume_id, volume_paths, expected_paths))
-                    #    allgood = False
-
-                    unhealthy_paths = 0
-                    for path in mp.path:
-                        if path.state != "active":
-                            unhealthy_paths += 1
-                    total_unhealthy_paths += unhealthy_paths
-                    if volume_paths - unhealthy_paths < expected_paths:
-                        mylog.error("Volume {} (volumeID {}) only has {} healthy paths but expected {}".format(lun.canonicalName, volume_id, volume_paths - unhealthy_paths, expected_paths))
+                    mylog.info("Checking connected volumes")
+                    allgood = True
+                    lun2multipath = {}
+                    if not host.config.storageDevice.multipathInfo.lun:
+                        mylog.error("No multipath LUNs detected")
                         allgood = False
+                    else:
+                        for mp in host.config.storageDevice.multipathInfo.lun:
+                            lun2multipath[mp.lun] = mp
 
-                    for message in lun.operationalState:
-                        if "error" in message.lower():
-                            mylog.error("Volume {} (volumeID {}) is in an error state - ".format(lun.canonicalName, volume_id))
-                            mylog.error("\n".join(lun.operationalState))
-                            total_unhealthy_volumes += 1
+                    volume_count = 0
+                    total_paths = 0
+                    total_unhealthy_paths = 0
+                    total_unhealthy_volumes = 0
+                    for lun in host.config.storageDevice.scsiLun:
+                        # skip non-SF devices
+                        if lun.vendor != "SolidFir":
+                            continue
+
+                        volume_count += 1
+                        key = lun.key
+                        mp = lun2multipath[key]
+                        pieces = lun.canonicalName.split('.')
+                        disk_serial = pieces[-1]
+                        volume_id = int(disk_serial[24:32].strip('0'), 16)
+
+                        volume_paths = len(mp.path)
+                        total_paths += volume_paths
+                        #if volume_paths < expected_paths:
+                        #    mylog.error("Volume {} (volumeID {}) only has {} paths but expected {}".format(lun.canonicalName, volume_id, volume_paths, expected_paths))
+                        #    allgood = False
+
+                        unhealthy_paths = 0
+                        for path in mp.path:
+                            if path.state != "active":
+                                unhealthy_paths += 1
+                        total_unhealthy_paths += unhealthy_paths
+                        if volume_paths - unhealthy_paths < expected_paths:
+                            mylog.error("Volume {} (volumeID {}) only has {} healthy paths but expected {}".format(lun.canonicalName, volume_id, volume_paths - unhealthy_paths, expected_paths))
                             allgood = False
+
+                        for message in lun.operationalState:
+                            if "error" in message.lower():
+                                mylog.error("Volume {} (volumeID {}) is in an error state - ".format(lun.canonicalName, volume_id))
+                                mylog.error("\n".join(lun.operationalState))
+                                total_unhealthy_volumes += 1
+                                allgood = False
 
         except libvmware.VmwareError as e:
             mylog.error(str(e))
@@ -157,7 +160,7 @@ if __name__ == '__main__':
     parser.add_option("-s", "--mgmt_server", type="string", dest="mgmt_server", default=sfdefaults.fc_mgmt_server, help="the IP/hostname of the vSphere Server [%default]")
     parser.add_option("-m", "--mgmt_user", type="string", dest="mgmt_user", default=sfdefaults.fc_vsphere_user, help="the vsphere admin username [%default]")
     parser.add_option("-a", "--mgmt_pass", type="string", dest="mgmt_pass", default=sfdefaults.fc_vsphere_pass, help="the vsphere admin password [%default]")
-    parser.add_option("-o", "--vmhost", type="string", dest="vmhost", default=None, help="the IP of the ESX host to set the policy on")
+    parser.add_option("-o", "--vmhost", action="list", dest="vmhost", default=None, help="the IP of one or more ESX hosts to verify on")
     parser.add_option("--expected_volumes", type="int", dest="expected_volumes", default=4, help="the expected number of volumes")
     parser.add_option("--expected_paths", type="int", dest="expected_paths", default=4, help="the expected number of paths per volume")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
