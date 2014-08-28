@@ -16,7 +16,6 @@ When run as a script, the following options/env variables apply:
 
 import sys
 from optparse import OptionParser
-from pyVmomi import vim, vmodl
 import multiprocessing
 
 import lib.libsf as libsf
@@ -54,8 +53,7 @@ class VmwareRescanFcAction(ActionBase):
         mylog.debug("Starting " + myname)
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
-                host = libvmware.FindHost(vsphere, [host_ip])[0]
-
+                host = libvmware.FindHost(vsphere, host_ip)
                 for adapter in host.config.storageDevice.hostBusAdapter:
                     if hasattr(adapter, "portWorldWideName") and adapter.device == hba_name:
 
@@ -118,7 +116,7 @@ class VmwareRescanFcAction(ActionBase):
             mylog.error("Error rescanning FC HBAs")
             return False
 
-    
+
 # Instantate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
 libsf.PopulateActionModule(sys.modules[__name__])

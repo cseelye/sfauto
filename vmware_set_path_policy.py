@@ -5,7 +5,7 @@ This action will set the multipathing policy (load balancing policy) on the LUNs
 
 When run as a script, the following options/env variables apply:
     --mgmt_server       The IP/hostname of the vSphere Server
-    
+
     --mgmt_user         The vsphere admin username
 
     --mgmt_pass         The vsphere admin password
@@ -17,10 +17,6 @@ When run as a script, the following options/env variables apply:
 
 import sys
 from optparse import OptionParser
-from pyVim import connect
-from pyVmomi import vim, vmodl
-import requests.exceptions
-
 import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
@@ -54,43 +50,46 @@ class VmwareSetPathPolicyAction(ActionBase):
             mylog.showDebug()
         else:
             mylog.hideDebug()
-        
+
+        if new_policy.lower() == "rr":
+            new_policy = "VMW_PSP_RR"
+        elif new_policy.lower() == "fixed":
+            new_policy = "VMW_PSP_FIXED"
+        elif new_policy.lower() == "mru":
+            new_policy = "VMW_PSP_MRU"
+
         mylog.info("Connecting to vSphere " + mgmt_server)
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
-                search_index = vsphere.content.searchIndex
-                
                 # Find the requested host
                 mylog.info("Searching for host " + vmhost)
-                host = search_index.FindByIp(ip=vmhost, vmSearch=False)
-                if not host:
-                    mylog.error("Could not find host " + vmhost)
-                    return False
-                
+                host = libvmware.FindHost(vsphere, vmhost)
+
                 storage_sys = host.configManager.storageSystem
-    
+
+                mylog.info("Checking path selection policies")
                 policies = storage_sys.QueryPathSelectionPolicyOptions()
                 allowed_policies = [p.policy.key for p in policies]
                 if new_policy not in allowed_policies:
                     mylog.error("Unrecognized multipath policy: only " + " / ".join(allowed_policies) + " are allowed")
                     return False
-                
+
                 mylog.info("Getting a list of LUNs")
                 lun2name = {}
                 for lun in host.config.storageDevice.scsiLun:
                     lun2name[lun.key] = lun.canonicalName
-                
+
                 allgood = True
                 for lun in storage_sys.storageDeviceInfo.multipathInfo.lun:
                     name = lun2name[lun.lun]
                     # Skip non-SF devices
                     if "f47acc" not in name:
                         continue
-                    
+
                     if lun.policy.policy == new_policy:
                         mylog.info(name + " is already using policy " + new_policy)
                         continue
-    
+
                     mylog.info("Setting " + name + " to " + new_policy)
                     if new_policy != "VMW_PSP_FIXED":
                         p = vim.host.MultipathInfo.LogicalUnitPolicy()

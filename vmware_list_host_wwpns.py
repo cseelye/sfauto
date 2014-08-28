@@ -20,9 +20,6 @@ When run as a script, the following options/env variables apply:
 
 import sys
 from optparse import OptionParser
-from pyVim import connect
-from pyVmomi import vim, vmodl
-import requests.exceptions
 
 import lib.libsf as libsf
 from lib.libsf import mylog
@@ -65,15 +62,10 @@ class VmwareListHostWwpnsAction(ActionBase):
         mylog.info("Connecting to vSphere " + mgmt_server)
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
-                search_index = vsphere.content.searchIndex
-
                 for host_ip in vmhost:
                     # Find the requested host
                     mylog.info("Searching for host " + host_ip)
-                    host = search_index.FindByIp(ip=host_ip, vmSearch=False)
-                    if not host:
-                        mylog.error("Could not find host " + host_ip)
-                        return False
+                    host = libvmware.FindHost(vsphere, vmhost)
 
                     mylog.info("Getting a list of WWNs")
                     for adapter in host.config.storageDevice.hostBusAdapter:
