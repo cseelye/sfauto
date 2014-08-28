@@ -90,6 +90,9 @@ qmetry_password = "password"
 qmetry_project = "proj"
 qmetry_release = "rel"
 qmetry_build = "1"
+hipchat_user = "testscript"
+hipchat_color = "gray"
+
 # =============================================================================
 # Default Choices
 all_volume_acess_levels = [         # Valid volume access levels
