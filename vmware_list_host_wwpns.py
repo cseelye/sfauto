@@ -65,7 +65,7 @@ class VmwareListHostWwpnsAction(ActionBase):
                 for host_ip in vmhost:
                     # Find the requested host
                     mylog.info("Searching for host " + host_ip)
-                    host = libvmware.FindHost(vsphere, vmhost)
+                    host = libvmware.FindHost(vsphere, host_ip)
 
                     mylog.info("Getting a list of WWNs")
                     for adapter in host.config.storageDevice.hostBusAdapter:
