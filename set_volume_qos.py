@@ -132,7 +132,7 @@ class SetVolumeQosAction(ActionBase):
         results = manager.dict()
         self._threads = []
         for volumeID, volumeInfo in volumes.items():
-            volume_name = volumeInfo[name]
+            volume_name = volumeInfo["name"]
             thread_name = "volume-" + str(volumeID)
             results[thread_name] = False
             th = multiprocessing.Process(target=self._ApiCallThread, name=thread_name, args=(mvip, username, password, volume_name, volumeID, maxIOPS, minIOPS, burstIOPS, results))
