@@ -64,7 +64,7 @@ class VmwareVerifyPathsAction(ActionBase):
                 for host_ip in vmhost:
                     # Find the requested host
                     mylog.info("Searching for host " + host_ip)
-                    host = libvmware.FindHost(vsphere, vmhost)
+                    host = libvmware.FindHost(vsphere, host_ip)
 
                     mylog.info("Checking connected volumes")
                     allgood = True
