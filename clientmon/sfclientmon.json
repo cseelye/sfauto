@@ -4,5 +4,6 @@
     "listenPort" : 58083,
     "username" : "root",
     "password" : "solidfire",
-    "ipFilter" : "172.30"   // Only monitor clients whose IP starts with this string
+    "ipFilter" : "172.30",   // Only monitor clients whose IP starts with this string
+    "templateNames" : ["gold", "template"]  // Ignore clients with these strings in their hostnames
 }

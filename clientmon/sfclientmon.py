@@ -1,4 +1,3 @@
-import MySQLdb;
 import select, socket
 import json
 import time
@@ -21,8 +20,9 @@ with open(configFile, "r") as config_handle:
 # Remove comments from JSON before loading it
 new_config_text = ""
 for line in config_lines:
-    line = re.sub("(//.*)", "", line)
-    if re.match("^\s*$", line): continue
+    line = re.sub(r"(//.*)", "", line)
+    if re.match(r"^\s*$", line):
+        continue
     new_config_text += line
 config_json = json.loads(new_config_text)
 
@@ -32,20 +32,13 @@ database = config_json["database"]
 username = config_json["username"]
 password = config_json["password"]
 ipFilter = config_json["ipFilter"]
+templateNames = config_json["templateNames"]
 
 try:
     monitor = ClientMon(DbServer=server, DbUser=username, DbPass=password, DbName=database, IpFilter=ipFilter)
 except SfError as e:
     mylog.error("Could not connect to monitor - " + str(e))
     sys.exit(1)
-
-## Connect to database
-#try:
-#    db = MySQLdb.connect(host=server, user=username, passwd=password, db=database)
-#except MySQLdb.Error as e:
-#    print "Error " + str(e.args[0]) + ": " + str(e.args[1])
-#    sys.exit(1)
-#db_cursor = db.cursor()
 
 # Open the listening socket
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -60,25 +53,28 @@ s.setblocking(0)
 
 # Listen and update the DB whenever we receive a message
 while True:
-    result = select.select([s],[],[])
+    result = select.select([s], [], [])
     msg = result[0][0].recv(bufferSize)
-    #print "Received: " + msg
+    print "Received: " + msg
 
     try:
         client_info = json.loads(msg)
     except:
-        #print "Invalid JSON"
+        print "Invalid JSON"
         continue
 
     # Skip template VMs
-    if "template" in client_info["hostname"]: continue
-    if "gold" in client_info["hostname"]: continue
+    for template_string in templateNames:
+        if template_string in client_info["hostname"]:
+            continue
 
     # Skip clients whose IP does not match our filter
-    if ipFilter and not str(client_info["ip"]).startswith(ipFilter): continue
+    if ipFilter and not str(client_info["ip"]).startswith(ipFilter):
+        continue
 
     # Ignore older clients that are not broadcasting their MAC address
-    if "mac" not in client_info.keys(): continue
+    if "mac" not in client_info.keys():
+        continue
 
     group_name = ""
     if "group" in client_info.keys():
@@ -95,46 +91,3 @@ while True:
     except SfError as e:
         mylog.error("Could not update status with monitor - " + str(e))
         continue
-
-    #sql = """
-    #        INSERT INTO clients
-    #            (
-    #                `mac`,
-    #                `hostname`,
-    #                `ip`,
-    #                `cpu_usage`,
-    #                `mem_usage`,
-    #                `vdbench_count`,
-    #                `vdbench_last_exit`,
-    #                `timestamp`,
-    #                `group`
-    #            )
-    #            VALUES
-    #            (
-    #                '""" + str(client_info["mac"]) + """',
-    #                '""" + str(client_info["hostname"]) + """',
-    #                '""" + str(client_info["ip"]) + """',
-    #                '""" + str(cpu_usage) + """',
-    #                '""" + str(mem_usage) + """',
-    #                '""" + str(client_info["vdbench_count"]) + """',
-    #                '""" + str(client_info["vdbench_last_exit"]) + """',
-    #                '""" + str(time.time()) + """',
-    #                '""" + str(group_name) + """'
-    #            )
-    #            ON DUPLICATE KEY UPDATE
-    #                `hostname`='""" + str(client_info["hostname"]) + """',
-    #                `ip`='""" + str(client_info["ip"]) + """',
-    #                `cpu_usage`='""" + str(cpu_usage) + """',
-    #                `mem_usage`='""" + str(mem_usage) + """',
-    #                `vdbench_count`='""" + str(client_info["vdbench_count"]) + """',
-    #                `vdbench_last_exit`='""" + str(client_info["vdbench_last_exit"]) + """',
-    #                `timestamp`='""" + str(time.time()) + """',
-    #                `group`='""" + str(group_name) + """'
-    #        """
-    ##print sql + "\n"
-    #try:
-    #    db_cursor.execute(sql)
-    #except MySQLdb.Error as e:
-    #    print "Error " + str(e.args[0]) + ": " + str(e.args[1])
-    #    continue
-

@@ -9,6 +9,10 @@ $dead_time = time() - $dead_threshold;
 // Connect
 $db = new mysqli("localhost", "root", "password", "monitor");
 
+$sql = "SELECT COUNT(*) FROM clusters";
+$res = $db->query($sql);
+$cluster_count = $row['COUNT(*)'];
+
 // Clusters that are not healthy
 $sql = "SELECT name FROM clusters WHERE ishealthy=0";
 $res = $db->query($sql);
@@ -63,22 +67,25 @@ while ($row = $res->fetch_assoc())
 <?php
 // Set the page title according to the client/cluster status
 echo "  <title>";
-if ($unhealthy_clusters == "")
+if ($cluster_count > 0)
 {
-	echo "{Healthy}";
-}
-else
-{
-	echo "{UNHEALTHY}";
+    if ($unhealthy_clusters == "")
+    {
+            echo "{Healthy}";
+    }
+    else
+    {
+            echo "{UNHEALTHY}";
+    }
 }
 if ($fail_count > 0)
 {
 	echo "[FAIL]";
 }
-elseif ($stop_count > 0)
-{
-	echo "[STOP]";
-}
+//elseif ($stop_count > 0)
+//{
+//	echo "[STOP]";
+//}
 if ($dead_count > 0)
 {
 	echo "[DEAD]";
@@ -118,13 +125,16 @@ echo "</title>\n";
 <body>
 <?php
 // Heading showing overall status
-if ($unhealthy_clusters != "")
+if ($cluster_count > 0)
 {
-	echo "<h1 class='red'>Cluster " . $unhealthy_clusters . " is unhealthy</h1>\n";
-}
-else
-{
-	echo "<h1 class='green'>All clusters are healthy</h1>\n";
+    if ($unhealthy_clusters != "")
+    {
+            echo "<h1 class='red'>Cluster " . $unhealthy_clusters . " is unhealthy</h1>\n";
+    }
+    else
+    {
+            echo "<h1 class='green'>All clusters are healthy</h1>\n";
+    }
 }
 
 if ($fail_count > 0)
