@@ -5,6 +5,8 @@ from pyVim import connect
 from pyVmomi import vim, vmodl
 # pylint: enable-msg=E0611
 import requests.exceptions
+import threading
+import time
 
 class VmwareError(Exception):
     def __init__(self, message, ex=None):
@@ -152,3 +154,130 @@ def FindObjects(connection, obj_type, obj_name, properties=["name"]):
         return result_list
     else:
         return result_list[0]
+
+def ShutdownVMs(vsphere, vm_list):
+    threads = []
+    results = {}
+    for vm in vm_list:
+        thread_name = "shutdown-" + vm.name
+        results[thread_name] = False
+        t = threading.Thread(target=_ShutdownVMThread, name=thread_name, args=(vsphere, vm, results))
+        t.daemon = True
+        threads.append(t)
+
+    allgood = libsf.ThreadRunner(threads, results, len(threads))
+    if not allgood:
+        raise VmwareError("Not all VMs could be shutdown")
+
+def _ShutdownVMThread(vsphere, vm, results):
+    myname = threading.current_thread().name
+    results[myname] = False
+    mylog.info("  Shutting down VM " + vm.name + " on " + vm.runtime.host.name)
+    try:
+        if vm.guest.toolsRunningStatus != "guestToolsRunning":
+            task = vm.PowerOffVM_Task()
+            WaitForTasks(vsphere, [task])
+        else:
+            vm.ShutdownGuest()
+            start_time = time.time()
+            while vm.runtime.powerState == "poweredOn":
+                time.sleep(5)
+                if time.time() - start_time > 300:
+                    mylog.warning("  " + vm.name + " failed to shut down in 5 minutes")
+                    task = vm.PowerOffVM_Task()
+                    WaitForTasks(vsphere, [task])
+        results[myname] = True
+
+    except vmodl.MethodFault as e:
+        mylog.error("  Failed shutting down VM " + vm.name + ": " + str(e))
+        return
+
+def PoweronVMs(vsphere, vm_list):
+    threads = []
+    results = {}
+    for vm in vm_list:
+        thread_name = "poweron-" + vm.name
+        results[thread_name] = False
+        t = threading.Thread(target=_PoweronVMThread, name=thread_name, args=(vsphere, vm, results))
+        t.daemon = True
+        threads.append(t)
+
+    allgood = libsf.ThreadRunner(threads, results, len(threads))
+    if not allgood:
+        raise VmwareError("Not all VMs could be brought up")
+
+def _PoweronVMThread(vsphere, vm, results):
+    myname = threading.current_thread().name
+    results[myname] = False
+    mylog.info("  Powering on VM " + vm.name)
+    try:
+        task = vm.PowerOnVM_Task()
+        WaitForTasks(vsphere, [task])
+    except vmodl.MethodFault as e:
+        mylog.error("  Failed powering on VM " + vm.name + ": " + str(e))
+        return
+
+    if vm.guest.toolsStatus == "toolsNotInstalled":
+        mylog.warning("  Cannot wait for VM " + vm.name + " to come up because VMware Tools are not installed")
+    else:
+        mylog.info("  Waiting for VM " + vm.name + " to come up")
+        while vm.guest.toolsRunningStatus != "guestToolsRunning":
+            time.sleep(1)
+        while vm.guestHeartbeatStatus != vim.ManagedEntity.Status.green:
+            time.sleep(1)
+
+    results[myname] = True
+
+
+def WaitForTasks(si, tasks):
+   """
+   Given the service instance si and tasks, it returns after all the
+   tasks are complete
+   """
+
+   pc = si.content.propertyCollector
+
+   taskList = [str(task) for task in tasks]
+
+   # Create filter
+   objSpecs = [vmodl.query.PropertyCollector.ObjectSpec(obj=task)
+                                                            for task in tasks]
+   propSpec = vmodl.query.PropertyCollector.PropertySpec(type=vim.Task,
+                                                         pathSet=[], all=True)
+   filterSpec = vmodl.query.PropertyCollector.FilterSpec()
+   filterSpec.objectSet = objSpecs
+   filterSpec.propSet = [propSpec]
+   filter = pc.CreateFilter(filterSpec, True)
+
+   try:
+      version, state = None, None
+
+      # Loop looking for updates till the state moves to a completed state.
+      while len(taskList):
+         update = pc.WaitForUpdates(version)
+         for filterSet in update.filterSet:
+            for objSet in filterSet.objectSet:
+               task = objSet.obj
+               for change in objSet.changeSet:
+                  if change.name == 'info':
+                     state = change.val.state
+                  elif change.name == 'info.state':
+                     state = change.val
+                  else:
+                     continue
+
+                  if not str(task) in taskList:
+                     continue
+
+                  if state == vim.TaskInfo.State.success:
+                     # Remove task from taskList
+                     taskList.remove(str(task))
+                  elif state == vim.TaskInfo.State.error:
+                     raise task.info.error
+         # Move to next version
+         version = update.version
+   finally:
+      if filter:
+         filter.Destroy()
+
+

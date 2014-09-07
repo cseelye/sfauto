@@ -1804,11 +1804,14 @@ def ThreadRunner_counter(threadList, resultList, concurrentThreadCount):
     # Check the results
     success_threads = 0
     for i, val in resultList.items():
-        if val:
+        if val is True:
             success_threads += 1
             mylog.debug("Thread " + str(i) + " succeeded")
         else:
             mylog.debug("Thread " + str(i) + " failed")
+            if isinstance(val, Exception):
+                raise val
+
     #for res in resultList.values():
     #    if res:
     #        success_threads += 1
@@ -1830,8 +1833,7 @@ def ThreadRunner(threadList, resultList, concurrentThreadCount):
     Returns:
         True if all results evaluated true, False if any thread result failed
     """
-    result_counter = ThreadRunner_counter(threadList, resultList, concurrentThreadCount)
-    result, counter = result_counter
+    result, counter = ThreadRunner_counter(threadList, resultList, concurrentThreadCount)
     return result
 
 def CallbackWrapper(callback):
