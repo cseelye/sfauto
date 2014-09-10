@@ -35,9 +35,9 @@ from email.MIMEText import MIMEText
 from email.Utils import COMMASPACE, formatdate
 from email import Encoders
 try:
-    import ssh
-except ImportError:
     import paramiko as ssh
+except ImportError:
+    import ssh
 import shlex
 import math
 import struct
