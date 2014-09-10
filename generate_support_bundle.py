@@ -23,12 +23,13 @@ When run as a script, the following options/env variables apply:
 
     --label             Label to prepend to the bundle filename
 """
+from optparse import OptionParser
+import os
+import re
+import socket
 import sys
 import threading
 import time
-import os
-import re
-from optparse import OptionParser
 import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
@@ -56,15 +57,26 @@ class GenerateSupportBundleAction(ActionBase):
             mylog.info(node_ip + ": Generating support bundle on node")
             bundle_name = label + "_" + timestamp
             stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sudo /sf/scripts/sf_make_support_bundle " + bundle_name + ";echo $?")
-            data = stdout.readlines()
-            retcode = int(data.pop())
+            stderr_data = stderr.readlines()
+            stdout_data = stdout.readlines()
+            retcode = int(stdout_data.pop())
+            # retry on zktreeutil error that floods stderr
+            retry = 2
+            while retcode != 0 and len(stderr_data) > 1000 and retry > 0:
+                time.sleep(1)
+                mylog.debug(node_ip + ": retry bundle")
+                stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sudo /sf/scripts/sf_make_support_bundle " + bundle_name + ";echo $?")
+                stderr_data = stderr.readlines()
+                stdout_data = stdout.readlines()
+                retcode = int(stdout_data.pop())
+                retry -= 1
             if retcode != 0:
-                mylog.error(node_ip + ": Error creating bundle - " + "\n".join(data) + "\n".join(stderr.readlines()))
+                mylog.error(node_ip + ": Error creating bundle - " + "\n".join(stdout_data) + "\n".join(stderr_data))
                 ssh.close()
-                self.RaiseFailureEvent(message="\n".join(data), nodeIP=node_ip)
+                self.RaiseFailureEvent(message="Error creating bundle", nodeIP=node_ip)
                 return
             full_bundle_name = ""
-            for line in reversed(data):
+            for line in reversed(stdout_data):
                 m = re.search("Generated \"(.+)\" successfully", line)
                 if m:
                     full_bundle_name = m.group(1)
@@ -73,33 +85,36 @@ class GenerateSupportBundleAction(ActionBase):
             # Compress the bundle on the node using parallel gzip
             mylog.info(node_ip + ": Compressing bundle on node")
             stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sudo pigz " + full_bundle_name + ";echo $?")
-            data = stdout.readlines()
-            retcode = int(data.pop())
+            stdout_data = stdout.readlines()
+            stderr_data = stderr.readlines()
+            retcode = int(stdout_data.pop())
             if retcode != 0:
-                mylog.error(node_ip + ": Error compressing bundle - " + "\n".join(data) + "\n".join(stderr.readlines()))
+                mylog.error(node_ip + ": Error compressing bundle - " + "\n".join(stdout_data) + "\n".join(stderr_data))
                 ssh.close()
-                self.RaiseFailureEvent(message=err, nodeIP=node_ip)
+                self.RaiseFailureEvent(message="Error compressing bundle", nodeIP=node_ip)
                 return
             full_bundle_name = full_bundle_name + ".gz"
 
             if remote_ip:
                 mylog.info(node_ip + ": Sending bundle to " + remote_ip + ":" + folder)
                 stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sudo sshpass -p " + remote_pass + " ssh -o StrictHostKeyChecking=no " + remote_user + "@" + remote_ip + " \"mkdir -p " + folder + "\";echo $?")
-                data = stdout.readlines()
-                retcode = int(data.pop())
+                stdout_data = stdout.readlines()
+                stderr_data = stderr.readlines()
+                retcode = int(stdout_data.pop())
                 if retcode != 0:
-                    mylog.error(node_ip + ": Error creating remote folder - " + "\n".join(data) + "\n".join(stderr.readlines()))
+                    mylog.error(node_ip + ": Error creating remote folder - " + "\n".join(stdout_data) + "\n".join(stderr_data))
                     ssh.close()
-                    self.RaiseFailureEvent(message="\n".join(data), nodeIP=node_ip)
+                    self.RaiseFailureEvent(message="Error creating remote folder", nodeIP=node_ip)
                     return
 
                 stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sudo sshpass -p " + remote_pass + " scp -o StrictHostKeyChecking=no " + full_bundle_name + " " + remote_user + "@" + remote_ip + ":" + folder + ";echo $?")
-                data = stdout.readlines()
-                retcode = int(data.pop())
+                stdout_data = stdout.readlines()
+                stderr_data = stderr.readlines()
+                retcode = int(stdout_data.pop())
                 if retcode != 0:
-                    mylog.error(node_ip + ": Error uploading bundle - " + "\n".join(data) + "\n".join(stderr.readlines()))
+                    mylog.error(node_ip + ": Error uploading bundle - " + "\n".join(stdout_data) + "\n".join(stderr_data))
                     ssh.close()
-                    self.RaiseFailureEvent(message="\n".join(data), nodeIP=node_ip)
+                    self.RaiseFailureEvent(message="Error uploading bundle", nodeIP=node_ip)
                     return
             else:
                 # Copy the file to the local system
@@ -116,6 +131,10 @@ class GenerateSupportBundleAction(ActionBase):
         except libsf.SfError as e:
             mylog.error(node_ip + ": " + str(e))
             self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
+            return
+        except socket.timeout:
+            mylog.error(node_ip + ": Timed out executing SSH command")
+            self.RaiseFailureEvent(message="Timed out executing SSH command", nodeIP=node_ip, exception=e)
             return
 
     def ValidateArgs(self, args):
