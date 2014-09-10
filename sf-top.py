@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 """
 Monitor a SolidFire cluster, including cluster stats, process resource utilization, etc.
 
