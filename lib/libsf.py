@@ -946,10 +946,17 @@ def ConnectSsh(pClientIp, pUsername, pPassword):
 
     return client
 
-def ExecSshCommand(pSshConnection, pCommand):
-    hostname, port = pSshConnection._transport.getpeername()
-    mylog.debug("Executing '" + pCommand + "' on host " + hostname)
-    return pSshConnection.exec_command(pCommand)
+def ExecSshCommand(sshConnection, command, timeout=300):
+    hostname, port = sshConnection._transport.getpeername()
+    mylog.debug("Executing '" + command + "' on host " + hostname)
+    #return sshConnection.exec_command(command)
+    chan = sshConnection._transport.open_session()
+    chan.settimeout(timeout)
+    chan.exec_command(command)
+    stdin = chan.makefile('wb', -1)
+    stdout = chan.makefile('rb', -1)
+    stderr = chan.makefile_stderr('rb', -1)
+    return stdin, stdout, stderr
 
 class Command(object):
     def __init__(self, cmd):
