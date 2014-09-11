@@ -20,10 +20,8 @@ import sys
 from optparse import OptionParser
 import lib.libsf as libsf
 from lib.libsf import mylog
-import logging
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
-from lib.datastore import SharedValues
 
 class CleanLogsAction(ActionBase):
     class Events:
@@ -47,7 +45,9 @@ class CleanLogsAction(ActionBase):
             node_ips = sfdefaults.node_ips
         self.ValidateArgs(locals())
         if debug:
-            mylog.console.setLevel(logging.DEBUG)
+            mylog.showDebug()
+        else:
+            mylog.hideDebug()
 
         allgood = True
         for node_ip in node_ips:
@@ -57,20 +57,33 @@ class CleanLogsAction(ActionBase):
 
                 if save_bundle:
                     mylog.info(node_ip + ": Saving support bundle")
-                    libsf.ExecSshCommand(ssh, "/sf/scripts/sf_make_support_bundle `date +%Y-%m-%d-%H-%M-%S` 2>&1 >/dev/null")
+                    libsf.ExecSshCommand(ssh, "sudo /sf/scripts/sf_make_support_bundle `date +%Y-%m-%d-%H-%M-%S` 2>&1 >/dev/null")
 
                 mylog.info(node_ip + ": Clearing SF logs")
 
                 # get rid of old logs
-                libsf.ExecSshCommand(ssh, "rm -f /var/log/sf-*.gz")
+                stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "for f in `find /var/log -name \"*.gz\" -o -name \"*.1\"`; do echo 'Deleting $f'; sudo rm -f $f; done; echo $?")
+                stdout_data = stdout.readlines()
+                stderr_data = stderr.readlines()
+                retcode = int(stdout_data.pop())
+                if retcode != 0:
+                    mylog.error("Failed to remove old logs:\n" + "\n".join(stderr_data))
+                    allgood = False
+
 
                 # empty current logs
-                libsf.ExecSshCommand(ssh, "for f in `ls -1 /var/log/sf-*`; do echo \"Log cleared on `date +%Y-%m-%d-%H-%M-%S`\" > f; done")
+                stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "for f in `ls -1 /var/log/sf-*`; do sudo echo \"Log cleared on `date +%Y-%m-%d-%H-%M-%S`\" > $f; done;echo $?")
+                stdout_data = stdout.readlines()
+                stderr_data = stderr.readlines()
+                retcode = int(stdout_data.pop())
+                if retcode != 0:
+                    mylog.error("Failed to clear current logs:\n" + "\n".join(stderr_data))
+                    allgood = False
 
                 ssh.close()
             except libsf.SfError as e:
                 mylog.error("Failed to clear logs on " + node_ip + ": " + str(e))
-                self.RaiseFailureEvent(message=str(e), nodeIP=node_ip, exception=e)
+                self.RaiseFailureEvent(message="Failed to clear logs", nodeIP=node_ip, exception=e)
                 allgood = False
                 continue
 
@@ -116,4 +129,3 @@ if __name__ == '__main__':
         mylog.exception("Unhandled exception")
         exit(1)
     exit(0)
-
