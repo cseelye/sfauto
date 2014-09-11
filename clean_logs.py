@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 """
-This action will clear the logs on a set of nodes
+This action will clear the logs and core files on a set of nodes
 
 When run as a script, the following options/env variables apply:
     --node_ips          The list of node management IP addresses
@@ -59,7 +59,16 @@ class CleanLogsAction(ActionBase):
                     mylog.info(node_ip + ": Saving support bundle")
                     libsf.ExecSshCommand(ssh, "sudo /sf/scripts/sf_make_support_bundle `date +%Y-%m-%d-%H-%M-%S` 2>&1 >/dev/null")
 
-                mylog.info(node_ip + ": Clearing SF logs")
+                mylog.info(node_ip + ": Clearing SF logs and cores")
+
+                # get rid of old logs
+                stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "sudo rm -f /sf/core*; echo $?")
+                stdout_data = stdout.readlines()
+                stderr_data = stderr.readlines()
+                retcode = int(stdout_data.pop())
+                if retcode != 0:
+                    mylog.error("Failed to remove old core files:\n" + "\n".join(stderr_data))
+                    allgood = False
 
                 # get rid of old logs
                 stdin, stdout, stderr = libsf.ExecSshCommand(ssh, "for f in `find /var/log -name \"*.gz\" -o -name \"*.1\"`; do echo 'Deleting $f'; sudo rm -f $f; done; echo $?")
@@ -106,6 +115,7 @@ if __name__ == '__main__':
     parser.add_option("-n", "--node_ips", action="list", dest="node_ips", default=None, help="the IP addresses of the nodes")
     parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes")
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes")
+    parser.add_option("--noremove_cores", action="store_false", dest="remove_cores", default=True, help="do not remove core files")
     parser.add_option("--save_bundle", action="store_true", dest="save_bundle", default=False, help="save a support bundle before clearing logs")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
