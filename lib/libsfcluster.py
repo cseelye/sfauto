@@ -108,12 +108,17 @@ class SFCluster(object):
             if ("GCStarted" in event["message"]):
                 gc_info = GCInfo()
                 gc_info.StartTime = libsf.ParseTimestamp(event['timeOfReport'])
-                m = re.search(r"GC generation:(\d+).+participatingSServices={(.+)}.+eligibleBSs={(.+)}", event["details"])
-                if m:
-                    gc_info.Generation = int(m.group(1))
-                    gc_info.ParticipatingSSSet = set(map(int, m.group(2).split(",")))
-                    gc_info.EligibleBSSet = set(map(int, m.group(3).split(",")))
-                    gc_objects[gc_info.Generation] = gc_info
+                if isinstance(event["details"], basestring):
+                    m = re.search(r"GC generation:(\d+).+participatingSServices={(.+)}.+eligibleBSs={(.+)}", event["details"])
+                    if m:
+                        gc_info.Generation = int(m.group(1))
+                        gc_info.ParticipatingSSSet = set(map(int, m.group(2).split(",")))
+                        gc_info.EligibleBSSet = set(map(int, m.group(3).split(",")))
+                else:
+                    gc_info.Generation = event["details"]["generation"]
+                    gc_info.ParticipatingSSSet = set(event["details"]["participatingSS"])
+                    gc_info.EligibleBSSet = set(event["details"]["eligibleBS"])
+                gc_objects[gc_info.Generation] = gc_info
 
             if ("GCRescheduled" in event["message"]):
                 m = re.search(r"GC rescheduled:(\d+)", event["details"])
@@ -130,9 +135,13 @@ class SFCluster(object):
                         gc_objects[gc_info.Generation] = gc_info
 
             if ("GCCompleted" in event["message"]):
-                pieces = event["details"].split(" ")
-                generation = int(pieces[0])
-                blocks_discarded = int(pieces[1])
+                if isinstance(event["details"], basestring):
+                    pieces = event["details"].split(" ")
+                    generation = int(pieces[0])
+                    blocks_discarded = int(pieces[1])
+                else:
+                    generation = event["details"]["generation"]
+                    blocks_discarded = event["details"]["discardedBlocks"]
                 service_id = int(event["serviceID"])
                 end_time = libsf.ParseTimestamp(event['timeOfReport'])
                 if generation in gc_objects:
@@ -261,7 +270,7 @@ class SFCluster(object):
     def GetAPIVersion(self):
         """
         Get the highest API version this cluster supports
-        
+
         Returns:
             A floating point API version
         """
