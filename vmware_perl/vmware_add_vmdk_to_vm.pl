@@ -97,7 +97,7 @@ if (!$source_vm)
 
 # Find the destination datastore
 mylog::info("Searching for destination datastore $dest_datastore_name");
-my $dest_datastore = Vim::find_entity_view(view_type => 'Datastore', filter => {'name' => qr/^$dest_datastore_name/i});
+my $dest_datastore = Vim::find_entity_view(view_type => 'Datastore', filter => {'name' => qr/^$dest_datastore_name$/i});
 if (!$dest_datastore)
 {
     mylog::error("Could not find destination datastore '$dest_datastore_name'");
