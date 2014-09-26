@@ -324,7 +324,7 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
                 log.debug("HTTPError: " + str(e.code))
                 return None
     except socket.error as e:
-        log.debug("Failed calling " + pMethodName + " - socket error on " + pUrl + " : " + str(e))
+        log.debug("Failed HTTP request - socket error on " + pUrl + " : " + str(e))
         return None
     except urllib2.URLError as e:
         log.debug("URLError on " + rpc_url + " : " + str(e.reason))
@@ -584,11 +584,11 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
         for pid in usage.Processes.iterkeys():
             command += " /proc/" + str(pid) + "/io"
     command += ";"
-    if usage.NodeType == "FC0025":
+    if usage.NodeType == "FC0025" or usage.NodeType == "SFFC":
         command += "for host in `ls " + base_fc_path + "`; do echo \"HOST='$host' MODEL='`cat " + base_fc_path + "/$host/device/scsi_host/$host/model_name`' WWN='`cat " + base_fc_path + "/$host/device/fc_host/$host/port_name`' LINK_STATE='`cat " + base_fc_path + "/$host/device/scsi_host/$host/link_state`' LINK_SPEED='`cat " + base_fc_path + "/$host/speed`' TX_FRAMES='`cat " + base_fc_path + "/$host/statistics/tx_frames`' RX_FRAMES='`cat " + base_fc_path + "/$host/statistics/rx_frames`'\"; done;"
     command += "sudo \\top -b -d " + str(sample_interval) + " -n 2;"
     command += "\\ifconfig | \\egrep -i 'eth|bond|lo|inet|RX bytes|dropped|MTU';"
-    if usage.NodeType == "FC0025":
+    if usage.NodeType == "FC0025" or usage.NodeType == "SFFC":
         command += "for host in `ls " + base_fc_path + "`; do echo \"HOST='$host' MODEL='`cat " + base_fc_path + "/$host/device/scsi_host/$host/model_name`' WWN='`cat " + base_fc_path + "/$host/device/fc_host/$host/port_name`' LINK_STATE='`cat " + base_fc_path + "/$host/device/scsi_host/$host/link_state`' LINK_SPEED='`cat " + base_fc_path + "/$host/speed`' TX_FRAMES='`cat " + base_fc_path + "/$host/statistics/tx_frames`' RX_FRAMES='`cat " + base_fc_path + "/$host/statistics/rx_frames`'\"; done;"
     command += "sudo \\grep sd /proc/diskstats"
     if len(usage.Processes.keys()) > 0:
@@ -860,7 +860,7 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
                 if "leader" in mode:
                     usage.EnsembleLeader = True
 
-    #if usage.NodeType == "FC0025":
+    #if usage.NodeType == "FC0025" or usage.NodeType == "SFFC":
     #    base_fc_path = "/sys/class/fc_host"
     #    command = "for host in `ls " + base_fc_path + "`; do echo \"HOST=$host MODEL=`cat " + base_fc_path + "/$host/device/scsi_host/$host/model_name` LINK_STATE=`cat " + base_fc_path + "/$host/device/scsi_host/$host/link_state` LINK_SPEED=`cat " + base_fc_path + "/$host/speed`  TX_FRAMES='`cat " + base_fc_path + "/$host/statistics/tx_frames`' RX_FRAMES='`cat " + base_fc_path + "/$host/statistics/rx_frames`'\"; done"
 
@@ -956,7 +956,7 @@ def GetClusterInfo(log, pMvip, pApiUser, pApiPass, pNodesInfo, previousClusterIn
             info.OldCores.append(node.Hostname)
 
         # Check NVRAM mount
-        if not node.NvramMounted and node.NodeType != "FC0025":
+        if not node.NvramMounted and node.NodeType != "FC0025" and node.NodeType != "SFFC":
             info.NvramNotMounted.append(node.Hostname)
         if "ram" in node.NvramDevice:
             info.NvramRamdrive.append(node.Hostname)
