@@ -118,7 +118,8 @@ class CreateVolumesForClientAction(ActionBase):
 
         # Create the requested volumes
         mylog.info(client_ip + ": Creating " + str(volume_count) + " volumes for account " + account_name)
-        volume_prefix = client.Hostname.lower() + "-v"
+        # This split makes sure there are no "." in the volume prefix
+        volume_prefix = client.Hostname.lower().split(".")[0] + "-v"
         for vol_num in range(volume_start, volume_start + volume_count):
             volume_name = volume_prefix + "%05d" % vol_num
             params = {}
