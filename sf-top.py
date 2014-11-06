@@ -1653,8 +1653,8 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
         print '....%9s.%15s..%11s..%11s..%17s..%4s.......' % ("......NIC", ".....IP Address", ".........RX", ".........TX", "......MAC address", ".MTU")
         screen.reset()
         for nic_name in sorted(top.Nics.keys()):
-            if "bond" not in nic_name and "Bond" not in nic_name: continue
-            if (nic_name == "lo"): continue
+            if nic_name in ["lo", "eth2", "eth3"]: continue
+            if "bond" not in nic_name.lower() and top.NodeType != "SFFC" and top.NodeType != "FC0025": continue
             current_line += 1
             screen.gotoXY(startx + 1, starty + current_line)
             display_name = top.Nics[nic_name].Name
