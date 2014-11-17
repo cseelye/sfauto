@@ -1826,7 +1826,7 @@ def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo)
                 screen.set_color(ConsoleColors.YellowFore)
         print "%0.02fx" % (float(pClusterInfo.DedupPercent)/100),
     else:
-        print "0.00"
+        print "0.00",
     screen.set_color(ConsoleColors.WhiteFore)
     print "  Compression: ",
     screen.reset()
