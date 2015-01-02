@@ -30,13 +30,12 @@ def parse_task(task_instance_id):
     task_instance = result['taskInstance']
     steps = task_instance['taskInstanceSteps']
     collected = {}
-
+    workload_name = ''
     for step in steps:
 
 
 
         if step['stepDisplayName'] == 'Build vdbench workload':
-            workload_name = ''
             for inp in step['inputs']:
                 if inp['inputName'] and inp['inputName'] == 'workloadName':
                     workload_name = inp['value']
@@ -44,7 +43,7 @@ def parse_task(task_instance_id):
             if workload_name not in collected:
                 collected[workload_name] = []
 
-        if (step['stepName'] == "vdbench_start" or step['stepName'] == 'config_start_vdbench') and (step['result'] == 'pass' or step['result'] == 'warning'):
+        if (step['stepName'] == "vdbench_start" or step['stepName'] == 'config_start_vdbench') and (step['status'] == 'background' or step['result'] in ['pass', 'warning']):
             #for inp in step['inputs']:
             #    if inp['inputName'] and inp['rawInput']:
             #        print inp['inputName'].encode('ascii') + ": " + inp['rawInput'].encode('ascii')
@@ -56,7 +55,7 @@ def parse_task(task_instance_id):
                     result['vdbenchAverages']['workload'] = workload_name
                     collected[workload_name].append(result['vdbenchAverages'])
                 else:
-                    if collected[result['vdbenchAverages']['title']] not in collected.keys():
+                    if result['vdbenchAverages']['title'] not in collected.keys():
                         collected[result['vdbenchAverages']['title']] = []
                     collected[result['vdbenchAverages']['title']].append(result['vdbenchAverages'])
 
@@ -65,6 +64,8 @@ def parse_task(task_instance_id):
                     print "Missing vdbench averages for step: {} ({}) workload: {}".format(step['stepName'], step['taskInstanceStepID'], workload_name)
                 else:
                     print "Missing vdbench averages for task: {}".format(task_instance['taskName'])
+
+            workload_name = ''
 
     processed_results = []
     for wl in sorted(collected.keys()):

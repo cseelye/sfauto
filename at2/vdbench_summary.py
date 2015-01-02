@@ -43,8 +43,7 @@ def parse_task(task_instance_id):
                     break
 
 
-
-        if (step['stepName'] == "vdbench_start" or step['stepName'] == 'config_start_vdbench') and (step['result'] == 'pass' or step['result'] == 'warning'):
+        if (step['stepName'] == "vdbench_start" or step['stepName'] == 'config_start_vdbench') and (step['status'] == 'background' or step['result'] in ['pass', 'warning']):
             #for inp in step['inputs']:
             #    if inp['inputName'] and inp['rawInput']:
             #        print inp['inputName'].encode('ascii') + ": " + inp['rawInput'].encode('ascii')
