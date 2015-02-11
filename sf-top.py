@@ -398,6 +398,7 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
     return response_obj['result']
 
 def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
+
     if not pKeyFile or not os.path.exists(pKeyFile): pKeyFile = None
 
     log.debug("Connecting to " + str(pNodeIp) + " user " + str(pNodeUser) + " pass " + str(pNodePass) + " keyfile " + str(pKeyFile))
@@ -2342,7 +2343,7 @@ if __name__ == '__main__':
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=None, help="the SSH password for the nodes [%default]")
     parser.add_option("--api_user", type="string", dest="api_user", default="admin", help="the API username for the cluster [%default]")
     parser.add_option("--api_pass", type="string", dest="api_pass", default="solidfire", help="the API password for the cluster [%default]")
-    parser.add_option("--keyfile", type="string", dest="keyfile", default=None, help="the full path to your RSA key (Windows only)")
+    parser.add_option("--keyfile", type="string", dest="keyfile", default=None, help="the full path to an RSA key for SSH auth")
     parser.add_option("--interval", type="int", dest="interval", default=1, help="the number of seconds between each refresh [%default]")
     parser.add_option("--cluster_interval", type="int", dest="cluster_interval", default=0, help="the number of seconds between each cluster refresh (leave at zero to use the same interval) [%default]")
     parser.add_option("--columns", type="int", dest="columns", default=3, help="the number of columns to use for display [%default]")
@@ -2380,6 +2381,13 @@ if __name__ == '__main__':
     sfapp_disp = options.sfapp_disp
     if sfapp_disp == None:
         sfapp_disp = ['Version','Repository','Revision','BuildDate','BuildType']
+
+    output_dir = os.path.expandvars(os.path.expanduser(output_dir))
+
+    keyfile = os.path.expandvars(os.path.expanduser(keyfile))
+    if not os.path.exists(keyfile):
+        print "Can't find key file {}".format(keyfile)
+        exit(1)
 
     log = DebugLog()
     log.Enable = options.debug
