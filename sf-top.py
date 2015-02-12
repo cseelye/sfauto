@@ -37,6 +37,7 @@ import signal
 import copy
 import inspect
 import BaseHTTPServer
+import ssl
 import lib.sfdefaults as sfdefaults
 import lib.libsf as libsf
 
@@ -347,16 +348,30 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
     handler = urllib2.HTTPBasicAuthHandler(password_mgr)
     opener = urllib2.build_opener(handler)
     urllib2.install_opener(opener)
+    context = None
+    try:
+        # pylint: disable=no-member
+        context = ssl._create_unverified_context()
+        # pylint: enable=no-member
+    except AttributeError:
+        pass
 
     api_call = json.dumps( { 'method': pMethodName, 'params': pMethodParams, 'id': random.randint(100, 1000) } )
     log.debug("Calling " + api_call + " on " + rpc_url)
     response_obj = None
     api_resp = None
     try:
-        api_resp = urllib2.urlopen(rpc_url, api_call, timeout * 60)
+        if context:
+            # pylint: disable=unexpected-keyword-arg
+            api_resp = urllib2.urlopen(rpc_url, api_call, timeout * 60, context=context)
+            # pylint: enable=unexpected-keyword-arg
+        else:
+            api_resp = urllib2.urlopen(rpc_url, api_call, timeout * 60)
     except urllib2.HTTPError as e:
-        if (e.code == 401):
+        if e.code == 401:
             print "Invalid cluster admin/password"
+            if sys.version_info[0:3] == (2,7,9):
+                print "Sorry, this script does not work on python 2.7.9"
             sys.exit(1)
         else:
             if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
@@ -2215,7 +2230,9 @@ def SingleNodeThread(log, pResults, pNodeIp, pNodeUser, pNodePass, pKeyFile=None
 def GatherNodeInfoThread(log, pNodeResults, pInterval, pApiUser, pApiPass, pNodeIpList, pNodeUser, pNodePass, pKeyFile=None):
     try:
         manager = multiprocessing.Manager()
+        # pylint: disable=no-member
         node_results = manager.dict()
+        # pylint: enable=no-member
         while True:
             try:
                 # Start one thread per node
@@ -2342,7 +2359,7 @@ if __name__ == '__main__':
     parser.add_option("--ssh_user", type="string", dest="ssh_user", default="sfadmin", help="the SSH username for the nodes [%default]")
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=None, help="the SSH password for the nodes [%default]")
     parser.add_option("--api_user", type="string", dest="api_user", default="admin", help="the API username for the cluster [%default]")
-    parser.add_option("--api_pass", type="string", dest="api_pass", default="solidfire", help="the API password for the cluster [%default]")
+    parser.add_option("--api_pass", type="string", dest="api_pass", default="admin", help="the API password for the cluster [%default]")
     parser.add_option("--keyfile", type="string", dest="keyfile", default=None, help="the full path to an RSA key for SSH auth")
     parser.add_option("--interval", type="int", dest="interval", default=1, help="the number of seconds between each refresh [%default]")
     parser.add_option("--cluster_interval", type="int", dest="cluster_interval", default=0, help="the number of seconds between each cluster refresh (leave at zero to use the same interval) [%default]")
@@ -2384,10 +2401,11 @@ if __name__ == '__main__':
 
     output_dir = os.path.expandvars(os.path.expanduser(output_dir))
 
-    keyfile = os.path.expandvars(os.path.expanduser(keyfile))
-    if not os.path.exists(keyfile):
-        print "Can't find key file {}".format(keyfile)
-        exit(1)
+    if keyfile:
+        keyfile = os.path.expandvars(os.path.expanduser(keyfile))
+        if not os.path.exists(keyfile):
+            print "Can't find key file {}".format(keyfile)
+            exit(1)
 
     log = DebugLog()
     log.Enable = options.debug
@@ -2471,10 +2489,14 @@ if __name__ == '__main__':
 
     # Shared data structures to hold the results in
     main_manager = multiprocessing.Manager()
+    # pylint: disable=no-member
     node_results = main_manager.dict()
+    # pylint: enable=no-member
     for n_ip in node_ips:
         node_results[n_ip] = None
+    # pylint: disable=no-member
     cluster_results = main_manager.dict()
+    # pylint: enable=no-member
 
     previous_node_list = set(node_results.keys())
     all_threads = dict()
