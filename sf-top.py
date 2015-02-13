@@ -341,7 +341,7 @@ def HttpRequest(log, pUrl, pUsername, pPassword):
 
     return response.read()
 
-def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, version = 1.0, port = 443, timeout = 3):
+def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, version=1.0, port=443, timeout=3, printErrors=False):
     rpc_url = 'https://' + pMvip + ':' + str(port) + '/json-rpc/' + ("%1.1f" % version)
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
     password_mgr.add_password(None, rpc_url, pUsername, pPassword)
@@ -375,24 +375,38 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
             sys.exit(1)
         else:
             if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
-                log.debug("Failed calling " + pMethodName + " - HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code]))
-                return None
+                message = "Failed calling " + pMethodName + " - HTTPError: " + str(e.code) + " " + str(BaseHTTPServer.BaseHTTPRequestHandler.responses[e.code])
             else:
-                log.debug("Failed calling " + pMethodName + " - HTTPError: " + str(e.code))
-                return None
+                message = "Failed calling " + pMethodName + " - HTTPError: " + str(e.code)
+            if printErrors:
+                print message
+            log.debug(message)
+            return None
     except socket.error as e:
-        log.debug("Failed calling " + pMethodName + " - socket error on " + pMvip + " : " + str(e))
+        message = "Failed calling " + pMethodName + " - socket error on " + pMvip + " : " + str(e)
+        if printErrors:
+            print message
+        log.debug(message)
         return None
     except urllib2.URLError as e:
-        log.debug("Failed calling " + pMethodName + " - URLError on " + rpc_url + " : " + str(e.reason))
+        message = "Failed calling " + pMethodName + " - URLError on " + rpc_url + " : " + str(e.reason)
+        if printErrors:
+            print message
+        log.debug(message)
         return None
     except httplib.BadStatusLine as e:
-        log.debug("Failed calling " + pMethodName + " - httplib.BadStatusLine: " + str(e))
+        message = "Failed calling " + pMethodName + " - httplib.BadStatusLine: " + str(e)
+        if printErrors:
+            print message
+        log.debug(message)
         return None
     except KeyboardInterrupt:
         raise
     except Exception as e:
-        log.debug("Failed calling " + pMethodName + " - Unhandled exception in CallApiMethod: " + str(e) + " - " + traceback.format_exc())
+        message = "Failed calling " + pMethodName + " - Unhandled exception in CallApiMethod: " + str(e) + " - " + traceback.format_exc()
+        if printErrors:
+            print message
+        log.debug(message)
         return None
 
     if (api_resp != None):
@@ -401,13 +415,18 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
         try:
             response_obj = json.loads(response_str)
         except ValueError:
-            log.debug("Invalid JSON received from cluster")
+            message = "Invalid JSON received from cluster"
+            if printErrors:
+                print message
+            log.debug(message)
             return None
 
     if (response_obj == None or 'error' in response_obj):
         log.debug("Missing or error response from cluster")
         if 'error' in response_obj:
             log.debug(response_str)
+            if printErrors:
+                print response_str
         return None
 
     return response_obj['result']
@@ -2430,7 +2449,7 @@ if __name__ == '__main__':
         try:
             print "Getting a list of nodes in cluster " + mvip
             node_ips = []
-            api_result = CallApiMethod(log, mvip, api_user, api_pass, 'ListAllNodes', {})
+            api_result = CallApiMethod(log, mvip, api_user, api_pass, 'ListAllNodes', {}, printErrors=True)
             if not api_result:
                 print "Could not call API on " + mvip
                 sys.exit(1)
