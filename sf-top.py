@@ -425,19 +425,26 @@ def GetNodeInfo(log, pNodeIp, pNodeUser, pNodePass, pKeyFile=None):
     try:
         ssh.connect(pNodeIp, username=pNodeUser, password=pNodePass, key_filename=pKeyFile)
     except socket.error as e:
-        log.debug("Could not connect to " + pNodeIp + ": " + str(e))
+        log.debug(pNodeIp + " - Could not connect: " + str(e))
         return None
     except paramiko.BadAuthenticationType:
-        print pNodeIp + " - You must use SSH host keys to connect to this node (try adding your key to the node, or disabling OTP)"
-        log.debug(pNodeIp + " - You must use SSH host keys to connect to this node (try adding your key to the node, or disabling OTP)")
+        message = pNodeIp + " - You must use SSH host keys to connect to this node (try adding your key to the node, or disabling OTP)"
+        log.debug(message)
+        print message
         sys.exit(1)
     except paramiko.AuthenticationException:
         try:
             ssh.connect(pNodeIp, username=pNodeUser, password=pNodePass)
         except paramiko.AuthenticationException:
-            print pNodeIp + " - Authentication failed. Check the password or RSA key"
-            log.debug(pNodeIp + " - Authentication failed. Check the password or RSA key")
+            message =  pNodeIp + " - Authentication failed. Check the password or RSA key"
+            log.debug(message)
+            print message
             sys.exit(1)
+    except paramiko.SSHException as e:
+        message = pNodeIp + " - Could not connect: " + str(e)
+        log.debug(message)
+        print message
+        sys.exit(1)
 
     #time_connect = datetime.datetime.now() - start_time
     #time_connect = time_connect.microseconds + time_connect.seconds * 1000000
