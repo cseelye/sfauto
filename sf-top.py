@@ -19,6 +19,7 @@ version = __version__
 from optparse import OptionParser
 import socket
 import re
+import base64
 import time
 import datetime
 import calendar
@@ -351,27 +352,31 @@ def CallApiMethod(log, pMvip, pUsername, pPassword, pMethodName, pMethodParams, 
     context = None
     try:
         # pylint: disable=no-member
-        context = ssl._create_unverified_context()
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
         # pylint: enable=no-member
     except AttributeError:
         pass
 
     api_call = json.dumps( { 'method': pMethodName, 'params': pMethodParams, 'id': random.randint(100, 1000) } )
+    request = urllib2.Request(rpc_url, api_call)
+    request.add_header('Content-Type', 'application/json-rpc')
+    request.add_header('Authorization', "Basic " + base64.encodestring(pUsername+":"+pPassword).strip())
+
     log.debug("Calling " + api_call + " on " + rpc_url)
     response_obj = None
     api_resp = None
     try:
         if context:
             # pylint: disable=unexpected-keyword-arg
-            api_resp = urllib2.urlopen(rpc_url, api_call, timeout * 60, context=context)
+            api_resp = urllib2.urlopen(request, timeout=timeout*60, context=context)
             # pylint: enable=unexpected-keyword-arg
         else:
-            api_resp = urllib2.urlopen(rpc_url, api_call, timeout * 60)
+            api_resp = urllib2.urlopen(request, timeout=timeout*60)
     except urllib2.HTTPError as e:
         if e.code == 401:
-            print "Invalid cluster admin/password"
-            if sys.version_info[0:3] == (2,7,9):
-                print "Sorry, this script does not work on python 2.7.9"
+            print "Invalid cluster admin/password (" + str(e) + ")"
             sys.exit(1)
         else:
             if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
