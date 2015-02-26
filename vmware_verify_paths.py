@@ -61,13 +61,13 @@ class VmwareVerifyPathsAction(ActionBase):
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
 
+                allgood = True
                 for host_ip in vmhost:
                     # Find the requested host
                     mylog.info("Searching for host " + host_ip)
                     host = libvmware.FindHost(vsphere, host_ip)
 
                     mylog.info("Checking connected volumes")
-                    allgood = True
                     lun2multipath = {}
                     if not host.config.storageDevice.multipathInfo.lun:
                         mylog.error("No multipath LUNs detected")
