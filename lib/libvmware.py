@@ -8,6 +8,9 @@ import requests.exceptions
 import threading
 import time
 
+import requests
+requests.packages.urllib3.disable_warnings()
+
 class VmwareError(Exception):
     def __init__(self, message, ex=None):
         self.message = message
@@ -279,5 +282,3 @@ def WaitForTasks(si, tasks):
    finally:
       if filter:
          filter.Destroy()
-
-
