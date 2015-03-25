@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-This action will reset a VM
+This action will power off a VM
 
 When run as a script, the following options/env variables apply:
     --mgmt_server       The IP/hostname of the vSphere Server
@@ -24,7 +24,7 @@ import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 import lib.libvmware as libvmware
 
-class VmwareResetVmAction(ActionBase):
+class VmwarePoweroffVmAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -42,7 +42,7 @@ class VmwareResetVmAction(ActionBase):
 
     def Execute(self, vm_name, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
         """
-        Reset the VM
+        Power off the VM
         """
         self.ValidateArgs(locals())
         if debug:
@@ -58,11 +58,15 @@ class VmwareResetVmAction(ActionBase):
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
                 mylog.info("Searching for VM " + vm_name)
                 vm = libvmware.FindVM(vsphere, vm_name)
+                
+                if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOff:
+                    mylog.passed(vm_name + " is already off")
+                    return True
 
-                mylog.info("Resetting " + vm_name)
-                task = vm.Reset()
+                mylog.info("Powering off " + vm_name)
+                task = vm.PowerOff()
                 libvmware.WaitForTasks(vsphere, [task])
-                mylog.passed("Successfully reset " + vm_name)
+                mylog.passed("Successfully powered off " + vm_name)
 
         except libvmware.VmwareError as e:
             mylog.error(str(e))
@@ -83,7 +87,7 @@ if __name__ == '__main__':
     parser.add_option("-s", "--mgmt_server", type="string", dest="mgmt_server", default=sfdefaults.fc_mgmt_server, help="the IP/hostname of the vSphere Server [%default]")
     parser.add_option("-m", "--mgmt_user", type="string", dest="mgmt_user", default=sfdefaults.fc_vsphere_user, help="the vsphere admin username [%default]")
     parser.add_option("-a", "--mgmt_pass", type="string", dest="mgmt_pass", default=sfdefaults.fc_vsphere_pass, help="the vsphere admin password [%default]")
-    parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to reset")
+    parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to power off")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")

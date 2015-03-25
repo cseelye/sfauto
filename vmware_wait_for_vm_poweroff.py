@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-This action will reset a VM
+This action will wait for a VM's power state to be 'off'
 
 When run as a script, the following options/env variables apply:
     --mgmt_server       The IP/hostname of the vSphere Server
@@ -17,14 +17,14 @@ When run as a script, the following options/env variables apply:
 import sys
 from optparse import OptionParser
 from pyVmomi import vim
-
+import time
 import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 import lib.libvmware as libvmware
 
-class VmwareResetVmAction(ActionBase):
+class VmwareWaitForVmPoweroffAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -42,7 +42,7 @@ class VmwareResetVmAction(ActionBase):
 
     def Execute(self, vm_name, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
         """
-        Reset the VM
+        Wait for the VM
         """
         self.ValidateArgs(locals())
         if debug:
@@ -56,13 +56,37 @@ class VmwareResetVmAction(ActionBase):
         mylog.info("Connecting to vSphere " + mgmt_server)
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
-                mylog.info("Searching for VM " + vm_name)
-                vm = libvmware.FindVM(vsphere, vm_name)
-
-                mylog.info("Resetting " + vm_name)
-                task = vm.Reset()
-                libvmware.WaitForTasks(vsphere, [task])
-                mylog.passed("Successfully reset " + vm_name)
+                mylog.info('Searching for VM {}'.format(vm_name))
+                
+                while True:
+                    # Search for the VM and retrieve only it's name and powerState
+                    result_list = []
+                    view = vsphere.content.viewManager.CreateContainerView(container=vsphere.content.rootFolder, type=[vim.VirtualMachine], recursive=True)
+                    trav_spec = vim.PropertyCollector.TraversalSpec(name='tSpecName', path='view', skip=False, type=vim.view.ContainerView)
+                    obj_spec = vim.PropertyCollector.ObjectSpec(obj=view, selectSet=[trav_spec], skip=False)
+                    prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=['name', 'runtime.powerState'], type=vim.VirtualMachine)
+                    filter_spec = vim.PropertyCollector.FilterSpec(objectSet=[obj_spec], propSet=[prop_spec], reportMissingObjectsInResults=False)
+                    ret_options = vim.PropertyCollector.RetrieveOptions()
+                    while True:
+                        result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
+                        if result.objects:
+                            for obj_result in result.objects:
+                                o = {}
+                                o['obj'] = obj_result.obj
+                                for prop in obj_result.propSet:
+                                    o[str(prop.name)] = prop.val
+                                if o['name'] == vm_name:
+                                    result_list.append(o)
+                        if not result.token:
+                            break
+                    if not result_list:
+                        mylog.error('Could not find VM {}'.format(vm_name))
+                        return False
+                    vm = result_list[0]
+                    if vm['runtime.powerState'] == vim.VirtualMachinePowerState.poweredOff:
+                        mylog.passed(vm_name + " is powered off")
+                        return True
+                    time.sleep(5)
 
         except libvmware.VmwareError as e:
             mylog.error(str(e))
@@ -83,7 +107,7 @@ if __name__ == '__main__':
     parser.add_option("-s", "--mgmt_server", type="string", dest="mgmt_server", default=sfdefaults.fc_mgmt_server, help="the IP/hostname of the vSphere Server [%default]")
     parser.add_option("-m", "--mgmt_user", type="string", dest="mgmt_user", default=sfdefaults.fc_vsphere_user, help="the vsphere admin username [%default]")
     parser.add_option("-a", "--mgmt_pass", type="string", dest="mgmt_pass", default=sfdefaults.fc_vsphere_pass, help="the vsphere admin password [%default]")
-    parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to reset")
+    parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to wait for")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
