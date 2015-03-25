@@ -10,7 +10,7 @@ When run as a script, the following options/env variables apply:
 
     --mgmt_pass         The vsphere admin password
 
-    --vm_name            The name of the VM to reset
+    --vm_name            The name of the VM to power on
 
 """
 
