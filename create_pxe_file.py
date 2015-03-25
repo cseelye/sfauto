@@ -20,7 +20,7 @@ def main():
     LABEL BootImage
        KERNEL images/fdva/solidfire-fdva-{release}-{version}/casper/vmlinuz
        INITRD images/fdva/solidfire-fdva-{release}-{version}/casper/initrd.lz
-       APPEND console=tty0 ip=:::::eth0:dhcp boot=casper vga=791 fetch=ftp://{pxeServer}/images/fdva/solidfire-fdva-{release}-{version}/casper/filesystem.squashfs sf_start_rtfi=1 sf_test_hardware=1 --
+       APPEND console=tty0 ip=:::::eth0:dhcp boot=casper vga=791 fetch=ftp://{pxeServer}/images/fdva/solidfire-fdva-{release}-{version}/casper/filesystem.squashfs sf_start_rtfi=1 sf_test_hardware=0 --
     LABEL BootLocal
        localboot 0
     '''.format(release=userArgs.release, version=userArgs.version, pxeServer=userArgs.pxeServer)
@@ -72,6 +72,9 @@ if __name__ == '__main__':
                                                                 %(prog)s -v 8.0.0.1234 -m 00:50:56:ab:cd:ef -r oxygen-oxygen-mybranch
                                                             If you are not imaging an FDVA/mNode, set the device name appropriately:
                                                                 %(prog)s -v 8.0.0.1234 -m 00:50:56:ab:cd:ef -d eth2
+                                                            
+                                                            If you are watching the console during RTFI, there are long periods where it
+                                                            appears to hang or not be doing anything.  This is normal, just wait for it.
                                                             '''))
     parser.add_argument('-m', '--mac-address', type=str, dest='macAddress', required=True, help='The MAC address of the system to PXE image')
     parser.add_argument('-d', '--device-name', type=str, dest='deviceName', default='eth0', help='The device name to use when booting the PXE image [%(default)s]')
