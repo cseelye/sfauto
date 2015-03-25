@@ -46,7 +46,7 @@ class VmwareSetVmBootOrderAction(ActionBase):
 
     def Execute(self, vm_name, boot_order, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
         """
-        Power off the VM
+        Set the boot order
         """
         self.ValidateArgs(locals())
         if debug:
