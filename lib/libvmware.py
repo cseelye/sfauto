@@ -27,13 +27,13 @@ class VsphereConnection(object):
     def __enter__(self):
         try:
             self.service = connect.SmartConnect(host=self.server, user=self.username, pwd=self.password)
-        except vmodl.MethodFault as e:
-            raise VmwareError("Could not connect: " + str(e), e)
         except vim.fault.InvalidLogin:
             raise VmwareError("Invalid credentials")
         except vim.fault.HostConnectFault as e:
             raise VmwareError("Could not connect: " + str(e), e)
         except requests.exceptions.ConnectionError as e:
+            raise VmwareError("Could not connect: " + str(e), e)
+        except vmodl.MethodFault as e:
             raise VmwareError("Could not connect: " + str(e), e)
         return self.service
 

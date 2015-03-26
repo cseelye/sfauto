@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-This action will wait for a VM's power state to be 'off'
+This action will get the amount of memory on a VM
 
 When run as a script, the following options/env variables apply:
     --mgmt_server       The IP/hostname of the vSphere Server
@@ -10,21 +10,21 @@ When run as a script, the following options/env variables apply:
 
     --mgmt_pass         The vsphere admin password
 
-    --vm_name            The name of the VM to reset
+    --vm_name           The name of the VM to modify
 
 """
 
 import sys
 from optparse import OptionParser
 from pyVmomi import vim
-import time
+
 import lib.libsf as libsf
 from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 import lib.libvmware as libvmware
 
-class VmwareWaitForVmPoweroffAction(ActionBase):
+class VmwareGetVmMemoryAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -40,9 +40,9 @@ class VmwareWaitForVmPoweroffAction(ActionBase):
                             "vm_name" : None},
             args)
 
-    def Execute(self, vm_name, timeout=0, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
+    def Get(self, vm_name, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
         """
-        Wait for the VM
+        Get the VM memory
         """
         self.ValidateArgs(locals())
         if debug:
@@ -52,50 +52,33 @@ class VmwareWaitForVmPoweroffAction(ActionBase):
         if bash or csv:
             mylog.silence = True
 
-        disk_count = 0
         mylog.info("Connecting to vSphere " + mgmt_server)
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
-                mylog.info('Waiting for VM {}'.format(vm_name))
-                start_time = time.time()
+                mylog.info("Searching for VM " + vm_name)
+                vm = libvmware.FindVM(vsphere, vm_name)
 
-                while True:
-                    # Search for the VM and retrieve only it's name and powerState
-                    result_list = []
-                    view = vsphere.content.viewManager.CreateContainerView(container=vsphere.content.rootFolder, type=[vim.VirtualMachine], recursive=True)
-                    trav_spec = vim.PropertyCollector.TraversalSpec(name='tSpecName', path='view', skip=False, type=vim.view.ContainerView)
-                    obj_spec = vim.PropertyCollector.ObjectSpec(obj=view, selectSet=[trav_spec], skip=False)
-                    prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=['name', 'runtime.powerState'], type=vim.VirtualMachine)
-                    filter_spec = vim.PropertyCollector.FilterSpec(objectSet=[obj_spec], propSet=[prop_spec], reportMissingObjectsInResults=False)
-                    ret_options = vim.PropertyCollector.RetrieveOptions()
-                    while True:
-                        result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
-                        if result.objects:
-                            for obj_result in result.objects:
-                                o = {}
-                                o['obj'] = obj_result.obj
-                                for prop in obj_result.propSet:
-                                    o[str(prop.name)] = prop.val
-                                if o['name'] == vm_name:
-                                    result_list.append(o)
-                        if not result.token:
-                            break
-                    if not result_list:
-                        mylog.error('Could not find VM {}'.format(vm_name))
-                        return False
-                    vm = result_list[0]
-                    if vm['runtime.powerState'] == vim.VirtualMachinePowerState.poweredOff:
-                        mylog.passed(vm_name + " is powered off")
-                        return True
-                    if start_time - time.time() > timeout:
-                        mylog.error('Timeout waiting for {} to power off'.format(vm_name))
-                        return False
-                    time.sleep(5)
+                return vm.config.hardware.memoryMB / 1024
 
         except libvmware.VmwareError as e:
             mylog.error(str(e))
             return False
 
+    def Execute(self, vm_name, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
+        """
+        Get the VM memory
+        """
+        del self
+        mem = Get(**locals())
+        if mem is False:
+            return False
+
+        # Display the memory amount in the requested format
+        if csv or bash:
+            sys.stdout.write('{}\n'.format(mem))
+            sys.stdout.flush()
+        else:
+            mylog.info('{} has {}GB of RAM'.format(vm_name, mem))
         return True
 
 
@@ -111,8 +94,7 @@ if __name__ == '__main__':
     parser.add_option("-s", "--mgmt_server", type="string", dest="mgmt_server", default=sfdefaults.fc_mgmt_server, help="the IP/hostname of the vSphere Server [%default]")
     parser.add_option("-m", "--mgmt_user", type="string", dest="mgmt_user", default=sfdefaults.fc_vsphere_user, help="the vsphere admin username [%default]")
     parser.add_option("-a", "--mgmt_pass", type="string", dest="mgmt_pass", default=sfdefaults.fc_vsphere_pass, help="the vsphere admin password [%default]")
-    parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to wait for")
-    parser.add_option("-t", "--timeout", type="int", dest="timeout", default=None, help="how long to wait before giving up (seconds)")
+    parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to modify")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -120,7 +102,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(vm_name=options.vm_name, timeout=options.timeout, mgmt_server=options.mgmt_server, mgmt_user=options.mgmt_user, mgmt_pass=options.mgmt_pass, bash=options.bash, csv=options.csv, debug=options.debug):
+        if Execute(vm_name=options.vm_name, mgmt_server=options.mgmt_server, mgmt_user=options.mgmt_user, mgmt_pass=options.mgmt_pass, bash=options.bash, csv=options.csv, debug=options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
