@@ -56,8 +56,8 @@ class VmwareWaitForVmPoweroffAction(ActionBase):
         mylog.info("Connecting to vSphere " + mgmt_server)
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
-                mylog.info('Waiting for VM {} to power off'.format(vm_name))
-                
+                mylog.info('Searching for VM {}'.format(vm_name))
+
                 while True:
                     # Search for the VM and retrieve only it's name and powerState
                     result_list = []
