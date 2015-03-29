@@ -41,7 +41,7 @@ class VsphereConnection(object):
         mylog.debug("Disconnecting from vSphere " + self.server)
         connect.Disconnect(self.service)
 
-def FindVM(connection, vm_name, properties=["name"]):
+def FindVM(connection, vm_name, parent=None):
     obj_name_list = []
     multiple_obj = True
     if isinstance(vm_name, basestring):
@@ -54,10 +54,17 @@ def FindVM(connection, vm_name, properties=["name"]):
             obj_name_list.append(vm_name)
             multiple_obj = False
 
+    if not parent:
+        parent = connection.content.rootFolder
     result_list = []
-    view = connection.content.viewManager.CreateContainerView(container=connection.content.rootFolder, type=[vim.VirtualMachine], recursive=True)
+    view = connection.content.viewManager.CreateContainerView(container=parent, type=[vim.VirtualMachine], recursive=True)
     for vm in view.view:
-        if vm.name in obj_name_list:
+        try:
+            name = vm.name
+        except vmodl.fault.ManagedObjectNotFound:
+            # VM was deleted while we were querying it
+            continue
+        if name in obj_name_list:
             result_list.append(vm)
 
     if len(result_list) < len(obj_name_list):
@@ -68,6 +75,34 @@ def FindVM(connection, vm_name, properties=["name"]):
     else:
         return result_list[0]
 
+def FindNetwork(connection, net_name, parent=None):
+    obj_name_list = []
+    multiple_obj = True
+    if isinstance(net_name, basestring):
+        obj_name_list.append(net_name)
+        multiple_obj = False
+    else:
+        try:
+            obj_name_list = list(net_name)
+        except ValueError:
+            obj_name_list.append(net_name)
+            multiple_obj = False
+
+    if not parent:
+        parent = connection.content.rootFolder
+    result_list = []
+    view = connection.content.viewManager.CreateContainerView(container=parent, type=[vim.Network], recursive=True)
+    for o in view.view:
+        if o.name in obj_name_list:
+            result_list.append(o)
+
+    if len(result_list) < len(obj_name_list):
+        raise VmwareError("Could not find network")
+
+    if multiple_obj:
+        return result_list
+    else:
+        return result_list[0]
 
 def FindHost(connection, host_ip):
     obj_name_list = []
@@ -91,6 +126,78 @@ def FindHost(connection, host_ip):
 
     if len(result_list) < len(obj_name_list):
         raise VmwareError("Could not find all hosts")
+
+    if multiple_obj:
+        return result_list
+    else:
+        return result_list[0]
+
+
+def FindClusterHostIsIn(host):
+    '''Get the cluster that a host is in'''
+    if type(host.parent) == vim.ClusterComputeResource:
+        return host.parent
+    return None
+
+def FindDatacenterHostIsIn(host):
+    '''Find the datacenter this host is in'''
+    upper = host
+    while type(upper.parent) != vim.Datacenter:
+        upper = upper.parent
+    return upper.parent
+
+def FindDatastore(connection, ds_name, parent=None):
+    obj_name_list = []
+    multiple_obj = True
+    if isinstance(ds_name, basestring):
+        obj_name_list.append(ds_name)
+        multiple_obj = False
+    else:
+        try:
+            obj_name_list = list(ds_name)
+        except ValueError:
+            obj_name_list.append(ds_name)
+            multiple_obj = False
+
+    if not parent:
+        parent = connection.content.rootFolder
+    result_list = []
+    view = connection.content.viewManager.CreateContainerView(container=parent, type=[vim.Datastore], recursive=True)
+    for o in view.view:
+        if o.name in obj_name_list:
+            result_list.append(o)
+
+    if len(result_list) < len(obj_name_list):
+        raise VmwareError("Could not find all datastores")
+
+    if multiple_obj:
+        return result_list
+    else:
+        return result_list[0]
+    
+def FindResourcePool(connection, pool_name, parent=None):
+    obj_name_list = []
+    multiple_obj = True
+    if isinstance(pool_name, basestring):
+        obj_name_list.append(pool_name)
+        multiple_obj = False
+    else:
+        try:
+            obj_name_list = list(pool_name)
+        except ValueError:
+            obj_name_list.append(pool_name)
+            multiple_obj = False
+
+    if not parent:
+        parent = connection.content.rootFolder
+    result_list = []
+    view = connection.content.viewManager.CreateContainerView(container=parent, type=[vim.ResourcePool], recursive=True)
+    for o in view.view:
+        if o.name in obj_name_list:
+            result_list.append(o)
+
+    if len(result_list) < len(obj_name_list):
+        raise VmwareError("Could not find all resource pools")
 
     if multiple_obj:
         return result_list
