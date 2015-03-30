@@ -8,8 +8,11 @@ import requests.exceptions
 import threading
 import time
 
-import requests
-requests.packages.urllib3.disable_warnings()
+try:
+    import requests
+    requests.packages.urllib3.disable_warnings()
+except AttributeError:
+    pass
 
 class VmwareError(Exception):
     def __init__(self, message, ex=None):
