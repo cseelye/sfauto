@@ -60,7 +60,7 @@ class VmwareSetVmBootOrderAction(ActionBase):
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
                 mylog.info("Searching for VM " + vm_name)
-                vm = libvmware.FindVM(vsphere, vm_name)
+                vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name'])
 
                 mylog.info("Setting boot order to {}".format(','.join(boot_order)))
                 boot_config = vim.option.OptionValue(key='bios.bootDeviceClasses',value='allow:' + ','.join(boot_order))

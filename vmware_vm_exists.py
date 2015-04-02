@@ -57,7 +57,7 @@ class VmwareVmExistsAction(ActionBase):
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
                 mylog.info("Searching for VM " + vm_name)
                 try:
-                    vm = libvmware.FindVM(vsphere, vm_name)
+                    vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name'])
                 except libvmware.VmwareError as e:
                     mylog.error('{} does not exist in vSphere'.format(vm_name))
                     return False

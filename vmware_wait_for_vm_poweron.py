@@ -60,35 +60,13 @@ class VmwareWaitForVmPoweronAction(ActionBase):
                 start_time = time.time()
 
                 while True:
-                    # Search for the VM and retrieve only it's name and powerState
-                    result_list = []
-                    view = vsphere.content.viewManager.CreateContainerView(container=vsphere.content.rootFolder, type=[vim.VirtualMachine], recursive=True)
-                    trav_spec = vim.PropertyCollector.TraversalSpec(name='tSpecName', path='view', skip=False, type=vim.view.ContainerView)
-                    obj_spec = vim.PropertyCollector.ObjectSpec(obj=view, selectSet=[trav_spec], skip=False)
-                    prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=['name', 'runtime.powerState'], type=vim.VirtualMachine)
-                    filter_spec = vim.PropertyCollector.FilterSpec(objectSet=[obj_spec], propSet=[prop_spec], reportMissingObjectsInResults=False)
-                    ret_options = vim.PropertyCollector.RetrieveOptions()
-                    while True:
-                        result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
-                        if result.objects:
-                            for obj_result in result.objects:
-                                o = {}
-                                o['obj'] = obj_result.obj
-                                for prop in obj_result.propSet:
-                                    o[str(prop.name)] = prop.val
-                                if o['name'] == vm_name:
-                                    result_list.append(o)
-                        if not result.token:
-                            break
-                    if not result_list:
-                        mylog.error('Could not find VM {}'.format(vm_name))
-                        return False
-                    vm = result_list[0]
-                    if vm['runtime.powerState'] == vim.VirtualMachinePowerState.poweredOn:
+                    vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name', 'runtime.powerState'])
+                    mylog.debug('{} runtime.powerstate = {}'.format(vm_name, vm.runtime.powerState))
+                    if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
                         mylog.passed(vm_name + " is powered on")
                         return True
                     if start_time - time.time() > timeout:
-                        mylog.error('Timeout waiting for {} to power off'.format(vm_name))
+                        mylog.error('Timeout waiting for {} to power on'.format(vm_name))
                         return False
                     time.sleep(5)
 

@@ -56,8 +56,8 @@ class VmwareGetVmMacAddressAction(ActionBase):
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
                 mylog.info("Searching for VM " + vm_name)
-                vm = libvmware.FindVM(vsphere, vm_name)
-                
+                vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name', 'config.hardware'])
+
                 mac = None
                 for dev in vm.config.hardware.device:
                     if type(dev) in [vim.vm.device.VirtualE1000, vim.vm.device.VirtualVmxnet3]:

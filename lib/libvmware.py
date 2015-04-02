@@ -21,6 +21,30 @@ class VmwareError(Exception):
     def __str__(self):
         return self.message
 
+class DynamicObject(object):
+
+    def __getitem__(self, name):
+        if name in dir(self):
+            return getattr(self, name)
+        else:
+            raise KeyError()
+
+    def __str__(self):
+        return self._format().strip()
+
+    def _format(self, indent=0):
+        output = ''
+        for name in dir(self):
+            if name.startswith('_'):
+                continue
+            value = getattr(self, name)
+            if type(value) == DynamicObject:
+                output += '{}\n'.format(name)
+                output += value._format(indent+1)
+            else:
+                output += ' '* indent + '{} = {} ({})\n'.format(name, value, type(value))
+        return output
+
 class VsphereConnection(object):
     def __init__(self, server, username, password):
         self.server = server
@@ -44,6 +68,69 @@ class VsphereConnection(object):
         mylog.debug("Disconnecting from vSphere " + self.server)
         connect.Disconnect(self.service)
 
+def FindObjectGetProperties(connection, obj_name, obj_type, properties=None, parent=None):
+    '''Search for an object in vSphere and retrieve a list of properties
+    Arguments:
+        connection:     the vsphere connection to use
+        obj_name:       the name of the object to find
+        obj_type:       the type of the object (ex vim.VirtualMachine)
+        properties:     the properties of the object to retrieve.  Set to None to return all properties, but this is very slow!
+        parent:         the parent object to start the search, such as a datacenter or host.  Set to None to search the entire vCenter
+    Returns:
+        a DynamicObject with the requested properties
+    '''
+
+    mylog.debug('Searching for a {} named "{}"'.format(obj_type, obj_name))
+    parent = parent or connection.content.rootFolder
+    if not properties:
+        prop_spec = vim.PropertyCollector.PropertySpec(all=True, type=obj_type)
+    else:
+        if 'name' not in properties:
+            prop_list.append('name')
+        prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=properties, type=obj_type)
+
+    result_list = []
+    view = connection.content.viewManager.CreateContainerView(container=parent, type=[obj_type], recursive=True)
+    trav_spec = vim.PropertyCollector.TraversalSpec(name='tSpecName', path='view', skip=False, type=vim.view.ContainerView)
+    obj_spec = vim.PropertyCollector.ObjectSpec(obj=view, selectSet=[trav_spec], skip=False)
+    filter_spec = vim.PropertyCollector.FilterSpec(objectSet=[obj_spec], propSet=[prop_spec], reportMissingObjectsInResults=False)
+    ret_options = vim.PropertyCollector.RetrieveOptions()
+    result = connection.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
+    while True:
+        for obj_result in result.objects:
+            try:
+                match = False
+                for prop in obj_result.propSet:
+                    #if prop.name == 'name':
+                    #    mylog.debug('found {}'.format(prop.val))
+                    if prop.name == 'name' and prop.val == obj_name:
+                        result_list.append(obj_result.obj)
+                        match = True
+                        break
+                if match:
+                    break
+            except vmodl.fault.ManagedObjectNotFound:
+                # The object was deleted while we were querying it
+                continue
+            if result_list:
+                break
+        if not result.token:
+            break
+        result = connection.content.propertyCollector.ContinueRetrievePropertiesEx(token=result.token)
+    if not result_list:
+        raise VmwareError('Could not find {}'.format(obj_name))
+    return result_list[0]
+
+def AddPropertyToObj(obj, prop_name, prop_val):
+    pieces = prop_name.split('.')
+    o = obj
+    while len(pieces) > 1:
+        attr = pieces.pop(0)
+        if not getattr(o, attr, None):
+            setattr(o, attr, DynamicObject())
+        o = getattr(o, attr)
+    setattr(o, pieces[0], prop_val)
+
 def FindVM(connection, vm_name, parent=None):
     obj_name_list = []
     multiple_obj = True
@@ -56,11 +143,12 @@ def FindVM(connection, vm_name, parent=None):
         except ValueError:
             obj_name_list.append(vm_name)
             multiple_obj = False
-
+    
     if not parent:
         parent = connection.content.rootFolder
     result_list = []
     view = connection.content.viewManager.CreateContainerView(container=parent, type=[vim.VirtualMachine], recursive=True)
+    #mylog.debug('Found {} total VMs'.format(len(view.view)))
     for vm in view.view:
         try:
             name = vm.name
@@ -69,10 +157,10 @@ def FindVM(connection, vm_name, parent=None):
             continue
         if name in obj_name_list:
             result_list.append(vm)
-
+    
     if len(result_list) < len(obj_name_list):
         raise VmwareError("Could not find all VMs")
-
+    
     if multiple_obj:
         return result_list
     else:
@@ -177,7 +265,7 @@ def FindDatastore(connection, ds_name, parent=None):
         return result_list
     else:
         return result_list[0]
-    
+
 def FindResourcePool(connection, pool_name, parent=None):
     obj_name_list = []
     multiple_obj = True
@@ -201,67 +289,6 @@ def FindResourcePool(connection, pool_name, parent=None):
 
     if len(result_list) < len(obj_name_list):
         raise VmwareError("Could not find all resource pools")
-
-    if multiple_obj:
-        return result_list
-    else:
-        return result_list[0]
-
-def FindObjects(connection, obj_type, obj_name, properties=["name"]):
-    """
-    Experimental.  This form of retrieving obects gets the properties at the same time, instead of late binding and retrieving
-    them when you request them (via obj.prop).  Much slower up front, but might save time overall in some scenarios
-
-    Find an object of a given type and name, retrive the object and the specific properties
-
-    connection: The ServiceInstance connection
-    obj_type:   The vMomi type of the object(s) to find (vim.TypeName)
-    obj_name:   The name(s) of the object(s) to search for.  If a simple string is given for obj_name, return a single matching object
-                If a list of strings is given for obj_name, return a list of matching objects
-                To return multiple matches for a single name, pass a list with a single element
-    properties: If a list of strings is given for properties, only those properties are retrieved (much faster)
-                If an empty list or None is given, then all properties are retrieved (very slow)
-
-    The return value is a dict where the keys are the requested properties, plus a key called "obj" that contains a reference to the entire object
-    """
-
-    obj_name_list = []
-    multiple_obj = True
-    if isinstance(obj_name, basestring):
-        obj_name_list.append(obj_name)
-        multiple_obj = False
-    else:
-        try:
-            obj_name_list = list(obj_name)
-        except ValueError:
-            obj_name_list.append(obj_name)
-            multiple_obj = False
-
-    view = connection.content.viewManager.CreateContainerView(container=connection.content.rootFolder, type=[obj_type], recursive=True)
-    result_list = []
-    if properties:
-        if "name" not in properties:
-            properties.append("name")
-        prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=properties, type=obj_type)
-    else:
-        prop_spec = vim.PropertyCollector.PropertySpec(all=True, type=obj_type)
-    trav_spec = vim.PropertyCollector.TraversalSpec(name='tSpecName', path='view', skip=False, type=vim.view.ContainerView)
-    obj_spec = vim.PropertyCollector.ObjectSpec(obj=view, selectSet=[trav_spec], skip=False)
-    filter_spec = vim.PropertyCollector.FilterSpec(objectSet=[obj_spec], propSet=[prop_spec], reportMissingObjectsInResults=False)
-    ret_options = vim.PropertyCollector.RetrieveOptions()
-    while True:
-        result = connection.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
-        if result.objects:
-            for obj_result in result.objects:
-                o = {}
-                o["obj"] = obj_result.obj
-                for prop in obj_result.propSet:
-                    o[str(prop.name)] = prop.val
-                # Check that this object matches the requested name(s)
-                if o["name"] in obj_name_list:
-                    result_list.append(o)
-        if not result.token:
-            break
 
     if multiple_obj:
         return result_list

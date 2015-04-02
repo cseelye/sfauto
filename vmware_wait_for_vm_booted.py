@@ -56,107 +56,151 @@ class VmwareWaitForVmBootedAction(ActionBase):
         mylog.info("Connecting to vSphere " + mgmt_server)
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
-                mylog.info('Searching for VM {}'.format(vm_name))
-
-                # Search for the VM and retrieve only it's name, guest info and powerState
-                view = vsphere.content.viewManager.CreateContainerView(container=vsphere.content.rootFolder, type=[vim.VirtualMachine], recursive=True)
-                trav_spec = vim.PropertyCollector.TraversalSpec(name='tSpecName', path='view', skip=False, type=vim.view.ContainerView)
-                obj_spec = vim.PropertyCollector.ObjectSpec(obj=view, selectSet=[trav_spec], skip=False)
-                prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=['name', 'guest', 'guestHeartbeatStatus', 'runtime.powerState'], type=vim.VirtualMachine)
-                filter_spec = vim.PropertyCollector.FilterSpec(objectSet=[obj_spec], propSet=[prop_spec], reportMissingObjectsInResults=False)
-                ret_options = vim.PropertyCollector.RetrieveOptions()
 
                 # Wait for VM to be powered on
                 mylog.info('Waiting for the VM to be powered on')
                 while True:
-                    result_list = []
-                    while True:
-                        result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
-                        if result.objects:
-                            for obj_result in result.objects:
-                                o = {}
-                                o['obj'] = obj_result.obj
-                                for prop in obj_result.propSet:
-                                    o[str(prop.name)] = prop.val
-                                if o['name'] == vm_name:
-                                    result_list.append(o)
-                        if not result.token:
-                            break
-                    if not result_list:
-                        mylog.error('Could not find VM {}'.format(vm_name))
-                        return False
-                    vm = result_list[0]
-
-                    mylog.debug('runtime.powerState = {}'.format(vm['runtime.powerState']))
-                    if vm['runtime.powerState'] == vim.VirtualMachinePowerState.poweredOn:
+                    vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name', 'runtime.powerState'])
+                    mylog.debug('  runtime.powerState = {}'.format(vm.runtime.powerState))
+                    if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
                         mylog.info("  {} is powered on".format(vm_name))
                         break
-
+                    time.sleep(10)
+                
                 # Wait for VMware tools to be running
                 mylog.info('Waiting for VMware tools to be running')
                 while True:
-                    result_list = []
-                    while True:
-                        result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
-                        if result.objects:
-                            for obj_result in result.objects:
-                                o = {}
-                                o['obj'] = obj_result.obj
-                                for prop in obj_result.propSet:
-                                    o[str(prop.name)] = prop.val
-                                if o['name'] == vm_name:
-                                    result_list.append(o)
-                        if not result.token:
-                            break
-                    if not result_list:
-                        mylog.error('Could not find VM {}'.format(vm_name))
-                        return False
-                    vm = result_list[0]
-                    
-                    mylog.debug('toolsRunningStatus = {}'.format(vm['guest'].toolsRunningStatus))
-                    mylog.debug('toolsStatus = {}'.format(vm['guest'].toolsStatus))
-
-                    if vm['guest'].toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
+                    vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name', 'guest.toolsRunningStatus', 'guest.toolsStatus'])
+                    mylog.debug('  toolsRunningStatus = {}'.format(vm.guest.toolsRunningStatus))
+                    mylog.debug('  toolsStatus = {}'.format(vm.guest.toolsStatus))
+                
+                    if vm.guest.toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
                         mylog.warning('VMware Tools are not installed in this VM; cannot detect VM boot/health')
                         break
-
-                    if vm['guest'].toolsStatus == vim.VirtualMachineToolsStatus.toolsOk:
+                
+                    if vm.guest.toolsStatus == vim.VirtualMachineToolsStatus.toolsOk:
                         mylog.info('  Tools are running in {}'.format(vm_name))
                         break
                     time.sleep(5)
-
+                
                 # Wait for VM heartbeat to be green
                 mylog.info('Waiting for VM heartbeat to go green')
                 while True:
-                    result_list = []
-                    while True:
-                        result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
-                        if result.objects:
-                            for obj_result in result.objects:
-                                o = {}
-                                o['obj'] = obj_result.obj
-                                for prop in obj_result.propSet:
-                                    o[str(prop.name)] = prop.val
-                                if o['name'] == vm_name:
-                                    result_list.append(o)
-                        if not result.token:
-                            break
-                    if not result_list:
-                        mylog.error('Could not find VM {}'.format(vm_name))
-                        return False
-                    vm = result_list[0]
-
-                    if vm['guest'].toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
-                        mylog.warning('VMware Tools are not installed in this VM; cannot detect VM boot/health')
-                        break
-
-                    mylog.debug('guestHeartbeatStatus = {}'.format(vm['guestHeartbeatStatus']))
-
-                    if vm['guestHeartbeatStatus'] == vim.ManagedEntityStatus.green:
+                    vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name', 'guestHeartbeatStatus'])
+                    mylog.debug('  guestHeartbeatStatus = {}'.format(vm.guestHeartbeatStatus))
+                    
+                    if vm.guestHeartbeatStatus == vim.ManagedEntityStatus.green:
                         mylog.info('  {} guest heartbeat status is green'.format(vm_name))
                         break
+                    time.sleep(2)
 
-                mylog.passed('{} is up and running'.format(vm_name))
+
+
+
+
+                #mylog.info('Searching for VM {}'.format(vm_name))
+                ## Search for the VM and retrieve only it's name, guest info and powerState
+                #view = vsphere.content.viewManager.CreateContainerView(container=vsphere.content.rootFolder, type=[vim.VirtualMachine], recursive=True)
+                #trav_spec = vim.PropertyCollector.TraversalSpec(name='tSpecName', path='view', skip=False, type=vim.view.ContainerView)
+                #obj_spec = vim.PropertyCollector.ObjectSpec(obj=view, selectSet=[trav_spec], skip=False)
+                #prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=['name', 'guest', 'guestHeartbeatStatus', 'runtime.powerState'], type=vim.VirtualMachine)
+                #filter_spec = vim.PropertyCollector.FilterSpec(objectSet=[obj_spec], propSet=[prop_spec], reportMissingObjectsInResults=False)
+                #ret_options = vim.PropertyCollector.RetrieveOptions()
+                #
+                ## Wait for VM to be powered on
+                #mylog.info('Waiting for the VM to be powered on')
+                #while True:
+                #    result_list = []
+                #    result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
+                #    while True:
+                #        if result.objects:
+                #            for obj_result in result.objects:
+                #                o = {}
+                #                o['obj'] = obj_result.obj
+                #                for prop in obj_result.propSet:
+                #                    o[str(prop.name)] = prop.val
+                #                if o['name'] == vm_name:
+                #                    result_list.append(o)
+                #        if not result.token:
+                #            break
+                #        result = vsphere.content.propertyCollector.ContinueRetrievePropertiesEx(token=result.token)
+                #    if not result_list:
+                #        mylog.error('Could not find VM {}'.format(vm_name))
+                #        return False
+                #    vm = result_list[0]
+                #
+                #    mylog.debug('runtime.powerState = {}'.format(vm['runtime.powerState']))
+                #    if vm['runtime.powerState'] == vim.VirtualMachinePowerState.poweredOn:
+                #        mylog.info("  {} is powered on".format(vm_name))
+                #        break
+                #
+                ## Wait for VMware tools to be running
+                #mylog.info('Waiting for VMware tools to be running')
+                #while True:
+                #    result_list = []
+                #    result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
+                #    while True:
+                #        if result.objects:
+                #            for obj_result in result.objects:
+                #                o = {}
+                #                o['obj'] = obj_result.obj
+                #                for prop in obj_result.propSet:
+                #                    o[str(prop.name)] = prop.val
+                #                if o['name'] == vm_name:
+                #                    result_list.append(o)
+                #        if not result.token:
+                #            break
+                #        result = vsphere.content.propertyCollector.ContinueRetrievePropertiesEx(token=result.token)
+                #    if not result_list:
+                #        mylog.error('Could not find VM {}'.format(vm_name))
+                #        return False
+                #    vm = result_list[0]
+                #    
+                #    mylog.debug('toolsRunningStatus = {}'.format(vm['guest'].toolsRunningStatus))
+                #    mylog.debug('toolsStatus = {}'.format(vm['guest'].toolsStatus))
+                #
+                #    if vm['guest'].toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
+                #        mylog.warning('VMware Tools are not installed in this VM; cannot detect VM boot/health')
+                #        break
+                #
+                #    if vm['guest'].toolsStatus == vim.VirtualMachineToolsStatus.toolsOk:
+                #        mylog.info('  Tools are running in {}'.format(vm_name))
+                #        break
+                #    time.sleep(5)
+                #
+                ## Wait for VM heartbeat to be green
+                #mylog.info('Waiting for VM heartbeat to go green')
+                #while True:
+                #    result_list = []
+                #    result = vsphere.content.propertyCollector.RetrievePropertiesEx(specSet=[filter_spec], options=ret_options)
+                #    while True:
+                #        if result.objects:
+                #            for obj_result in result.objects:
+                #                o = {}
+                #                o['obj'] = obj_result.obj
+                #                for prop in obj_result.propSet:
+                #                    o[str(prop.name)] = prop.val
+                #                if o['name'] == vm_name:
+                #                    result_list.append(o)
+                #        if not result.token:
+                #            break
+                #        result = vsphere.content.propertyCollector.ContinueRetrievePropertiesEx(token=result.token)
+                #    if not result_list:
+                #        mylog.error('Could not find VM {}'.format(vm_name))
+                #        return False
+                #    vm = result_list[0]
+                #
+                #    if vm['guest'].toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
+                #        mylog.warning('VMware Tools are not installed in this VM; cannot detect VM boot/health')
+                #        break
+                #
+                #    mylog.debug('guestHeartbeatStatus = {}'.format(vm['guestHeartbeatStatus']))
+                #
+                #    if vm['guestHeartbeatStatus'] == vim.ManagedEntityStatus.green:
+                #        mylog.info('  {} guest heartbeat status is green'.format(vm_name))
+                #        break
+                #
+                #mylog.passed('{} is up and running'.format(vm_name))
 
         except libvmware.VmwareError as e:
             mylog.error(str(e))

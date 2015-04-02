@@ -59,24 +59,24 @@ class VmwareCreateVmAction(ActionBase):
         mylog.info("Connecting to vSphere " + mgmt_server)
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
-                
+
                 try:
-                    libvmware.FindVM(vsphere, vm_name)
+                    libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name'])
                     # Successfully found the VM, so this is a duplicate name
                     mylog.error("A VM with this name already exists")
                     return False
                 except libvmware.VmwareError:
-                    # Could not find the VM
+                    # Could not find the VM so this name is usable
                     pass
-                host = libvmware.FindHost(vsphere, vmhost)
+                host = libvmware.FindObjectGetProperties(vsphere, vmhost, vim.HostSystem, ['name', 'network', 'datastore'])
                 # Find the default resource pool - either right on the host (if it is standalone) or on the cluster this host is in
                 parent = libvmware.FindClusterHostIsIn(host) or host
                 pool = libvmware.FindResourcePool(vsphere, 'Resources', parent=parent)
-                
+
                 # Find the datacenter this host is in, and the default VM folder
                 datacenter = libvmware.FindDatacenterHostIsIn(host)
                 folder = datacenter.vmFolder
-                
+
                 # Find the requested network
                 network = None
                 for net in host.network:
@@ -86,11 +86,10 @@ class VmwareCreateVmAction(ActionBase):
                 if not network:
                     mylog.error("Could not find the requested network on the specified host")
                     return False
-                #network = libvmware.FindNetwork(vsphere, net_name, parent=datacenter)
 
                 # Find the requested datastore, or pick the datastore with the most free space
                 if datastore_name:
-                    datastore = libvmware.FindDatastore(vsphere, datastore_name, host)
+                    datastore = libvmware.FindObjectGetProperties(vsphere, datastore_name, vim.Datastore, ['name'])
                 else:
                     dsmap = {}
                     for ds in host.datastore:

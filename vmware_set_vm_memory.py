@@ -57,7 +57,7 @@ class VmwareSetVmMemoryAction(ActionBase):
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
                 mylog.info("Searching for VM " + vm_name)
-                vm = libvmware.FindVM(vsphere, vm_name)
+                vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name', 'runtime.powerState'])
 
                 if vm.runtime.powerState != vim.VirtualMachinePowerState.poweredOff:
                     mylog.error("Cannot set memory on a VM that is not powered off")

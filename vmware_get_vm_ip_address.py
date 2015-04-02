@@ -56,7 +56,7 @@ class VmwareGetVmIpAddressAction(ActionBase):
         try:
             with libvmware.VsphereConnection(mgmt_server, mgmt_user, mgmt_pass) as vsphere:
                 mylog.info("Searching for VM " + vm_name)
-                vm = libvmware.FindVM(vsphere, vm_name)
+                vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name', 'runtime.powerState', 'guest.toolsRunningStatus', 'guest.net'])
 
                 if vm.guest.toolsRunningStatus in [vim.VirtualMachineToolsStatus.toolsNotInstalled, vim.VirtualMachineToolsStatus.toolsNotRunning]:
                     mylog.error('VMware Tools must be installed and running to get VM IP address')
