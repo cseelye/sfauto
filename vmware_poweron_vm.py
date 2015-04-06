@@ -39,6 +39,9 @@ class VmwarePoweronVmAction(ActionBase):
                             "mgmt_pass" : None,
                             "vm_name" : None},
             args)
+        for name in sfdefaults.blacklisted_vm_names:
+            if name in args['vm_name']:
+                raise libsf.SfArgumentError('{} is a reserved VM name and cannot be used here'.format(args['vm_name']))
 
     def Execute(self, vm_name, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
         """

@@ -43,6 +43,9 @@ class VmwareSetVmBootOrderAction(ActionBase):
         for opt in args['boot_order']:
             if opt not in ['hd', 'cd', 'net', 'fd']:
                 raise libsf.SfArgumentError('{} is not a valid boot option'.format(opt))
+        for name in sfdefaults.blacklisted_vm_names:
+            if name in args['vm_name']:
+                raise libsf.SfArgumentError('{} is a reserved VM name and cannot be used here'.format(args['vm_name']))
 
     def Execute(self, vm_name, boot_order, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
         """

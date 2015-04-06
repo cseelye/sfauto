@@ -126,6 +126,9 @@ all_client_volume_sort = [          # Valid sort orders for client volumes
     "portal",
     "state"
 ]
+blacklisted_vm_names = [            # Names of VMs we are not allowed to operate on
+    'jenkins'
+]
 # =============================================================================
 
 __var_names = dir()
