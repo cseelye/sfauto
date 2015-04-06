@@ -92,7 +92,7 @@ qmetry_release = "rel"
 qmetry_build = "1"
 hipchat_user = "testscript"
 hipchat_color = "gray"
-
+d
 # =============================================================================
 # Default Choices
 all_volume_acess_levels = [         # Valid volume access levels
@@ -127,7 +127,8 @@ all_client_volume_sort = [          # Valid sort orders for client volumes
     "state"
 ]
 blacklisted_vm_names = [            # Names of VMs we are not allowed to operate on
-    'jenkins'
+    'jenkins',
+    'artifacts'
 ]
 # =============================================================================
 
