@@ -5,7 +5,7 @@ import json
 import numpy
 from sys import argv, exit
 
-import sf_platform.api.ApiCommonUtils as api
+import sf_platform.core.http_utils as api
 import requests
 requests.packages.urllib3.disable_warnings()
 
@@ -15,7 +15,7 @@ AT2_PASSWORD = "solidfire"
 def call_method(method, params={}):
     ''' Calls into the AT2 API and returns the result under the 'result' key. '''
     result = api.json_rpc_post("https://autotest2.solidfire.net/json-rpc/1.0/",
-                               method_name=method, params=params, time_out=180)
+                               method=method, params=params)
 
     if 'error' in result:
         raise Exception('Error calling %s: %s. %s' % (method, result['error'], params))
