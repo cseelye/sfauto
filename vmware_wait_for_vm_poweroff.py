@@ -65,7 +65,7 @@ class VmwareWaitForVmPoweroffAction(ActionBase):
                     if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOff:
                         mylog.passed(vm_name + " is powered off")
                         return True
-                    if start_time - time.time() > timeout:
+                    if time.time() - start_time > timeout:
                         mylog.error('Timeout waiting for {} to power off'.format(vm_name))
                         return False
                     time.sleep(10)

@@ -65,7 +65,7 @@ class VmwareWaitForVmPoweronAction(ActionBase):
                     if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
                         mylog.passed(vm_name + " is powered on")
                         return True
-                    if start_time - time.time() > timeout:
+                    if time.time() - start_time > timeout:
                         mylog.error('Timeout waiting for {} to power on'.format(vm_name))
                         return False
                     time.sleep(5)
