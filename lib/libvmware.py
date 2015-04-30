@@ -80,7 +80,7 @@ def FindObjectGetProperties(connection, obj_name, obj_type, properties=None, par
         a DynamicObject with the requested properties
     '''
 
-    mylog.debug('Searching for a {} named "{}"'.format(obj_type, obj_name))
+    mylog.debug('Searching for a {} named "{}"'.format(obj_type.__name__, obj_name))
     parent = parent or connection.content.rootFolder
     if not properties:
         prop_spec = vim.PropertyCollector.PropertySpec(all=True, type=obj_type)
