@@ -17,7 +17,7 @@ volumes_by_timestamp = {}
 date_samples = {}
 db = MySQLdb.connect(host="192.168.154.50", user="root", passwd="solidfire", db="dogfood")
 cursor = db.cursor(MySQLdb.cursors.DictCursor)
-sql = "SELECT volumeID,nonZeroBlocks,timestamp FROM volume_capacity"
+sql = "SELECT volumeID,nonZeroBlocks,timestamp FROM volume_capacity where  timestamp > UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR))"
 cursor.execute(sql)
 row = cursor.fetchone()
 while row is not None:
@@ -108,7 +108,13 @@ try:
     count = 0
     for vid in sorted(last_sample, key=last_sample.get, reverse=True):
         chart = workbook.add_chart({"type" : "scatter", "subtype": "straight_with_markers"})
-        source_col = volname2col[id2name[vid]]
+
+        try:
+            source_col = volname2col[id2name[vid]]
+        except KeyError:
+            # Deleted volume
+            continue
+        
         if source_col < 26:
             column_letter = string.uppercase[source_col]
         else:
@@ -160,13 +166,19 @@ try:
     row += 1
     col = 0
     for vid in sorted(last_sample, key=last_sample.get, reverse=True):
-        worksheet3.write(row, col, id2name[vid])
+        try:
+
+            worksheet3.write(row, col, id2name[vid])
+        except KeyError:
+            # Deleted volume
+            continue
+
         col += 1
         worksheet3.write(row, col, float(id2size[vid])/1000000000.0, num_format)
         col += 1
         worksheet3.write(row, col, float(last_sample[vid])*4096.0/1000000000.0, num_format)
         col += 1
-        worksheet3.write(row, col, "=$C$" + str(row+1) + "/$B$2", percent_format)
+        worksheet3.write(row, col, "=C" + str(row+1) + "/B2", percent_format)
         
         row += 1
         col = 0
