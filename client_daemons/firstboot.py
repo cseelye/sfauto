@@ -136,7 +136,8 @@ if not new_hostname:
                             if mac:
                                 mac = mac.replace(":", "").lower()
                             if mac in mac_list:
-                                vm_name = vm.get_property('name')
+                                vminfo = vcenter.get_vm_by_path(vm)
+                                vm_name = vminfo.get_property('name')
                                 break
                     if vm_name:
                         break
