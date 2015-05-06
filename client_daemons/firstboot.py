@@ -128,7 +128,8 @@ if not new_hostname:
                 vmlist = vcenter.get_registered_vms(status='poweredOn')
                 vm_name = None
                 for vm in vmlist:
-                    net = vm.get_property('net', from_cache=False)
+                    vminfo = vcenter.get_vm_by_path(vm)
+                    net = vminfo.get_property('net', from_cache=False)
                     if net:
                         for interface in net:
                             mac = interface.get('mac_address', None)
