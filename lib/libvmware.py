@@ -5,9 +5,9 @@ from libsf import mylog
 import sfdefaults
 
 from pyVim import connect
-# pylint: disable-msg=E0611
+# pylint: disable=no-name-in-module
 from pyVmomi import vim, vmodl
-# pylint: enable-msg=E0611
+# pylint: enable=no-name-in-module
 import requests.exceptions
 import threading
 import time
@@ -20,41 +20,20 @@ except AttributeError:
     pass
 try:
     import ssl
+    #pylint: disable=protected-access
     ssl._create_default_https_context = ssl._create_unverified_context
+    #pylint: enable=protected-access
 except AttributeError:
     pass
 
 class VmwareError(Exception):
+    """Exception class for all errors generated in this module"""
     def __init__(self, message, ex=None):
         super(self.__class__, self).__init__(message)
         self.message = message
         self.ex = ex
     def __str__(self):
         return self.message
-
-class DynamicObject(object):
-
-    def __getitem__(self, name):
-        if name in dir(self):
-            return getattr(self, name)
-        else:
-            raise KeyError()
-
-    def __str__(self):
-        return self._format().strip()
-
-    def _format(self, indent=0):
-        output = ''
-        for name in dir(self):
-            if name.startswith('_'):
-                continue
-            value = getattr(self, name)
-            if type(value) == DynamicObject:
-                output += '{}\n'.format(name)
-                output += value._format(indent+1)
-            else:
-                output += ' '* indent + '{} = {} ({})\n'.format(name, value, type(value))
-        return output
 
 class VsphereConnection(object):
     """Wrapper around connecting/disconnecting from vSphere"""
@@ -90,7 +69,7 @@ def FindObjectGetProperties(connection, obj_name, obj_type, properties=None, par
         properties:     the properties of the object to retrieve.  Set to None to return all properties, but this is very slow!
         parent:         the parent object to start the search, such as a datacenter or host.  Set to None to search the entire vCenter
     Returns:
-        a DynamicObject with the requested properties
+        The requested vim object with only the requested properties
     '''
 
     mylog.debug('Searching for a {} named "{}"'.format(obj_type.__name__, obj_name))
@@ -136,17 +115,6 @@ def FindObjectGetProperties(connection, obj_name, obj_type, properties=None, par
     if not result_list:
         raise VmwareError('Could not find {}'.format(obj_name))
     return result_list[0]
-
-def AddPropertyToObj(obj, prop_name, prop_val):
-    """Add a property to a python object"""
-    pieces = prop_name.split('.')
-    o = obj
-    while len(pieces) > 1:
-        attr = pieces.pop(0)
-        if not getattr(o, attr, None):
-            setattr(o, attr, DynamicObject())
-        o = getattr(o, attr)
-    setattr(o, pieces[0], prop_val)
 
 def FindVM(connection, vm_name, parent=None):
     """Search for a VM"""
@@ -250,14 +218,14 @@ def FindHost(connection, host_ip):
 
 def FindClusterHostIsIn(host):
     '''Get the cluster that a host is in'''
-    if type(host.parent) == vim.ClusterComputeResource:
+    if isinstance(host.parent, vim.ClusterComputeResource):
         return host.parent
     return None
 
 def FindDatacenterHostIsIn(host):
     '''Find the datacenter this host is in'''
     upper = host
-    while type(upper.parent) != vim.Datacenter:
+    while not isinstance(upper.parent, vim.Datacenter):
         upper = upper.parent
     return upper.parent
 
@@ -399,12 +367,12 @@ def _PoweronVMThread(vsphere, vm, results):
     results[myname] = True
 
 
-def WaitForTasks(si, tasks):
+def WaitForTasks(vsphere, tasks):
     """
     Wait for all outstanding tasks to complete
     """
 
-    pc = si.content.propertyCollector
+    pc = vsphere.content.propertyCollector
     taskList = [str(task) for task in tasks]
 
     # Create filter
@@ -445,3 +413,36 @@ def WaitForTasks(si, tasks):
     finally:
         if task_filter:
             task_filter.Destroy()
+
+
+def GetVMXProperty(connection, vm, prop_name):
+    """Get a advanced property of a VM.  These are stored as key-value pairs in the VMX file.
+    Arguments:
+        connection:     the vsphere connection to use
+        vm:             the VM object to set the property on
+        prop_name:      the name (key) of the property to get
+    Returns:
+        the requested value, as a string
+    """
+
+    vm_obj = FindObjectGetProperties(connection, vm.name, vim.VirtualMachine, ['config.extraConfig'])
+    for cfg in vm_obj.config.extraConfig:
+        if cfg.key == prop_name:
+            return cfg.value
+    return None
+
+def SetVMXProperty(connection, vm, prop_name, prop_value):
+    """Set a advanced property of a VM.  These are stored as key-value pairs in the VMX file.
+    Arguments:
+        connection:     the vsphere connection to use
+        vm:             the VM object to set the property on
+        prop_name:      the name (key) of the property to set
+        prop_value:     the value to set
+    """
+
+    mylog.debug('Setting property {}={} on VM {}'.format(prop_name, prop_value, vm.name))
+    option = vim.option.OptionValue(key=prop_name, value=prop_value)
+    config = vim.vm.ConfigSpec()
+    config.extraConfig = [option]
+    task = vm.ReconfigVM_Task(config)
+    WaitForTasks(connection, [task])
