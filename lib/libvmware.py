@@ -1,3 +1,5 @@
+""" Helper classes and functions for VMware vSphere """
+
 import libsf
 from libsf import mylog
 from pyVim import connect
@@ -8,14 +10,21 @@ import requests.exceptions
 import threading
 import time
 
+# Fix late-model python not working with self signed certs out of the box
 try:
     import requests
     requests.packages.urllib3.disable_warnings()
 except AttributeError:
     pass
+try:
+    import ssl
+    ssl._create_default_https_context = ssl._create_unverified_context
+except AttributeError:
+    pass
 
 class VmwareError(Exception):
     def __init__(self, message, ex=None):
+        super(self.__class__, self).__init__(message)
         self.message = message
         self.ex = ex
     def __str__(self):
@@ -46,10 +55,12 @@ class DynamicObject(object):
         return output
 
 class VsphereConnection(object):
+    """Wrapper around connecting/disconnecting from vSphere"""
     def __init__(self, server, username, password):
         self.server = server
         self.username = username
         self.password = password
+        self.service = None
 
     def __enter__(self):
         try:
@@ -64,7 +75,7 @@ class VsphereConnection(object):
             raise VmwareError("Could not connect: " + str(e), e)
         return self.service
 
-    def __exit__(self, type, value, tb):
+    def __exit__(self, extype, value, tb):
         mylog.debug("Disconnecting from vSphere " + self.server)
         connect.Disconnect(self.service)
 
@@ -86,7 +97,7 @@ def FindObjectGetProperties(connection, obj_name, obj_type, properties=None, par
         prop_spec = vim.PropertyCollector.PropertySpec(all=True, type=obj_type)
     else:
         if 'name' not in properties:
-            prop_list.append('name')
+            properties.append('name')
         prop_spec = vim.PropertyCollector.PropertySpec(all=False, pathSet=properties, type=obj_type)
 
     result_list = []
@@ -122,6 +133,7 @@ def FindObjectGetProperties(connection, obj_name, obj_type, properties=None, par
     return result_list[0]
 
 def AddPropertyToObj(obj, prop_name, prop_val):
+    """Add a property to a python object"""
     pieces = prop_name.split('.')
     o = obj
     while len(pieces) > 1:
@@ -132,6 +144,7 @@ def AddPropertyToObj(obj, prop_name, prop_val):
     setattr(o, pieces[0], prop_val)
 
 def FindVM(connection, vm_name, parent=None):
+    """Search for a VM"""
     obj_name_list = []
     multiple_obj = True
     if isinstance(vm_name, basestring):
@@ -167,6 +180,7 @@ def FindVM(connection, vm_name, parent=None):
         return result_list[0]
 
 def FindNetwork(connection, net_name, parent=None):
+    """Search for a network"""
     obj_name_list = []
     multiple_obj = True
     if isinstance(net_name, basestring):
@@ -196,6 +210,7 @@ def FindNetwork(connection, net_name, parent=None):
         return result_list[0]
 
 def FindHost(connection, host_ip):
+    """Search for a host"""
     obj_name_list = []
     multiple_obj = True
     if isinstance(host_ip, basestring):
@@ -238,6 +253,7 @@ def FindDatacenterHostIsIn(host):
     return upper.parent
 
 def FindDatastore(connection, ds_name, parent=None):
+    """Search for a datastore"""
     obj_name_list = []
     multiple_obj = True
     if isinstance(ds_name, basestring):
@@ -267,6 +283,7 @@ def FindDatastore(connection, ds_name, parent=None):
         return result_list[0]
 
 def FindResourcePool(connection, pool_name, parent=None):
+    """Search for a resource pool"""
     obj_name_list = []
     multiple_obj = True
     if isinstance(pool_name, basestring):
@@ -296,6 +313,7 @@ def FindResourcePool(connection, pool_name, parent=None):
         return result_list[0]
 
 def ShutdownVMs(vsphere, vm_list):
+    """Shutdown a list of VMs in parallel"""
     threads = []
     results = {}
     for vm in vm_list:
@@ -310,6 +328,7 @@ def ShutdownVMs(vsphere, vm_list):
         raise VmwareError("Not all VMs could be shutdown")
 
 def _ShutdownVMThread(vsphere, vm, results):
+    """Shutdown a VM"""
     myname = threading.current_thread().name
     results[myname] = False
     mylog.info("  Shutting down VM " + vm.name + " on " + vm.runtime.host.name)
@@ -333,6 +352,7 @@ def _ShutdownVMThread(vsphere, vm, results):
         return
 
 def PoweronVMs(vsphere, vm_list):
+    """Power on a list of VMs in parallel"""
     threads = []
     results = {}
     for vm in vm_list:
@@ -347,6 +367,7 @@ def PoweronVMs(vsphere, vm_list):
         raise VmwareError("Not all VMs could be brought up")
 
 def _PoweronVMThread(vsphere, vm, results):
+    """Power on a VM"""
     myname = threading.current_thread().name
     results[myname] = False
     mylog.info("  Powering on VM " + vm.name)
@@ -370,52 +391,48 @@ def _PoweronVMThread(vsphere, vm, results):
 
 
 def WaitForTasks(si, tasks):
-   """
-   Given the service instance si and tasks, it returns after all the
-   tasks are complete
-   """
+    """
+    Wait for all outstanding tasks to complete
+    """
 
-   pc = si.content.propertyCollector
+    pc = si.content.propertyCollector
+    taskList = [str(task) for task in tasks]
 
-   taskList = [str(task) for task in tasks]
+    # Create filter
+    objSpecs = [vmodl.query.PropertyCollector.ObjectSpec(obj=task) for task in tasks]
+    propSpec = vmodl.query.PropertyCollector.PropertySpec(type=vim.Task, pathSet=[], all=True)
+    filterSpec = vmodl.query.PropertyCollector.FilterSpec()
+    filterSpec.objectSet = objSpecs
+    filterSpec.propSet = [propSpec]
+    task_filter = pc.CreateFilter(filterSpec, True)
 
-   # Create filter
-   objSpecs = [vmodl.query.PropertyCollector.ObjectSpec(obj=task)
-                                                            for task in tasks]
-   propSpec = vmodl.query.PropertyCollector.PropertySpec(type=vim.Task,
-                                                         pathSet=[], all=True)
-   filterSpec = vmodl.query.PropertyCollector.FilterSpec()
-   filterSpec.objectSet = objSpecs
-   filterSpec.propSet = [propSpec]
-   filter = pc.CreateFilter(filterSpec, True)
+    try:
+        version, state = None, None
 
-   try:
-      version, state = None, None
+        # Loop looking for updates till the state moves to a completed state.
+        while len(taskList):
+            update = pc.WaitForUpdates(version)
+            for filterSet in update.filterSet:
+                for objSet in filterSet.objectSet:
+                    task = objSet.obj
+                    for change in objSet.changeSet:
+                        if change.name == 'info':
+                            state = change.val.state
+                        elif change.name == 'info.state':
+                            state = change.val
+                        else:
+                            continue
 
-      # Loop looking for updates till the state moves to a completed state.
-      while len(taskList):
-         update = pc.WaitForUpdates(version)
-         for filterSet in update.filterSet:
-            for objSet in filterSet.objectSet:
-               task = objSet.obj
-               for change in objSet.changeSet:
-                  if change.name == 'info':
-                     state = change.val.state
-                  elif change.name == 'info.state':
-                     state = change.val
-                  else:
-                     continue
+                        if not str(task) in taskList:
+                            continue
 
-                  if not str(task) in taskList:
-                     continue
-
-                  if state == vim.TaskInfo.State.success:
-                     # Remove task from taskList
-                     taskList.remove(str(task))
-                  elif state == vim.TaskInfo.State.error:
-                     raise task.info.error
-         # Move to next version
-         version = update.version
-   finally:
-      if filter:
-         filter.Destroy()
+                        if state == vim.TaskInfo.State.success:
+                            # Remove task from taskList
+                            taskList.remove(str(task))
+                        elif state == vim.TaskInfo.State.error:
+                            raise task.info.error
+            # Move to next version
+            version = update.version
+    finally:
+        if task_filter:
+            task_filter.Destroy()
