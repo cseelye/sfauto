@@ -2,6 +2,8 @@
 
 import libsf
 from libsf import mylog
+import sfdefaults
+
 from pyVim import connect
 # pylint: disable-msg=E0611
 from pyVmomi import vim, vmodl
@@ -92,6 +94,9 @@ def FindObjectGetProperties(connection, obj_name, obj_type, properties=None, par
     '''
 
     mylog.debug('Searching for a {} named "{}"'.format(obj_type.__name__, obj_name))
+    if obj_type == vim.VirtualMachine and obj_name in sfdefaults.blacklisted_vm_names:
+        raise VmwareError('{} is a reserved name and cannot be used here'.format(obj_name))
+
     parent = parent or connection.content.rootFolder
     if not properties:
         prop_spec = vim.PropertyCollector.PropertySpec(all=True, type=obj_type)
@@ -157,6 +162,10 @@ def FindVM(connection, vm_name, parent=None):
             obj_name_list.append(vm_name)
             multiple_obj = False
     
+    for obj_name in obj_name_list:
+        if obj_name in sfdefaults.blacklisted_vm_names:
+            raise VmwareError('{} is a reserved name and cannot be used here'.format(obj_name))
+
     if not parent:
         parent = connection.content.rootFolder
     result_list = []
