@@ -1673,6 +1673,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
         screen.gotoXY(startx + 1, starty + current_line)
         print line
 
+    # network interface table
     if pCompact:
         names_10g = ['bond1', 'Bond10G']
         for name in names_10g:
@@ -1692,7 +1693,7 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
             screen.reset()
             print "%9s/s" % (HumanizeBytes(top.Nics[nic_name].TxThroughput))
     else:
-        # next lines - network table
+        include_nics = GetNicsToDisplay(top)
         current_line += 1
         screen.gotoXY(startx + 1, starty + current_line)
         #log.debug(top.Hostname + " network header starting at " + str(startx+1) + "," + str(starty+current_line))
@@ -1700,8 +1701,8 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
         print '....%9s.%15s..%11s..%11s..%17s..%4s.......' % ("......NIC", ".....IP Address", ".........RX", ".........TX", "......MAC address", ".MTU")
         screen.reset()
         for nic_name in sorted(top.Nics.keys()):
-            if nic_name in ["lo", "eth2", "eth3"]: continue
-            if "bond" not in nic_name.lower() and top.NodeType != "SFFC" and top.NodeType != "FC0025": continue
+            if nic_name not in include_nics:
+                continue
             current_line += 1
             screen.gotoXY(startx + 1, starty + current_line)
             display_name = top.Nics[nic_name].Name
@@ -1725,7 +1726,14 @@ def DrawNodeInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pCompact, pSfapp
                     link_state = link_state + " - " + hba.LinkSpeed
                 print '%6s  %7s  %23s  %15s  %7s Fr/s   %7s Fr/s' % (fc_host, hba.Model, hba.PortWWN, link_state, HumanizeDecimal(hba.RxFrameThroughput), HumanizeDecimal(hba.TxFrameThroughput))
 
-
+def GetNicsToDisplay(nodeInfo):
+    nics = [n for n in nodeInfo.Nics.keys() if n.lower().startswith("bond")]
+    if nics:
+        if nodeInfo.NodeType == "SFFC" or nodeInfo.NodeType == "FC0025":
+            nics +=["eth0", "eth1", "eth2", "eth3", "eth4", "eth5"]
+    else:
+        nics = [n for n in nodeInfo.Nics.keys() if n.lower().startswith("eth")]
+    return nics
 
 def DrawClusterInfoCell(pStartX, pStartY, pCellWidth, pCellHeight, pClusterInfo):
     if (pClusterInfo == None):
@@ -2598,7 +2606,7 @@ if __name__ == '__main__':
                 if compact:
                     node_cell_height = 4 + 1 + (len(node_results[node_ip].Processes.keys()) - 2) + 1
                 else:
-                    node_cell_height = 4 + 1 + len(node_results[node_ip].Processes.keys()) + 1 + (len(node_results[node_ip].Nics.keys()) - 4) - 1
+                    node_cell_height = 4 + 1 + len(node_results[node_ip].Processes.keys()) + 1 + len(GetNicsToDisplay(node_results[node_ip]))
                     if len(node_results[node_ip].FcHbas.keys()) > 0:
                         node_cell_height += 1 + len(node_results[node_ip].FcHbas.keys())
                 if (node_cell_height > cell_height):
