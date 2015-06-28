@@ -42,6 +42,20 @@ import shlex
 import math
 import struct
 
+# Fix late-model python not working with self signed certs out of the box
+try:
+    import requests
+    requests.packages.urllib3.disable_warnings()
+except AttributeError:
+    pass
+try:
+    import ssl
+    #pylint: disable=protected-access
+    ssl._create_default_https_context = ssl._create_unverified_context
+    #pylint: enable=protected-access
+except AttributeError:
+    pass
+
 class SfError(Exception):
     """
     Exception thrown when an error occurs
