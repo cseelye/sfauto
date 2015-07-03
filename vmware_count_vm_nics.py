@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-This action will get the MAC address of a VM
+This action will get the count of network interfaces connected to a VM
 
 When run as a script, the following options/env variables apply:
     --mgmt_server       The IP/hostname of the vSphere Server
@@ -24,7 +24,7 @@ import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 import lib.libvmware as libvmware
 
-class VmwareGetVmMacAddressAction(ActionBase):
+class VmwareCountVmNicsAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -61,16 +61,11 @@ class VmwareGetVmMacAddressAction(ActionBase):
                 mylog.info("Searching for VM " + vm_name)
                 vm = libvmware.FindObjectGetProperties(vsphere, vm_name, vim.VirtualMachine, ['name', 'config.hardware'])
 
-                mac = None
+                count = 0
                 for dev in vm.config.hardware.device:
                     if isinstance(dev, vim.vm.device.VirtualEthernetCard):
-                        mac = dev.macAddress
-                        break
-                if not mac:
-                    mylog.error('Could not find a MAC address for VM {}'.format(vm_name))
-                    return False
-                
-                return mac
+                        count += 1
+                return count
 
         except libvmware.VmwareError as e:
             mylog.error(str(e))
@@ -78,19 +73,19 @@ class VmwareGetVmMacAddressAction(ActionBase):
 
     def Execute(self, vm_name, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
         """
-        Get the MAC address
+        Get the count
         """
         del self
-        mac_addr = Get(**locals())
-        if mac_addr is False:
+        count = Get(**locals())
+        if count is False:
             return False
 
         # Display the MAC in the requested format
         if csv or bash:
-            sys.stdout.write('{}\n'.format(mac_addr))
+            sys.stdout.write('{}\n'.format(count))
             sys.stdout.flush()
         else:
-            mylog.info('{} has MAC address {}'.format(vm_name, mac_addr))
+            mylog.info('{} has {} NICs'.format(vm_name, count))
         return True
 
 
