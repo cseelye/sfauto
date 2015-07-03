@@ -162,8 +162,8 @@ class SFNode(object):
         stdin, stdout, stderr = libsf.ExecSshCommand(ssh, command)
         lines = stdout.readlines()
         return int(lines[0])
-#nodeIP, username, password, onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch
-    def SetNetworkInfo(self, onegIP, onegNetmask, onegGateway, tengIP, tengNetmask, dnsIP, dnsSearch):
+
+    def SetNetworkInfo(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP=None, tengNetmask=None, onegNic="Bond1G", tengNic="Bond10G"):
         """
         Set the network info on this node
         """
@@ -174,7 +174,7 @@ class SFNode(object):
         status = manager.dict()
         status["success"] = False
         status["message"] = None
-        th = multiprocessing.Process(target=self._SetNetworkInfoThread, args=(onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, status))
+        th = multiprocessing.Process(target=self._SetNetworkInfoThread, args=(onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, onegNic, tengNic, status))
         th.daemon = True
         th.start()
         while True:
@@ -204,18 +204,19 @@ class SFNode(object):
         # Update my internal data
         self.ipAddress = onegIP
 
-    def _SetNetworkInfoThread(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, status):
+    def _SetNetworkInfoThread(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, onegNic, tengNic, status):
         params = {}
         params["network"] = {}
-        params["network"]["Bond1G"] = {}
-        params["network"]["Bond1G"]["address"] = onegIP
-        params["network"]["Bond1G"]["netmask"] = onegNetmask
-        params["network"]["Bond1G"]["gateway"] = onegGateway
-        params["network"]["Bond1G"]["dns-nameservers"] = dnsIP
-        params["network"]["Bond1G"]["dns-search"] = dnsSearch
-        params["network"]["Bond10G"] = {}
-        params["network"]["Bond10G"]["address"] = tengIP
-        params["network"]["Bond10G"]["netmask"] = tengNetmask
+        params["network"][onegNic] = {}
+        params["network"][onegNic]["address"] = onegIP
+        params["network"][onegNic]["netmask"] = onegNetmask
+        params["network"][onegNic]["gateway"] = onegGateway
+        params["network"][onegNic]["dns-nameservers"] = dnsIP
+        params["network"][onegNic]["dns-search"] = dnsSearch
+        if tengNic and tengIP and tengNetmask:
+            params["network"][tengNic] = {}
+            params["network"][tengNic]["address"] = tengIP
+            params["network"][tengNic]["netmask"] = tengNetmask
         try:
             libsf.CallNodeApiMethod(self.ipAddress, self.clusterUsername, self.clusterPassword, "SetConfig", params)
             status["success"] = True
