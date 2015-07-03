@@ -40,7 +40,7 @@ class VmwareWaitForVmPoweronAction(ActionBase):
                             "vm_name" : None},
             args)
 
-    def Execute(self, vm_name, timeout=0, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
+    def Execute(self, vm_name, timeout=600, mgmt_server=sfdefaults.fc_mgmt_server, mgmt_user=sfdefaults.fc_vsphere_user, mgmt_pass=sfdefaults.fc_vsphere_pass, bash=False, csv=False, debug=False):
         """
         Wait for the VM
         """
@@ -65,7 +65,7 @@ class VmwareWaitForVmPoweronAction(ActionBase):
                     if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
                         mylog.passed(vm_name + " is powered on")
                         return True
-                    if time.time() - start_time > timeout:
+                    if timeout > 0 and time.time() - start_time > timeout:
                         mylog.error('Timeout waiting for {} to power on'.format(vm_name))
                         return False
                     time.sleep(5)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mgmt_user", type="string", dest="mgmt_user", default=sfdefaults.fc_vsphere_user, help="the vsphere admin username [%default]")
     parser.add_option("-a", "--mgmt_pass", type="string", dest="mgmt_pass", default=sfdefaults.fc_vsphere_pass, help="the vsphere admin password [%default]")
     parser.add_option("--vm_name", type="string", dest="vm_name", default=None, help="the name of the VM to wait for")
-    parser.add_option("-t", "--timeout", type="int", dest="timeout", default=None, help="how long to wait before giving up (seconds)")
+    parser.add_option("-t", "--timeout", type="int", dest="timeout", default=600, help="how long to wait before giving up (seconds) [%default]")
     parser.add_option("--csv", action="store_true", dest="csv", default=False, help="display a minimal output that is formatted as a comma separated list")
     parser.add_option("--bash", action="store_true", dest="bash", default=False, help="display a minimal output that is formatted as a space separated list")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
