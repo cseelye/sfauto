@@ -70,10 +70,12 @@ class SetNodeClusterAction(ActionBase):
             self._RaiseEvent(self.Events.AFTER_SET_CLUSTER_NAME, nodeIP=node_ip, clusterName=clusterName)
 
         if allgood:
-            mylog.passed("Successfully set cluster name on all nodes")
+            if len(nodeIPs) > 1:
+                mylog.passed("Successfully set cluster name on all nodes")
             return True
         else:
-            mylog.error("Failed to set cluster name on all nodes")
+            if len(nodeIPs) > 1:
+                mylog.error("Failed to set cluster name on all nodes")
             return False
 
 # Instantate the class and add its attributes to the module
