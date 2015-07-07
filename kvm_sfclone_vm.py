@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 
 """
 This action will clone the volume a VM is on and import the new VM to the hypervisor

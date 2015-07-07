@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 
 """
 This action will return a xen hypervisor to a "normal" state

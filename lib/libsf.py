@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 import logging
 from logging.handlers import SysLogHandler
 from logging.handlers import NTEventLogHandler

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 
 """
 This action will create a simple vdbench input file based on the iscsi volumes connected to a list of clients

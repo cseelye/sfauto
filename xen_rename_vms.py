@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 
 """
 This action will rename the VMs on a XenServer hypervisor so their hostnames match the VM names

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 
 # This script will make sure your environment is sane and ready to run the scripts in this directory
 

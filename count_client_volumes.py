@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 
 """
 This action will count all of the connected iSCSI volumes and compare to the exepected value

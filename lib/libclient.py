@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 import lib.libsf as libsf
 from lib.libsf import mylog
 import subprocess

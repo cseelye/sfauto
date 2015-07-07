@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 
 """
 This action will set the multipathing policy (load balancing policy) on the LUNs attached to a VMware host

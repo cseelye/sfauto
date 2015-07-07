@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 
 """
 This action will push the local SSH RSA key to a list of clients, to enable password-less SSH

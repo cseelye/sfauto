@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 
 """
 This action will run sfnodereset on multiple nodes in parallel, destroying a cluster

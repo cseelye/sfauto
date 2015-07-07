@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 # Copyright (c) 2007 XenSource, Inc.
 #
 # Permission to use, copy, modify, and distribute this software for any

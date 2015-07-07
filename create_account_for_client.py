@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2.7
 
 """
 This action will create a CHAP account on the cluster for each client and configure the client with the CHAP credentials
