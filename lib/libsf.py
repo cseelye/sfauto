@@ -274,6 +274,7 @@ class MyLogLevels:
     TIME = 23
     BANNER = 24
     STEP = 25
+    EXCEPTION = 26
 for attr, value in vars(MyLogLevels).iteritems():
     logging.addLevelName(attr, value)
 
@@ -300,12 +301,12 @@ class ColorizingStreamHandler(logging.StreamHandler):
         logging.INFO: ('black', 'white', True),
         logging.WARNING: ('black', 'yellow', True),
         logging.ERROR: ('black', 'red', True),
-        logging.CRITICAL: ('red', 'white', True),
         MyLogLevels.PASS: ('black', 'green', True),
         MyLogLevels.RAW: ('black', 'white', True),
         MyLogLevels.TIME: ('black', 'cyan', False),
         MyLogLevels.BANNER: ('black', 'magenta', True),
         MyLogLevels.STEP: ('black', 'cyan', False),
+        MyLogLevels.EXCEPTION: ('black', 'red', True),
     }
     csi = '\x1b['
     reset = '\x1b[0m'
@@ -432,6 +433,8 @@ class MultiFormatter(logging.Formatter):
             self._fmt = self.banner_format
         elif record.levelno == MyLogLevels.STEP:
             record.msg = ">>> " + record.msg
+        elif record.levelno == MyLogLevels.EXCEPTION:
+            record.msg = record.msg + "\n{}".format(traceback.format_exc())
         else:
             self._fmt = self.std_format
 
@@ -440,42 +443,8 @@ class MultiFormatter(logging.Formatter):
         self._fmt = self.std_format
         return result
 
-class LogListener(object):
-    def __init__(self):
-        self.listener = Listener(address=('127.0.0.1', 6000))
-        self.runListener = threading.Event()
-        self.thread = threading.Thread(target=self.ListenThread)
-        self.thread.run()
-
-    def ListenThread(self):
-        while self.runListener.is_set():
-            conn = self.listener.accept()
-            data = conn.recv()
-            getattr(mylog, data[0])(data[1])
-
-    def Stop(self):
-        self.runListener.clear()
-        self.thread.join()
-        self.listener.close()
-
-    def __del__(self):
-        self.Stop()
-
-# Cross platform log to syslog and console with colors
 class mylog:
-
-    # In a multiprocessing environment, attempt to determine if I am the main process or a child
-    # The main process will open a listener that logs all messages that come in from it
-    # The child processes will not log directly but will instead send messages to the listener
-    #pname = multiprocessing.current_process().name
-    #if pname == "MainProcess":
-    #    mainlogger = True
-    #    listener = LogListener()
-    #else:
-    #    mainlogger = False
-    #    if listener:
-    #        listener.Stop()
-    #    client = multiprocessing.connection.Client(('127.0.0.1', 6000))
+    """ Cross platform log to syslog/console with colors"""
 
     silence = False
 
@@ -521,6 +490,48 @@ class mylog:
     console.setFormatter(console_formatter)
     sftestlog.addHandler(console)
 
+    class loggermethod(object):
+        """Decorator to create a logger method
+        Must be used as a function even when not passing arguments, ie @loggermethod()
+        """
+        def __init__(self, severity=None):
+            if hasattr(severity, "__call__"):
+                raise Exception("{} decorator must be called as a function".format(self.__class__.__name__))
+            else:
+                self.severity = severity
+
+        def __call__(self, func):
+            if not self.severity:
+                self.severity = func.__name__
+            severity = self.severity.upper()
+
+            try:
+                level = logging._checkLevel(severity)
+            except ValueError:
+                raise Exception("Log level '{}' is not defined".format(self.severity))
+
+            def logfunc(message):
+                if mylog.silence:
+                    return
+                lines = SplitMessage(message)
+                for line in lines:
+                    mylog.sftestlog.log(level, line)
+
+            # Set some metadata on this method
+            setattr(logfunc, "isLoggerFunction", True)
+            setattr(logfunc, "severity", func.__name__)
+            setattr(logfunc, "original", func)
+
+            return logfunc
+
+    @staticmethod
+    def GetLoggerMethods():
+        methods=[]
+        for name, func in inspect.getmembers(mylog, predicate=inspect.isroutine):
+            if getattr(func, "isLoggerFunction", False):
+                methods.append(func)
+        return methods
+
     @staticmethod
     def showDebug():
         mylog.console.setLevel(logging.DEBUG)
@@ -530,74 +541,45 @@ class mylog:
         mylog.console.setLevel(logging.INFO)
 
     @staticmethod
-    def debug(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.debug(line)
+    @loggermethod()
+    def debug(message): pass
 
     @staticmethod
-    def info(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.info(line)
+    @loggermethod()
+    def info(message): pass
 
     @staticmethod
-    def warning(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.warning(line)
+    @loggermethod()
+    def warning(message): pass
 
     @staticmethod
-    def error(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.error(line)
+    @loggermethod()
+    def error(message): pass
 
     @staticmethod
-    def exception(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.exception(line)
+    @loggermethod()
+    def exception(message): pass
 
     @staticmethod
-    def passed(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.log(MyLogLevels.PASS, line)
+    @loggermethod("pass")
+    def passed(message): pass
 
     @staticmethod
-    def time(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.log(MyLogLevels.TIME, line)
+    @loggermethod()
+    def time(message): pass
 
     @staticmethod
-    def raw(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.log(MyLogLevels.RAW, line)
+    @loggermethod()
+    def raw(message): pass
 
     @staticmethod
-    def banner(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.log(MyLogLevels.BANNER, line)
+    @loggermethod()
+    def banner(message): pass
 
     @staticmethod
-    def step(message):
-        if mylog.silence: return
-        lines = SplitMessage(message)
-        for line in lines:
-            mylog.sftestlog.log(MyLogLevels.STEP, line)
+    @loggermethod()
+    def step(message): pass
+
 
 def SplitMessage(message, length=1024):
     lines = []
