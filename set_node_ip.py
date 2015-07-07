@@ -52,9 +52,7 @@ class SetNodeIpAction(ActionBase):
 
     def ValidateArgs(self, args):
         libsf.ValidateArgs({"node_ip" : libsf.IsValidIpv4Address,
-                            "oneg_ip" : libsf.IsValidIpv4Address,
-                            "teng_ip" : libsf.IsValidIpv4Address,
-                            "dns_ip" : libsf.IsValidIpv4Address},
+                            "oneg_ip" : libsf.IsValidIpv4Address},
             args)
 
     def Execute(self, node_ip, username, password, oneg_ip, oneg_netmask, oneg_gateway, teng_ip, teng_netmask, dns_ip, dns_search, oneg_nic="Bond1G", teng_nic="Bond10G", debug=False):
