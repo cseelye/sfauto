@@ -1,0 +1,31 @@
+#!/bin/bash
+set -x
+
+: ${MAC_ADDRESS:=}
+: ${SF_VERSION:=}
+
+: ${KERNEL_PARAMS:=sf_auto=1 sf_ssh_key=1 sf_disable_otp=1 sf_ssh_root=1 sf_start_rtfi=1 sf_test_hardware=0}
+: ${RELEASE:=fluorine}
+: ${PXE_SERVER:=192.168.100.4}
+: ${BLOCK_DRIVE_COUNT:=}
+: ${BOOT_NIC:=eth0}
+
+[[ -z ${MAC_ADDRESS} ]] && { echo "Missing MAC_ADDRESS"; exit 1; }
+[[ -z ${SF_VERSION} ]] && { echo "Missing SF_VERSION"; exit 1; }
+
+[[ -n ${BLOCK_DRIVE_COUNT} ]] && KERNEL_PARAMS+=" sf_virt_block_drive_count=${BLOCK_DRIVE_COUNT}"
+sshpass -p SolidF1r3 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l root ${PXE_SERVER} "cat > /tftpboot/pxelinux.cfg/01-$(echo ${MAC_ADDRESS} | tr ':' '-' | tr '[:upper:]' '[:lower:]') <<EOF
+DEFAULT BootImage
+TIMEOUT 1
+ONTIMEOUT BootImage
+PROMPT 0
+LABEL BootImage
+   KERNEL images/rtfi/solidfire-rtfi-${RELEASE}-${SF_VERSION}/casper/vmlinuz
+   INITRD images/rtfi/solidfire-rtfi-${RELEASE}-${SF_VERSION}/casper/initrd.lz
+   APPEND console=tty0 ip=:::::${BOOT_NIC}:dhcp boot=casper vga=791 fetch=ftp://${PXE_SERVER}/images/rtfi/solidfire-rtfi-${RELEASE}-${SF_VERSION}/casper/filesystem.squashfs ${KERNEL_PARAMS} --
+LABEL BootLocal
+   localboot 0
+EOF"
+
+set +x
+
