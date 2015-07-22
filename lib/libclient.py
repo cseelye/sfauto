@@ -1356,6 +1356,36 @@ class SfClient:
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
 
+    def CreateIscsiIface(self, ifaceName, initiatorName=None):
+        if self.RemoteOs == OsType.Linux:
+            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m iface -I {0} -o new".format(ifaceName))
+            if retcode != 0:
+                raise ClientError("Could not create iface {}: {}".format(ifaceName, stderr))
+
+            if initiatorName:
+                retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m iface -I {0} -o update -n iface.initiatorname -v {1}".format(ifaceName, initiatorName))
+                if retcode != 0:
+                    raise ClientError("Could not update iface {} initiator name: {}".format(ifaceName, stderr))
+
+        else:
+            raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
+
+    def LoginTargetsOnIface(self, targetList, ifaceName, portalAddress):
+        if self.RemoteOs == OsType.Linux:
+            # Create the target records
+            for target in targetList:
+                retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m node -o new -T {0} -I {1} -p {2}".format(target, ifaceName, portalAddress))
+                if retcode != 0:
+                    raise ClientError("Could not create target record {}: {}".format(target, stderr))
+
+            # Log in to all targets on this iface
+            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m node -l all -I {0}".format(ifaceName))
+            if retcode != 0:
+                raise ClientError("Could not create iface {}: {}".format(ifaceName, stderr))
+
+        else:
+            raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
+
     def LogoutTargets(self, pTargetList=None):
         self._info("Logging out of all iSCSI volumes")
 

@@ -1047,7 +1047,7 @@ def IsValidIpv4Address(pAddressString):
         last_octet = int(pieces[-1])
     except ValueError: return False
 
-    if len(pieces) != 4 or last_octet <= 0:
+    if len(pieces) != 4 or last_octet < 0:
         return False
     try:
         addr = socket.inet_pton(socket.AF_INET, pAddressString)
@@ -1057,7 +1057,7 @@ def IsValidIpv4Address(pAddressString):
         except socket.error:
             return False
         pieces = pAddressString.split(".")
-        return (len(pieces) == 4 and int(pieces[0]) > 0)
+        return (len(pieces) == 4 and int(pieces[0]) >= 0)
     except socket.error: # not a valid address
         return False
 
