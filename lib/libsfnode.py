@@ -217,6 +217,7 @@ class SFNode(object):
             params["network"][tengNic] = {}
             params["network"][tengNic]["address"] = tengIP
             params["network"][tengNic]["netmask"] = tengNetmask
+            params["network"][tengNic]["mtu"] = 9000
         try:
             libsf.CallNodeApiMethod(self.ipAddress, self.clusterUsername, self.clusterPassword, "SetConfig", params)
             status["success"] = True
