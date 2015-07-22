@@ -392,6 +392,25 @@ class SfClient:
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
 
+    def GetNetworkInfo(self):
+        if self.RemoteOs == OsType.Linux:
+            interfaces = {}
+            retcode, stdout, stderr = self.ExecuteCommand("ifconfig | egrep 'HWaddr|inet addr'")
+            if retcode != 0:
+                raise ClientError("Failed to get list of network interfaces: {}".format(stderr))
+            for line in stdout.split("\n"):
+                m = re.search("^(\S+)\s+", line)
+                if m:
+                    nic = m.group(1)
+                    continue
+                m = re.search("inet addr:(\S+)", line)
+                if m and not m.group(1).startswith("127") and not nic == "lo":
+                    interfaces[nic] = m.group(1)
+            return interfaces
+
+        else:
+            raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
+
     def ChangeIpAddress(self, NewIp, NewMask, NewGateway=None, InterfaceName=None, InterfaceMac=None, UpdateHosts=None):
         if not InterfaceName and not InterfaceMac:
             raise ClientError("Please specify interface name or interface MAC")
@@ -1167,7 +1186,7 @@ class SfClient:
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
 
-    def RefreshTargets(self, pPortalAddress, pExpectedTargetCount=0):
+    def RefreshTargets(self, pPortalAddress, pExpectedTargetCount=0, ifaceName=None):
         if self.RemoteOs == OsType.Windows:
             if not self.ChapCredentials.has_key(pPortalAddress):
                 raise ClientError("Please setup CHAP for this portal before trying to discover or login")
@@ -1186,8 +1205,13 @@ class SfClient:
             self._passed("Refreshed all portals")
 
         elif self.RemoteOs == OsType.Linux:
-            self._debug("Refreshing target list on " + pPortalAddress)
-            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m discovery -t sendtargets -p " + pPortalAddress)
+            if ifaceName:
+                cmd = "iscsiadm -m discovery -t sendtargets -p {} -I {}".format(pPortalAddress, ifaceName)
+                self._debug("Refreshing target list on {} via iface {}".format(pPortalAddress, ifaceName))
+            else:
+                cmd = "iscsiadm -m discovery -t sendtargets -p {}".format(pPortalAddress)
+                self._debug("Refreshing target list on {}".format(pPortalAddress))
+            retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Discovery error --\n" + "".join(stderr));
             targets = self.GetAllTargets()
@@ -1220,7 +1244,7 @@ class SfClient:
         # If we couldn't find a recognizable error, just return the last line
         return pStdout.split("\n")[1]
 
-    def LoginTargets(self, pPortalAddress, pLoginOrder = "serial", pTargetList = None):
+    def LoginTargets(self, pPortalAddress=None, pLoginOrder = "serial", pTargetList = None):
         if self.RemoteOs == OsType.Windows:
             if pTargetList != None and len(pTargetList) > 0:
                 raise ClientError("target_list is not implemented for Windows")
@@ -1356,32 +1380,35 @@ class SfClient:
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
 
-    def CreateIscsiIface(self, ifaceName, initiatorName=None):
+    def CreateIscsiIface(self, ifaceName, ipAddress=None, nicName=None, initiatorName=None):
         if self.RemoteOs == OsType.Linux:
             retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m iface -I {0} -o new".format(ifaceName))
             if retcode != 0:
                 raise ClientError("Could not create iface {}: {}".format(ifaceName, stderr))
 
+            if ipAddress:
+                retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m iface -I {0} -o update -n iface.ipaddress -v {1}".format(ifaceName, ipAddress))
+                if retcode != 19 and retcode != 0:
+                    raise ClientError("Could not update iface {} IP address: [{}] {} {}".format(ifaceName, retcode, stderr, stdout))
+
+            if nicName:
+                retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m iface -I {0} -o update -n iface.net_ifacename -v {1}".format(ifaceName, nicName))
+                if retcode != 19 and retcode != 0:
+                    raise ClientError("Could not update iface {} net interface name: [{}] {} {}".format(ifaceName, retcode, stderr, stdout))
+
             if initiatorName:
                 retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m iface -I {0} -o update -n iface.initiatorname -v {1}".format(ifaceName, initiatorName))
-                if retcode != 0:
-                    raise ClientError("Could not update iface {} initiator name: {}".format(ifaceName, stderr))
+                if retcode != 19 and retcode != 0:
+                    raise ClientError("Could not update iface {} initiator name: [{}] {} {}".format(ifaceName, retcode, stderr, stdout))
 
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
 
-    def LoginTargetsOnIface(self, targetList, ifaceName, portalAddress):
+    def RefreshTargetsOnIface(self, portalAddress, ifaceName, expectedTargetCount=0):
         if self.RemoteOs == OsType.Linux:
-            # Create the target records
-            for target in targetList:
-                retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m node -o new -T {0} -I {1} -p {2}".format(target, ifaceName, portalAddress))
-                if retcode != 0:
-                    raise ClientError("Could not create target record {}: {}".format(target, stderr))
-
-            # Log in to all targets on this iface
-            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m node -l all -I {0}".format(ifaceName))
+            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m discovery -t sendtargets -I {} -p {}".format(ifaceName, portalAddress))
             if retcode != 0:
-                raise ClientError("Could not create iface {}: {}".format(ifaceName, stderr))
+                raise ClientError("Discovery error on iface {}: {}".format(ifaceName, stderr))
 
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
