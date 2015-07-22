@@ -51,7 +51,7 @@ class CreateAccountForClientAction(ActionBase):
     def __init__(self):
         super(self.__class__, self).__init__(self.__class__.Events)
 
-    def _ClientThread(self, mvip, username, password, client_ip, client_user, client_pass, account_name, svip, accounts_list, results, index):
+    def _ClientThread(self, mvip, username, password, client_ip, client_user, client_pass, account_name, svip, accounts_list, chap, results, index):
         mylog.info(client_ip + ": Connecting to client")
         client = SfClient()
         try:
@@ -95,13 +95,14 @@ class CreateAccountForClientAction(ActionBase):
                     return
 
         # set the CHAP credentials on the client
-        mylog.info(client_ip + ": Setting CHAP credentials on " + client.Hostname)
-        try:
-            client.SetupChap(svip, account_name.lower(), init_secret)
-        except ClientError as e:
-            mylog.error(client_ip + ": " + e.message)
-            self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
-            return
+        if chap:
+            mylog.info(client_ip + ": Setting CHAP credentials on " + client.Hostname)
+            try:
+                client.SetupChap(svip, account_name.lower(), init_secret)
+            except ClientError as e:
+                mylog.error(client_ip + ": " + e.message)
+                self.RaiseFailureEvent(message=str(e), clientIP=client_ip, exception=e)
+                return
 
         self.SetSharedValue(SharedValues.accountName, account_name)
         self.SetSharedValue(client_ip + "-accountName", account_name)
@@ -117,7 +118,7 @@ class CreateAccountForClientAction(ActionBase):
                             },
             args)
 
-    def Execute(self, mvip=sfdefaults.mvip, client_ips=None, account_name=None, username=sfdefaults.username, password=sfdefaults.password, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, parallel_thresh=sfdefaults.parallel_thresh, parallel_max=sfdefaults.parallel_max, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, client_ips=None, account_name=None, chap=True, username=sfdefaults.username, password=sfdefaults.password, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, parallel_thresh=sfdefaults.parallel_thresh, parallel_max=sfdefaults.parallel_max, debug=False):
         """
         Create an account for each client
         """
@@ -158,7 +159,7 @@ class CreateAccountForClientAction(ActionBase):
         thread_index = 0
         for client_ip in client_ips:
             results[thread_index] = False
-            th = multiprocessing.Process(target=self._ClientThread, args=(mvip, username, password, client_ip, client_user, client_pass, account_name, svip, accounts_list, results, thread_index))
+            th = multiprocessing.Process(target=self._ClientThread, args=(mvip, username, password, client_ip, client_user, client_pass, account_name, svip, accounts_list, chap, results, thread_index))
             th.daemon = True
             #th.start()
             self._threads.append(th)
@@ -189,6 +190,7 @@ if __name__ == '__main__':
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster [%default]")
     parser.add_option("--account_name", type="string", dest="account_name", default=None, help="the account name to use instead of the client hostname. This will be used for every client!")
+    parser.add_option("--nochap", action="store_false", dest="chap", default=True, help="do not configure CHAP on the clients")
     parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=sfdefaults.parallel_thresh, help="do not thread clients unless there are more than this many [%default]")
     parser.add_option("--parallel_max", type="int", dest="parallel_max", default=sfdefaults.parallel_max, help="the max number of client threads to use [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -196,7 +198,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.client_ips, options.account_name, options.username, options.password, options.client_user, options.client_pass, options.parallel_thresh, options.parallel_max, options.debug):
+        if Execute(options.mvip, options.client_ips, options.account_name, options.chap, options.username, options.password, options.client_user, options.client_pass, options.parallel_thresh, options.parallel_max, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
