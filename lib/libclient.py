@@ -753,7 +753,7 @@ class SfClient:
 
     def GetInitiatorName(self):
         if self.RemoteOs == OsType.Linux:
-            retcode, stdout, stderr = self.ExecuteCommand("cat /etc/iscsi/initiatorname.iscsi | cut -d'=' -f2")
+            retcode, stdout, stderr = self.ExecuteCommand("cat /etc/iscsi/initiatorname.iscsi | grep -v '#' | cut -d'=' -f2")
             if retcode != 0:
                 raise ClientError("Could not read initiator name: " + stderr)
             return stdout.strip()
