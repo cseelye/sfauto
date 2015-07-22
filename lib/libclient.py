@@ -117,21 +117,13 @@ class SfClient:
                 # Make sure the latest version of diskapp.exe is on the client
                 self._debug("Updating diskapp")
                 if self.LocalOs == OsType.Windows:
-<<<<<<< HEAD:libclient.py
-                    command = r"robocopy windiskhelper/bin \\" + str(self.IpAddress) + r"\c$\Windows\System32 diskapp.* /z /r:1 /w:3 /tbd"
-=======
                     lib_path = os.path.dirname(os.path.realpath(__file__))
                     command = "robocopy " + lib_path + r"\diskapp\bin \\" + str(self.IpAddress) + r"\c$\Windows\System32 diskapp.* /z /r:1 /w:3 /tbd"
->>>>>>> 3ba6dc2... Refactor scripts to be importable as modules; various bugfixes and cleanup:lib/libclient.py
                     retcode, stdout, stderr = libsf.RunCommand(command)
                     if retcode != 0:
                         raise ClientError("Failed to update diskapp on client: " + stderr)
                 else:
-<<<<<<< HEAD:libclient.py
-                    command = "smbclient //" + self.IpAddress + "/c$ " + self.Password + " -U " + self.Username + " <<EOC\ncd Windows\\System32\nlcd diskapp/bin\nput diskapp.exe\nexit\nEOC"
-=======
                     command = "smbclient //" + self.IpAddress + "/c$ " + self.Password + " -U " + self.Username + " <<EOC\ncd Windows\\System32\nlcd " + lib_path + "/windiskhelper\nput diskapp.exe\nexit\nEOC"
->>>>>>> 3ba6dc2... Refactor scripts to be importable as modules; various bugfixes and cleanup:lib/libclient.py
                     retcode, stdout, stderr = libsf.RunCommand(command)
                     if retcode != 0:
                         raise ClientError("Failed to update diskapp on client: " + stderr)
@@ -1186,45 +1178,45 @@ class SfClient:
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
 
-    def RefreshTargets(self, pPortalAddress, pExpectedTargetCount=0, ifaceName=None):
+    def RefreshTargets(self, portalAddress, expectedTargetCount=0, ifaceName=None):
         if self.RemoteOs == OsType.Windows:
-            if not self.ChapCredentials.has_key(pPortalAddress):
+            if not self.ChapCredentials.has_key(portalAddress):
                 raise ClientError("Please setup CHAP for this portal before trying to discover or login")
-            chap_user = self.ChapCredentials[pPortalAddress][0]
-            chap_secret = self.ChapCredentials[pPortalAddress][1]
+            chap_user = self.ChapCredentials[portalAddress][0]
+            chap_secret = self.ChapCredentials[portalAddress][1]
             retcode, stdout, stderr = self.ExecuteCommand("diskapp.exe --refresh_targets")
             if retcode != 0:
                 self._debug(stdout)
                 raise ClientError(self._parse_diskapp_error(stdout))
-            if pExpectedTargetCount <= 0:
+            if expectedTargetCount <= 0:
                 self._passed("Refreshed all portals")
                 return
             targets = self.GetAllTargets()
-            if len(targets) < pExpectedTargetCount:
-                raise ClientError("Expected " + str(pExpectedTargetCount) + " targets but discovered " + str(len(targets)))
+            if len(targets) < expectedTargetCount:
+                raise ClientError("Expected " + str(expectedTargetCount) + " targets but discovered " + str(len(targets)))
             self._passed("Refreshed all portals")
 
         elif self.RemoteOs == OsType.Linux:
             if ifaceName:
-                cmd = "iscsiadm -m discovery -t sendtargets -p {} -I {}".format(pPortalAddress, ifaceName)
-                self._debug("Refreshing target list on {} via iface {}".format(pPortalAddress, ifaceName))
+                cmd = "iscsiadm -m discovery -t sendtargets -p {} -I {}".format(portalAddress, ifaceName)
+                self._debug("Refreshing target list on {} via iface {}".format(portalAddress, ifaceName))
             else:
-                cmd = "iscsiadm -m discovery -t sendtargets -p {}".format(pPortalAddress)
-                self._debug("Refreshing target list on {}".format(pPortalAddress))
+                cmd = "iscsiadm -m discovery -t sendtargets -p {}".format(portalAddress)
+                self._debug("Refreshing target list on {}".format(portalAddress))
             retcode, stdout, stderr = self.ExecuteCommand(cmd)
             if retcode != 0:
                 raise ClientError("Discovery error --\n" + "".join(stderr));
             targets = self.GetAllTargets()
-            if len(targets) < pExpectedTargetCount:
-                raise ClientError("Expected " + str(pExpectedTargetCount) + " targets but discovered " + str(len(targets)))
+            if len(targets) < expectedTargetCount:
+                raise ClientError("Expected " + str(expectedTargetCount) + " targets but discovered " + str(len(targets)))
             if len(targets) <= 0:
                 self._warn("There were no iSCSI targets discovered")
-            self._passed("Refreshed portal " + pPortalAddress)
+            self._passed("Refreshed portal " + portalAddress)
 
         elif self.RemoteOs == OsType.SunOS:
             # Refresh targets and LoginTargets do the same thing for Solaris
-            self._debug("Refreshing target list on " + pPortalAddress)
-            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm add discovery-address " + pPortalAddress)
+            self._debug("Refreshing target list on " + portalAddress)
+            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm add discovery-address " + portalAddress)
             if retcode != 0: raise ClientError("Could not add discovery address: " + stderr)
             retcode, stdout, stderr = self.ExecuteCommand("iscsiadm modify discovery --sendtargets=disable")
             if retcode != 0: raise ClientError("Could not disable discovery: " + stderr)
@@ -1253,14 +1245,9 @@ class SfClient:
             chap_user = self.ChapCredentials[pPortalAddress][0]
             chap_secret = self.ChapCredentials[pPortalAddress][1]
             self._info("Logging in to all targets")
-<<<<<<< HEAD:libclient.py
-            cmd = "diskapp.exe --login_targets --portal_address=" + pPortalAddress + " --chap_user=\"" + self._shell_quote(chap_user) + "\" --chap_secret=\"" + self._shell_quote(chap_secret) + "\""
-            retcode, stdout, stderr = self.ExecuteCommand(cmd)
-=======
             cmd = "diskapp.exe --login_targets --portal_address=" + pPortalAddress + " --chap_user=\"" + self._shell_quote(chap_user) + "\" --chap_secret=\"" + self._shell_quote(chap_secret) + "\""
             #retcode, stdout, stderr = self.ExecuteCommand(cmd)
             retcode, stdout, stderr = self._execute_winexe_command(self.IpAddress, self.Username, self.Password, cmd, 300)
->>>>>>> 3ba6dc2... Refactor scripts to be importable as modules; various bugfixes and cleanup:lib/libclient.py
             if retcode == 0:
                 self._passed("Logged in to all volumes")
             else:
@@ -1400,15 +1387,6 @@ class SfClient:
                 retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m iface -I {0} -o update -n iface.initiatorname -v {1}".format(ifaceName, initiatorName))
                 if retcode != 19 and retcode != 0:
                     raise ClientError("Could not update iface {} initiator name: [{}] {} {}".format(ifaceName, retcode, stderr, stdout))
-
-        else:
-            raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
-
-    def RefreshTargetsOnIface(self, portalAddress, ifaceName, expectedTargetCount=0):
-        if self.RemoteOs == OsType.Linux:
-            retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m discovery -t sendtargets -I {} -p {}".format(ifaceName, portalAddress))
-            if retcode != 0:
-                raise ClientError("Discovery error on iface {}: {}".format(ifaceName, stderr))
 
         else:
             raise ClientError("Sorry, this is not implemented for " + str(self.RemoteOs))
@@ -1593,7 +1571,8 @@ class SfClient:
                     if not line:
                         continue
                     dev_list.append("/dev/" + line)
-                return sorted(dev_list, key=lambda x: int(re.findall(r'\d+$', x)[0]))
+                if len(dev_list) > 0:
+                    return sorted(dev_list, key=lambda x: int(re.findall(r'\d+$', x)[0]))
 
             retcode, stdout, stderr = self.ExecuteCommand("iscsiadm -m session -P 3 | egrep 'Target:|State:|disk'");
             if retcode != 0: raise ClientError("Could not get volume list: " + stderr)

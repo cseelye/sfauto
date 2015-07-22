@@ -128,6 +128,7 @@ class CreateVdbenchInputAction(ActionBase):
                     outfile.flush()
                 host_number += 1
 
+            outfile.write("\n")
             outfile.write("wd=default," + workload + ",sd=sd*\n")
             host_number = 1
             for client_ip in client_ips:

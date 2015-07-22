@@ -58,7 +58,7 @@ class CreateClientVlanAction(ActionBase):
         else:
             mylog.hideDebug()
 
-        mylog.info("Creating VLAN interface {}.{} on {}".format(vlan_base, vlan_tag, client_ip))
+        mylog.info("Creating VLAN interface {}.{} with IP {} on client {}".format(vlan_base, vlan_tag, vlan_ip, client_ip))
         try:
             ssh = libsf.ConnectSsh(client_ip, client_user, client_pass)
             libsf.ExecSshCommand(ssh, "vconfig add {} {}".format(vlan_base, vlan_tag))
