@@ -104,7 +104,7 @@ if __name__ == '__main__':
     parser.add_option("--volgroup_name", type="string", dest="volgroup_name", default=None, help="the name of the group")
     parser.add_option("--volgroup_id", type="int", dest="volgroup_id", default=0, help="the ID of the group")
     parser.add_option("--iqn", type="string", dest="iqn", default=None, help="the initiator IQN to add to the group")
-    parser.add_option("--debug", action="store_true", dest="debug", default=True, help="display more verbose messages")
+    parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
