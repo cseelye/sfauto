@@ -63,6 +63,7 @@ class CreateClientVlanAction(ActionBase):
             ssh = libsf.ConnectSsh(client_ip, client_user, client_pass)
             libsf.ExecSshCommand(ssh, "vconfig add {} {}".format(vlan_base, vlan_tag))
             libsf.ExecSshCommand(ssh, "ifconfig {}.{} {} netmask {} up".format(vlan_base, vlan_tag, vlan_ip, vlan_netmask))
+#            libsf.ExecSshCommand(ssh, "arping -c5 -w100000 -A -I {}.{} {}".format(vlan_base, vlan_tag, vlan_ip))
         except libsf.SfError as e:
             mylog.error(str(e))
             return False

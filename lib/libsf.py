@@ -1079,6 +1079,17 @@ def isValidMACAddress(macAddress):
         return True
     return False
 
+def IsValidVLANTag(tag):
+    if not tag:
+        return False
+    try:
+        int(tag)
+    except ValueError:
+        return False
+    if tag < 1 or tag > 4096:
+        return False
+    return True
+
 def ParseIntsFromList(integerListString):
     if not integerListString: return []
     int_list = []

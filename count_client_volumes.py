@@ -38,10 +38,8 @@ class CountClientVolumesAction(ActionBase):
 
     def ValidateArgs(self, args):
         libsf.ValidateArgs({"client_ips" : libsf.IsValidIpv4AddressList,
-                            "expected" : libsf.IsInteger},
+                            "expected" : libsf.IsPositiveInteger},
             args)
-        if args["exepected"] < 0:
-            raise libsf.SfArgumentError("Invalid value for expected")
 
     def Execute(self, expected, client_ips=None, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_user, debug=False):
         """
@@ -117,7 +115,7 @@ if __name__ == '__main__':
     parser.add_option("-c", "--client_ips", type="string", dest="client_ips", default=None, help="the IP addresses of the clients")
     parser.add_option("--client_user", type="string", dest="client_user", default=sfdefaults.client_user, help="the username for the clients [%default]")
     parser.add_option("--client_pass", type="string", dest="client_pass", default=sfdefaults.client_pass, help="the password for the clients [%default]")
-    parser.add_option("--expected", type="int", dest="expected", default=None, help="the number of drives to expect")
+    parser.add_option("--expected", type="int", dest="expected", default=None, help="the number of volumes to expect")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
