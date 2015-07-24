@@ -804,16 +804,21 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
                 mylog.debug("Calling API on " + Url + ": " + api_call + " as " + str(Username) + " : " + str(Password))
             else:
                 mylog.debug("Calling API on " + Url + ": " + api_call)
+
             try:
+                # Make the HTTP POST request
                 api_resp = urllib2.urlopen(Url, api_call)
+                # Read the raw text content of the response
+                response_str = api_resp.read().decode('ascii')
                 break
+
             except urllib2.HTTPError as e:
                 if (e.code == 401):
                     if ExitOnError:
                         mylog.error("Invalid username/password")
                         exit(1)
                     else:
-                        raise SfApiError("HTTP error 404", "Invalid username/password")
+                        raise SfApiError("HTTP error 401", "Invalid username/password")
                 else:
                     last_error_code = str(e.code)
                     if (e.code in BaseHTTPServer.BaseHTTPRequestHandler.responses):
@@ -839,7 +844,7 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
                 mylog.warning("HTTPException: " + str(e))
                 last_error_code = "HTTPException"
                 last_error_mess = str(e)
-            except socket.errno as e:
+            except (socket.timeout, socket.error, socket.herror, socket.gaierror) as e:
                 mylog.warning("Socket error: " + str(e))
                 last_error_code = "SocketError"
                 last_error_mess = str(e)
@@ -854,10 +859,8 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
             mylog.info("Waiting 30 seconds before trying API again...")
             time.sleep(30)
 
-        # At this point we got a good HTTP response code from the URL
+        # At this point we got a good HTTP response code from the URL and were able to read the response text
 
-        # Read the raw text content of the response
-        response_str = api_resp.read().decode('ascii')
         #print "Raw response = ------------------------------------------------------"
         #print response_str
         #print "---------------------------------------------------------------------"
