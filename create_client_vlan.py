@@ -27,7 +27,7 @@ from optparse import OptionParser
 import re
 import lib.libsf as libsf
 from lib.libsf import mylog
-import logging
+from lib.libclient import SfClient, ClientError
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
@@ -60,10 +60,21 @@ class CreateClientVlanAction(ActionBase):
 
         mylog.info("Creating VLAN interface {}.{} with IP {} on client {}".format(vlan_base, vlan_tag, vlan_ip, client_ip))
         try:
-            ssh = libsf.ConnectSsh(client_ip, client_user, client_pass)
-            libsf.ExecSshCommand(ssh, "vconfig add {} {}".format(vlan_base, vlan_tag))
-            libsf.ExecSshCommand(ssh, "ifconfig {}.{} {} netmask {} up".format(vlan_base, vlan_tag, vlan_ip, vlan_netmask))
-#            libsf.ExecSshCommand(ssh, "arping -c5 -w100000 -A -I {}.{} {}".format(vlan_base, vlan_tag, vlan_ip))
+            client = SfClient()
+            try:
+                client.Connect(client_ip, client_user, client_pass)
+            except ClientError as e:
+                mylog.error(client_ip + ": " + e.message)
+                return False
+
+            return_code, stdout, stderr = client.ExecuteCommand("vconfig add {} {}".format(vlan_base, vlan_tag))
+            if return_code != 0:
+                mylog.error("Failed to create VLAN: {}".format(stderr))
+                return False
+            return_code, stdout, stderr = client.ExecuteCommand("ifconfig {}.{} {} netmask {} up".format(vlan_base, vlan_tag, vlan_ip, vlan_netmask))
+            if return_code != 0:
+                mylog.error("Failed to configure VLAN: {}".format(stderr))
+                return False
         except libsf.SfError as e:
             mylog.error(str(e))
             return False
