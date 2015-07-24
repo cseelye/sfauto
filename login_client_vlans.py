@@ -3,8 +3,19 @@
 """
 This action will log in to iSCSI volumes by VLAN on a list of clients
 
+It works by getting a list of volume groups from the cluster and finding groups where the IQN is derived from
+the client IQN, plus the VLAN info on the end.  For example:
+Client IQN    - iqn.2010-01.net.solidfire.eng:vwc-es184
+volgroup IQNs - iqn.2010-01.net.solidfire.eng:vwc-es184:vlan-2500
+                iqn.2010-01.net.solidfire.eng:vwc-es184:vlan-2670
+                iqn.2010-01.net.solidfire.eng:vwc-es184:vlan-3000
+The IQN from the volume group is parsed to get the VLAN tag and then used to create an open-iscsi iface for
+each VLAN, using the different IQN for each iface.  The volumes in the volume group are then discovered via
+that iface, using the vSVIP for that VLAN.
+
 When run as a script, the following options/env variables apply:
     --client_ips        The IP addresses of the clients
+    SFCLIENT_IPS env var
 
     --client_user       The username for the client
     SFCLIENT_USER env var
@@ -21,8 +32,6 @@ When run as a script, the following options/env variables apply:
     --pass              The cluster admin password
     SFPASS env var
 
-    --target_list       List of target IQNs to log in to
-
     --paralell_thresh   Do not thread clients unless there are more than this many
     SFPARALLEL_THRESH env var
 
@@ -33,10 +42,10 @@ When run as a script, the following options/env variables apply:
 import sys
 from optparse import OptionParser
 import multiprocessing
+import time
 import lib.libsf as libsf
 from lib.libsf import mylog
-from lib.libclient import ClientError, SfClient, OsType
-import logging
+from lib.libclient import ClientError, SfClient
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
@@ -50,7 +59,7 @@ class LoginClientVlansAction(ActionBase):
     def __init__(self):
         super(self.__class__, self).__init__(self.__class__.Events)
 
-    def _ClientThread(self, client_ip, client_user, client_pass, expected_volumes, all_vlans, all_volgroups, all_volumes, results):
+    def _ClientThread(self, client_ip, client_user, client_pass, all_vlans, all_volgroups, all_volumes, results):
         myname = multiprocessing.current_process().name
         results[myname] = False
 
@@ -73,27 +82,50 @@ class LoginClientVlansAction(ActionBase):
                     break
         if len(volgroups) == 0:
             mylog.warning(client_ip + ": No appropriate volume groups found")
-            results[myname] = True
             return
 
-        # For each volgroup/VLAN, create an appropriate iSCSI iface, discover the volumes, then log in
+        # For each volgroup/VLAN, create an appropriate iSCSI iface and discover the volumes
         for group in volgroups:
 
             # Get the info for this connection
+            expected_volume_count = len(group['volumes'])
             vlan_iqn = group['initiators'][0]
             tag = int(vlan_iqn.split(":")[-1].split("-")[-1])
             vlan_targets = [all_volumes[i]['iqn'] for i in group['volumes']]
             vlan_portal = all_vlans[tag]['svip']
 
-            # Create iface and discover on this connection
+            # Create iface with the correct initiator IQN
             mylog.info("{}: Creating iSCSI iface for VLAN {}".format(client_ip, tag))
             iface_name = "vlan-{}".format(tag)
             client.CreateIscsiIface(iface_name, initiatorName=vlan_iqn)
-            mylog.info("{}: Discovering volumes on VLAN {}".format(client_ip, tag))
-            client.RefreshTargets(vlan_portal, ifaceName=iface_name, expectedTargetCount=expected_volumes)
 
-        mylog.info("{}: Logging in to all volumes".format(client_ip))
-        client.LoginTargets(pLoginOrder="parallel")
+            # Discover on the VLAN svip
+            wait = 30
+            retry = 10
+            while retry > 0:
+                try:
+                    mylog.info("{}: Discovering volumes on VLAN {} via SVIP {}".format(client_ip, tag, vlan_portal))
+                    client.RefreshTargets(vlan_portal, ifaceName=iface_name, expectedTargetCount=expected_volume_count)
+                    break
+                except ClientError as e:
+                    mylog.error(str(e))
+                mylog.info("{}: Waiting {} sec before trying again...".format(client_ip, wait))
+                time.sleep(wait)
+                retry -= 1
+            if retry == 0:
+                mylog.error("{}: Failed to discover volumes".format(client_ip))
+                return
+
+        # Log in to all discovered volumes in parallel
+        wait = 30
+        retry = 6
+        while retry > 0:
+            mylog.info("{}: Logging in to all volumes".format(client_ip))
+            client.LoginTargets(pLoginOrder="parallel")
+            break
+            mylog.info("Waiting {} sec before trying again...".format(wait))
+            time.sleep(wait)
+            retry -= 1
 
         results[myname] = True
         return
@@ -106,7 +138,7 @@ class LoginClientVlansAction(ActionBase):
                             },
             args)
 
-    def Execute(self, expected_volumes, mvip=sfdefaults.mvip, client_ips=sfdefaults.client_ips, username=sfdefaults.username, password=sfdefaults.password, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, parallel_thresh=sfdefaults.parallel_thresh, parallel_max=sfdefaults.parallel_max, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, client_ips=sfdefaults.client_ips, username=sfdefaults.username, password=sfdefaults.password, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, parallel_thresh=sfdefaults.parallel_thresh, parallel_max=sfdefaults.parallel_max, debug=False):
         """
         Log in to volumes on clients
         """
@@ -114,7 +146,9 @@ class LoginClientVlansAction(ActionBase):
             client_ips = sfdefaults.client_ips
         self.ValidateArgs(locals())
         if debug:
-            mylog.console.setLevel(logging.DEBUG)
+            mylog.showDebug()
+        else:
+            mylog.hideDebug()
 
         # Get a list of VLANs in the cluster
         try:
@@ -152,7 +186,7 @@ class LoginClientVlansAction(ActionBase):
         for client_ip in client_ips:
             thread_name = "client-" + client_ip
             results[thread_name] = False
-            th = multiprocessing.Process(target=self._ClientThread, name=thread_name, args=(client_ip, client_user, client_pass, expected_volumes, all_vlans, all_volgroups, all_volumes, results))
+            th = multiprocessing.Process(target=self._ClientThread, name=thread_name, args=(client_ip, client_user, client_pass, all_vlans, all_volgroups, all_volumes, results))
             th.daemon = True
             all_threads.append(th)
 
@@ -180,7 +214,6 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management VIP for the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the username for the cluster [%default]")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the password for the cluster [%default]")
-    parser.add_option("--expected_volumes", type="int", dest="expected_volumes", default=0, help="the expected number of volumes")
     parser.add_option("--parallel_thresh", type="int", dest="parallel_thresh", default=sfdefaults.parallel_thresh, help="do not thread clients unless there are more than this many [%default]")
     parser.add_option("--parallel_max", type="int", dest="parallel_max", default=sfdefaults.parallel_max, help="the max number of client threads to use [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -188,7 +221,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.expected_volumes, options.mvip, options.client_ips, options.username, options.password, options.client_user, options.client_pass, options.parallel_thresh, options.parallel_max, options.debug):
+        if Execute(options.mvip, options.client_ips, options.username, options.password, options.client_user, options.client_pass, options.parallel_thresh, options.parallel_max, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
