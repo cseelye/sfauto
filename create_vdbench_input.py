@@ -30,6 +30,8 @@ When run as a script, the following options/env variables apply:
 
     --nodatavalidation  Skip data validation
 
+    --prefill           Prefill the volumes first
+
     --volume_start      Volume number to start from
 
     --volume_end        Volume to end at
@@ -60,7 +62,7 @@ class CreateVdbenchInputAction(ActionBase):
                             "filename" : None},
             args)
 
-    def Execute(self, client_ips, filename, data_errors=sfdefaults.vdbench_data_errors, compratio=sfdefaults.vdbench_compratio, dedupratio=sfdefaults.vdbench_dedupratio, workload=sfdefaults.vdbench_workload, run_time=sfdefaults.vdbench_run_time, interval=sfdefaults.vdbench_interval, threads=sfdefaults.vdbench_threads, warmup=sfdefaults.vdbench_warmup, datavalidation=sfdefaults.vdbench_data_vaidation, volume_start=0, volume_end=0, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
+    def Execute(self, client_ips, filename, data_errors=sfdefaults.vdbench_data_errors, compratio=sfdefaults.vdbench_compratio, dedupratio=sfdefaults.vdbench_dedupratio, workload=sfdefaults.vdbench_workload, run_time=sfdefaults.vdbench_run_time, interval=sfdefaults.vdbench_interval, threads=sfdefaults.vdbench_threads, warmup=sfdefaults.vdbench_warmup, datavalidation=sfdefaults.vdbench_data_vaidation, prefill=False, volume_start=0, volume_end=0, client_user=sfdefaults.client_user, client_pass=sfdefaults.client_pass, debug=False):
         """
         Create a vdbench input file
         """
@@ -129,18 +131,26 @@ class CreateVdbenchInputAction(ActionBase):
                 host_number += 1
 
             outfile.write("\n")
-            outfile.write("wd=default," + workload + ",sd=sd*\n")
-            host_number = 1
-            for client_ip in client_ips:
-                outfile.write("wd=wd" + str(host_number) + ",host=hd" + str(host_number) + "\n")
-                outfile.flush()
-                host_number += 1
 
-            outfile.write("rd=default,iorate=max,elapsed=" + str(run_time) + ",interval=" + str(interval) + ",threads=" + str(threads))
+            if prefill:
+                outfile.write("wd=prefill,hd=hd*,rdpct=0,seekpct=eof,xfersize=256k,sd=sd*\n")
+
+            if datavalidation:
+                host_number = 1
+                for client_ip in client_ips:
+                    outfile.write("wd=wd" + str(host_number) + ",host=hd" + str(host_number) + "," + workload + ",sd=sd*\n")
+                    outfile.flush()
+                    host_number += 1
+            else:
+                outfile.write("wd=wd1,host=hd*," + workload + ",sd=sd*\n")
+
+            if prefill:
+                outfile.write("rd=prefill,wd=prefill,iorate=max,elapsed=200h,threads=4,interval=" + str(interval) + "\n")
+
+            outfile.write("rd=iotest,wd=wd*,iorate=max,elapsed=" + str(run_time) + ",interval=" + str(interval) + ",threads=" + str(threads))
             if warmup > 0:
                 outfile.write(",warmup=" + str(warmup))
             outfile.write("\n")
-            outfile.write("rd=rd1,wd=wd*" + "\n")
             outfile.flush()
             outfile.close()
             return True
@@ -169,6 +179,7 @@ if __name__ == '__main__':
     parser.add_option("--threads", type="int", dest="threads", default=sfdefaults.vdbench_threads, help="how many threads per sd (queue depth) [%default]")
     parser.add_option("--warmup", type="int", dest="warmup", default=sfdefaults.vdbench_warmup, help="how long a warmup period [%default]")
     parser.add_option("--nodatavalidation", action="store_false", dest="datavalidation", default=True, help="skip data validation [%default]")
+    parser.add_option("--prefill", action="store_true", dest="prefill", default=False, help="run a prefill workload first [%default]")
     parser.add_option("--volume_start", type="int", dest="volume_start", default=0, help="sd number to start at [%default]")
     parser.add_option("--volume_end", type="int", dest="volume_end", default=0, help="sd number to finish at (0 means all sds) [%default]")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -176,7 +187,7 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.client_ips, options.filename, options.data_errors, options.compratio, options.dedupratio, options.workload, options.run_time, options.interval, options.threads, options.warmup, options.datavalidation, options.volume_start, options.volume_end, options.client_user, options.client_pass, options.debug):
+        if Execute(options.client_ips, options.filename, options.data_errors, options.compratio, options.dedupratio, options.workload, options.run_time, options.interval, options.threads, options.warmup, options.datavalidation, options.prefill, options.volume_start, options.volume_end, options.client_user, options.client_pass, options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
