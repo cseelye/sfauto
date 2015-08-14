@@ -827,8 +827,8 @@ def __CallApiMethodCommon(Ip, Url, Username, Password, MethodName, MethodParams,
                     else:
                         mylog.warning("HTTPError: " + str(e.code)  + " " + Url)
             except urllib2.URLError as e:
-                # Immediately fail for "network unreachable", "operation timed out", "connection refused"
-                if e.args and (e.args[0].errno == 51 or e.args[0].errno == 60 or e.args[0].errno == 111):
+                # Immediately fail for "network unreachable", "operation timed out"
+                if e.args and (e.args[0].errno == 51 or e.args[0].errno == 60):
                     if ExitOnError:
                         mylog.error("Could not call API method " + MethodName + ": " + e.args[0].strerror)
                     else:
