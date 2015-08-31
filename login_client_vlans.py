@@ -154,7 +154,7 @@ class LoginClientVlansAction(ActionBase):
         try:
             result = libsf.CallApiMethod(mvip, username, password, "ListVirtualNetworks", {}, ApiVersion=8.0)
         except libsf.SfError as e:
-            mylog.error(client_ip + ": Failed to get volgroup list - " + str(e))
+            mylog.error("Failed to get volgroup list - " + str(e))
             return
         all_vlans = {v['virtualNetworkTag'] : v for v in result['virtualNetworks']}
 
@@ -162,14 +162,14 @@ class LoginClientVlansAction(ActionBase):
         try:
             result = libsf.CallApiMethod(mvip, username, password, "ListVolumeAccessGroups", {})
         except libsf.SfError as e:
-            mylog.error(client_ip + ": Failed to get volgroup list - " + str(e))
+            mylog.error("Failed to get volgroup list - " + str(e))
             return
         all_volgroups = result['volumeAccessGroups']
 
         try:
             result = libsf.CallApiMethod(mvip, username, password, "ListActiveVolumes", {})
         except libsf.SfError as e:
-            mylog.error(client_ip + ": Failed to get volume list - " + str(e))
+            mylog.error("Failed to get volume list - " + str(e))
             return
         all_volumes = {v['volumeID'] : v for v in result['volumes']}
 
