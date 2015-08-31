@@ -100,7 +100,7 @@ class DeleteVolumesAction(ActionBase):
                 return False
 
             if purge:
-                mylog.debug("Purging " + vol_name)
+                mylog.debug("Purging " + volumes_to_delete[vol_id]["name"])
                 try:
                     libsf.CallApiMethod(mvip, username, password, "PurgeDeletedVolume", params)
                 except SfError as e:
