@@ -35,6 +35,7 @@ from optparse import OptionParser
 import lib.libsf as libsf
 from lib.libsf import mylog, SfError
 import logging
+import lib.libsfcluster as libsfcluster
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 from lib.datastore import SharedValues
@@ -56,26 +57,30 @@ class DeleteVolumesAction(ActionBase):
                             },
                     args)
 
-    def Execute(self, mvip=sfdefaults.mvip, volume_name=None, volume_id=0, volume_prefix=None, volume_regex=None, volume_count=0, source_account=None, purge=False, test=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, mvip=sfdefaults.mvip, volume_name=None, volume_id=0, volume_prefix=None, volume_regex=None, volume_count=0, source_account=None, include_duplicates=False, purge=False, test=False, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Delete volumes
         """
 
         self.ValidateArgs(locals())
         if debug:
-            mylog.console.setLevel(logging.DEBUG)
+            mylog.showDebug()
+        else:
+            mylog.hideDebug()
+        
+        cluster = libsfcluster.SFCluster(mvip, username, password)
 
         # Get a list of volumes to delete
         mylog.info("Searching for volumes")
         try:
-            volumes_to_delete = libsf.SearchForVolumes(mvip, username, password, VolumeId=volume_id, VolumeName=volume_name, VolumeRegex=volume_regex, VolumePrefix=volume_prefix, AccountName=source_account, VolumeCount=volume_count)
+            volumes_to_delete = cluster.SearchForVolumes(volumeID=volume_id, volumeName=volume_name, volumeRegex=volume_regex, volumePrefix=volume_prefix, accountName=source_account, volumeCount=volume_count, includeDuplicates=include_duplicates)
         except SfError as e:
             mylog.error(e.message)
             self.RaiseFailureEvent(message=str(e), exception=e)
             return False
 
         count = len(volumes_to_delete.keys())
-        names = ", ".join(sorted(volumes_to_delete.keys()))
+        names = ", ".join(sorted([vol["name"] for id,vol in volumes_to_delete.items()]))
         mylog.info("Deleting " + str(count) + " volumes: " + names)
 
         if test:
@@ -83,9 +88,8 @@ class DeleteVolumesAction(ActionBase):
             return True
 
         # Delete the requested volumes
-        for vol_name in sorted(volumes_to_delete.keys()):
-            vol_id = volumes_to_delete[vol_name]
-            mylog.debug("Deleting " + vol_name)
+        for vol_id in sorted(volumes_to_delete.keys()):
+            mylog.debug("Deleting " + volumes_to_delete[vol_id]["name"])
             params = {}
             params["volumeID"] = vol_id
             try:
@@ -123,6 +127,7 @@ if __name__ == '__main__':
     parser.add_option("--volume_regex", type="string", dest="volume_regex", default=None, help="regex to search for volumes to delete")
     parser.add_option("--volume_count", type="int", dest="volume_count", default=0, help="the number of volumes to delete")
     parser.add_option("--source_account", type="string", dest="source_account", default=None, help="the name of the account to select volumes from")
+    parser.add_option("--include_duplicates", action="store_true", dest="include_duplicates", default=False, help="include all instances of volumes with identical names")
     parser.add_option("--purge", action="store_true", dest="purge", default=False, help="purge the volumes after deleting them")
     parser.add_option("--test", action="store_true", dest="test", default=False, help="show the volumes that would be deleted but don't actually delete them")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
@@ -130,7 +135,19 @@ if __name__ == '__main__':
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.mvip, options.volume_name, options.volume_id, options.volume_prefix, options.volume_regex, options.volume_count, options.source_account, options.purge, options.test, options.username, options.password, options.debug):
+        if Execute(mvip=options.mvip,
+                   volume_name=options.volume_name,
+                   volume_id=options.volume_id,
+                   volume_prefix=options.volume_prefix,
+                   volume_regex=options.volume_regex,
+                   volume_count=options.volume_count,
+                   source_account=options.source_account,
+                   include_duplicates=options.include_duplicates,
+                   purge=options.purge,
+                   test=options.test,
+                   username=options.username,
+                   password=options.password,
+                   debug=options.debug):
             sys.exit(0)
         else:
             sys.exit(1)

@@ -541,7 +541,7 @@ class SFCluster(object):
             all_volumes[vol["volumeID"]] = vol
         return all_volumes
 
-    def SearchForVolumes(self, volumeID=None, volumeName=None, volumeRegex=None, volumePrefix=None, accountName=None, accountID=None, volumeCount=0):
+    def SearchForVolumes(self, volumeID=None, volumeName=None, volumeRegex=None, volumePrefix=None, accountName=None, accountID=None, volumeCount=0, includeDuplicates=False):
         """
         Search for volumes with the given criteria
 
@@ -619,12 +619,12 @@ class SFCluster(object):
                             mylog.warning("Duplicate volume name " + vname)
                         volume_id = int(volume["volumeID"])
                         found_volumes[volume_id] = volume
-                        found = True
+                        if not includeDuplicates:
+                            found = True
                 if volume_id == None:
                     raise libsf.SfError("Could not find volume '" + vname + "' on account '" + accountName + "'")
 
         # Search for a single volume name (or list of volume names) across all volumes.
-        # If there are duplicate volume names, the first match is taken
         elif volumeName:
             # Convert to a list if it is a scalar
             volume_name_list = []
@@ -645,7 +645,8 @@ class SFCluster(object):
                             mylog.warning("Duplicate volume name " + vname)
                         volume_id = int(volume["volumeID"])
                         found_volumes[volume_id] = volume
-                        found = True
+                        if not includeDuplicates:
+                            found = True
                 if volume_id == None:
                     raise libsf.SfError("Could not find volume '" + vname + "'")
 
@@ -697,6 +698,15 @@ class SFCluster(object):
         # Search for all volumes on an account
         elif accountName:
             for volume in account_volumes["volumes"]:
+                vol_id = int(volume["volumeID"])
+                found_volumes[vol_id] = volume
+                count += 1
+                if volumeCount > 0 and count >= volumeCount:
+                    break
+
+        # All volumes in the cluster
+        else:
+            for volume in all_volumes["volumes"]:
                 vol_id = int(volume["volumeID"])
                 found_volumes[vol_id] = volume
                 count += 1
