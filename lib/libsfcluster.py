@@ -448,6 +448,16 @@ class SFCluster(object):
         result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListActiveNodes", {})
         return result["nodes"]
 
+    def ListVLANs(self):
+        """
+        Get a list of VLANs on the cluster
+
+        Returns:
+            A list of VLAN dictionaries
+        """
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListVirtualNetworks", {}, ApiVersion=7.0)
+        return result["virtualNetworks"]
+
     def GetNode(self, nodeIP, sshUser=sfdefaults.ssh_user, sshPass=sfdefaults.ssh_pass):
         """
         Get the node with the given IP

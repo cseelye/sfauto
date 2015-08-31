@@ -92,7 +92,8 @@ qmetry_release = "rel"
 qmetry_build = "1"
 hipchat_user = "testscript"
 hipchat_color = "gray"
-d
+vlan_healthy_timeout = 300          # Seconds to wait for VLANs to be present and healthy on all cluster nodes
+
 # =============================================================================
 # Default Choices
 all_volume_acess_levels = [         # Valid volume access levels
