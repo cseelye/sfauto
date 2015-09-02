@@ -117,7 +117,7 @@ class WaitForVlanNamespacesAction(ActionBase):
                             missing.append(namespace)
                     if len(missing) > 0:
                         nodegood = False
-                        mylog.warning("Not listening for iSCSI in {}".format(",".join(missing)))
+                        mylog.warning("{}: Not listening for iSCSI in {} namespaces {}".format(node_ip, len(missing), ",".join(sorted(missing))))
                     else:
                         mylog.info("{}: Listening for iSCSI in all namespaces".format(node_ip))
 
@@ -130,8 +130,7 @@ class WaitForVlanNamespacesAction(ActionBase):
                 break
             time.sleep(30)
             if time.time() - start_time > timeout:
-                mylog.error("Timeout waiting for bin syncing")
-                self._RaiseEvent(self.Events.WAIT_TIMEOUT)
+                mylog.error("Timeout waiting for namespaces")
                 return False
 
         end_time = time.time()
