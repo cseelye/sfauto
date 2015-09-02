@@ -113,12 +113,15 @@ class CreateVdbenchInputAction(ActionBase):
                 client = clients[client_ip]
                 mylog.info("Querying connected volumes on " + client.Hostname + "")
                 devices = client.GetVdbenchDevices()
-                if volume_start <= 0:
-                    volume_start = 1
-                if volume_end <= 0:
-                    volume_end = len(devices)
+                mylog.debug("  {} vdbench devices={}".format(client_ip, devices))
+                client_volume_start = volume_start
+                client_volume_end = volume_end
+                if client_volume_start <= 0:
+                    client_volume_start = 1
+                if client_volume_end <= 0:
+                    client_volume_end = len(devices)
                 outfile.write("\n# sd devices for host hd" + str(host_number) + " (" + client_ip + ")\n")
-                for sd_number in xrange(volume_start, volume_end + 1):
+                for sd_number in xrange(client_volume_start, client_volume_end + 1):
                     device = devices[sd_number - 1]
                     outfile.write("sd=sd" + str(host_number) + "_" + str(sd_number) + ",host=hd" + str(host_number))
                     if client.RemoteOs == OsType.Windows:
