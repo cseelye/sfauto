@@ -140,7 +140,7 @@ class ListOption(Option):
     def take_action(self, action, dest, opt, value, values, parser):
         if action == "list":
             # Split on any number of ',' or ' ' and remove empty entries
-            lvalue = [i for i in re.split("[,\s]+", value) if i != None]
+            lvalue = [i for i in re.split("[,\s]+", value) if i]
             if lvalue:
                 setattr(values, dest, lvalue)
             if not values.ensure_value(dest, []):
