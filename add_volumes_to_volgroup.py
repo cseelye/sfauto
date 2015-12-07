@@ -66,9 +66,10 @@ class AddVolumesToVolgroupAction(ActionBase):
         """
         Add volumes to a volume access group
         """
-        if volume_name == None and volume_id == None or volgroup_id <= 0:
+        if not volume_name and volume_id <= 0:
             volume_name = self.GetSharedValue(SharedValues.volumeList)
-            volgroup_id = self.GetSharedValue(SharedValues.volumeIDList)
+            if not volume_name:
+                volume_id = self.GetSharedValue(SharedValues.volumeIDList)
         ValidateArgs(locals())
         if debug:
             mylog.console.setLevel(logging.DEBUG)
