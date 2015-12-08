@@ -621,6 +621,8 @@ class SFCluster(object):
                     volume_name_list.append(volumeName)
 
             for vname in volume_name_list:
+                if not vname:
+                    continue
                 volume_id = 0
                 found = False
                 for volume in account_volumes["volumes"]:
@@ -647,6 +649,8 @@ class SFCluster(object):
                     volume_name_list.append(volumeName)
 
             for vname in volume_name_list:
+                if not vname:
+                    continue
                 volume_id = 0
                 found = False
                 for volume in all_volumes["volumes"]:
@@ -725,18 +729,24 @@ class SFCluster(object):
 
         return found_volumes
 
-    def CreateVolumeGroup(self, volgroupName):
+    def CreateVolumeGroup(self, volgroupName, iqns=None, volumeIDs=None):
         """
         Create a volume access group
 
         Args:
-            name: the name of the group
+            volgroupName: the name of the group
+            iqns:         the list of initiator IQNs to add to the group
+            volumeIDs:    ths list of volume IDs to add to the group
 
         Returns:
             An SFVolGroup object
         """
         params = {}
         params["name"] = volgroupName
+        if iqns:
+            params["initiators"] = iqns
+        if volumeIDs:
+            params["volumes"] = volumeIDs
         result = libsf.CallApiMethod(self.mvip, self.username, self.password, "CreateVolumeAccessGroup", params, ApiVersion=5.0)
 
         return self.FindVolumeAccessGroup(volgroupID=result["volumeAccessGroupID"])
