@@ -136,6 +136,7 @@ blacklisted_vm_names = [            # Names of VMs we are not allowed to operate
 __var_names = dir()
 
 import os as __os
+import re as __re
 import sys as __sys
 import inspect as __inspect
 __thismodule = __sys.modules[__name__]
@@ -165,9 +166,7 @@ for __name in __var_names:
         if isinstance(__current_value, list):
             __list_type = True
         if __list_type:
-            from string import strip as __strip
-            __new_val = map(__strip, __os.environ[__env_name].split(","))
-            setattr(__thismodule, __name, __new_val)
+            setattr(__thismodule, __name, [s for s in __re.split(r"[\s,]+", __os.environ[__env_name]) if s])
         else:
             setattr(__thismodule, __name, __os.environ[__env_name])
 del __env_name
