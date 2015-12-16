@@ -69,8 +69,8 @@ class AddAvailableDrivesAction(ActionBase):
 
         if waitForSync:
             self._RaiseEvent(self.Events.BEFORE_SYNC)
-            mylog.info("Waiting a minute to make sure syncing has started")
-            time.sleep(60)
+            mylog.info("Waiting a little while to make sure syncing has started")
+            time.sleep(120)
 
             try:
                 mylog.info("Waiting for slice syncing")

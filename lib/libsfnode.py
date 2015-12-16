@@ -16,6 +16,13 @@ class NetworkInterfaceType(object):
     VirtualBondMaster = "VirtualBondMaster"
     VirtualVlan = "VirtualVlan"
 
+class DriveType(object):
+    """Type of drives in cluster/node"""
+    Any = "any"
+    Block = "block"
+    Slice = "volume"
+    Unknown = "unknown"
+
 class SFNode(object):
     """
     Common interactions with a SolidFire node
@@ -333,3 +340,15 @@ class SFNode(object):
             if iface["type"] in interfaceType:
                 filtered.append(iface)
         return filtered
+
+    def GetExpectedDriveCount(self, driveType=DriveType.Any):
+        """
+        Get the expected number of drives for this node
+        """
+        result = libsf.CallNodeApiMethod(self.ipAddress, self.clusterUsername, self.clusterPassword, "GetDriveConfig", {}, ApiVersion=6.0)
+        if driveType == DriveType.Any:
+            return result["driveConfig"]["numTotalExpected"]
+        elif driveType == DriveType.Block:
+            return result["driveConfig"]["numBlockExpected"]
+        elif driveType == DriveType.Slice:
+            return result["driveConfig"]["numSliceExpected"]

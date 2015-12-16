@@ -127,6 +127,20 @@ all_client_volume_sort = [          # Valid sort orders for client volumes
     "portal",
     "state"
 ]
+all_drive_states = [
+    "any",
+    "active",
+    "available",
+    "failed"
+]
+all_compare_ops = {
+    "eq" : "==",
+    "ne" : "!=",
+    "gt" : ">",
+    "ge" : ">=",
+    "lt" : "<",
+    "le" : "<="
+}
 blacklisted_vm_names = [            # Names of VMs we are not allowed to operate on
     'jenkins',
     'artifacts'

@@ -10,6 +10,7 @@ import time
 import libsfvolgroup
 import libsfaccount
 import libsfnode
+from libsfnode import DriveType
 import libsfclusterpair
 import sfdefaults
 
@@ -34,6 +35,14 @@ class GCInfo(object):
         self.ParticipatingSSSet = set()
         self.EligibleBSSet = set()
         self.CompletedBSSet = set()
+
+class DriveState(object):
+    """State of drives in cluster"""
+    Any = "any"
+    Active = "active"
+    Available = "available"
+    Failed = "failed"
+    Removing = "removing"
 
 class SFCluster(object):
     """
@@ -754,17 +763,43 @@ class SFCluster(object):
     def ListAvailableDrives(self):
         """
         Get a list of all the available drives
+
+        Returns:
+            A list of drive dictionaries
         """
         mylog.debug("Searching for available drives...")
+        return self.ListDrives(driveState=DriveState.Available)
+
+    def ListDrives(self, driveType=DriveType.Any, driveState=DriveState.Any):
+        """
+        Get a list of the drives in the cluster
+
+        Args:
+            driveType:  only list drives of this type - this may be a scalar or a list
+            driveState: only list drives in this state - this may be a scalar or a list
+
+        Returns:
+            A list of drive dictionaries
+        """
         result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListDrives", {})
+        if driveType == DriveType.Any and driveState == DriveState.Any:
+            return result["drives"]
 
-        available = []
+        if not isinstance(driveType, list):
+            driveType = [driveType]
+        if not isinstance(driveState, list):
+            driveState = [driveState]
+
+        drive_list = []
         for drive in result["drives"]:
-            if drive["status"] == "available":
-                mylog.debug("Found available driveID " + str(drive["driveID"]) + " (slot " + str(drive["slot"]) + ") from nodeID " + str(drive["nodeID"]))
-                available.append(drive)
-
-        return available
+            include = True
+            if DriveType.Any not in driveType and drive["type"] not in driveType:
+                include = False
+            if DriveState.Any not in driveState and drive["status"] not in driveState:
+                include = False
+            if include:
+                drive_list.append(drive)
+        return drive_list
 
     def AddAvailableDrives(self):
         """
