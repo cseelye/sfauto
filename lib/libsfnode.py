@@ -8,6 +8,14 @@ import string
 import multiprocessing
 import time
 
+class NetworkInterfaceType(object):
+    Loopback = "Loopback"
+    BondMaster = "BondMaster"
+    BondSlave = "BondSlave"
+    Vlan = "Vlan"
+    VirtualBondMaster = "VirtualBondMaster"
+    VirtualVlan = "VirtualVlan"
+
 class SFNode(object):
     """
     Common interactions with a SolidFire node
@@ -22,6 +30,16 @@ class SFNode(object):
         self.ipmiIP = ipmiIP
         self.ipmiUsername = ipmiUsername
         self.ipmiPassword = ipmiPassword
+
+    def GetHighestVersion(self):
+        """
+        Get the highest API version this node supports
+
+        Returns:
+            Floating point version number
+        """
+        result = libsf.CallNodeApiMethod(self.ipAddress, self.clusterUsername, self.clusterPassword, "GetAPI", {}, ApiVersion=0.0)
+        return float(result["supportedVersions"][-1])
 
     def GetCoreFileList(self, since = 0):
         """
@@ -282,3 +300,36 @@ class SFNode(object):
         stderr_data = stderr.readlines()
         if return_code != 0:
             raise libsf.SfError("Failed to add route: " + "\n".join(stderr_data))
+
+    def ListNetworkNamespaceInfo(self):
+        """
+        Get a list of network spaces on this node.  This will always include a single "base" namespace entry, plus
+        any others that exist on the node
+
+        Returns:
+            A dictionary of namespace name => namespace info dictionary, one for each namespace
+        """
+        result = libsf.CallNodeApiMethod(self.ipAddress, self.clusterUsername, self.clusterPassword, "ListNetworkNamespaceInfo", {}, ApiVersion=9.0)
+        return result["namespaces"]
+
+    def ListNetworkInterfaces(self, interfaceType=None):
+        """
+        Get a list of network interfaces on this node.
+
+        Args:
+            type:   Type of interface(s) to list - this may be a scalar or a list. Use None to get all interfaces
+
+        Returns:
+            A list of interface dictionaries
+        """
+        result = libsf.CallNodeApiMethod(self.ipAddress, self.clusterUsername, self.clusterPassword, "ListNetworkInterfaces", {}, ApiVersion=7.0)
+        if not interfaceType:
+            return result["interfaces"]
+
+        if not isinstance(interfaceType, list):
+            interfaceType = [interfaceType]
+        filtered = []
+        for iface in result["interfaces"]:
+            if iface["type"] in interfaceType:
+                filtered.append(iface)
+        return filtered
