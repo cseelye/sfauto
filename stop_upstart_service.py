@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 
 """
-This action will start solidfire on a list of nodes simultaneously
+This action will stop an upstart service on a list of nodes simultaneously
 
 When run as a script, the following options/env variables apply:
     --node_ips          List of node IP addresses
@@ -25,7 +25,7 @@ from lib.libsf import mylog
 import lib.sfdefaults as sfdefaults
 from lib.action_base import ActionBase
 
-class StartSolidfireAction(ActionBase):
+class StopUpstartServiceAction(ActionBase):
     class Events:
         """
         Events that this action defines
@@ -35,12 +35,13 @@ class StartSolidfireAction(ActionBase):
         super(self.__class__, self).__init__(self.__class__.Events)
 
     def ValidateArgs(self, args):
-        libsf.ValidateArgs({"node_ips" : libsf.IsValidIpv4AddressList},
+        libsf.ValidateArgs({"service_name" : None,
+                            "node_ips" : libsf.IsValidIpv4AddressList},
             args)
 
-    def Execute(self, node_ips=None, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, debug=False):
+    def Execute(self, service_name=None, node_ips=None, ssh_user=sfdefaults.ssh_user, ssh_pass=sfdefaults.ssh_pass, strict=False, debug=False):
         """
-        Start solidfire on the nodes
+        Stop a service on the nodes
         """
         if not node_ips:
             node_ips = sfdefaults.node_ips
@@ -48,7 +49,7 @@ class StartSolidfireAction(ActionBase):
         if debug:
             mylog.console.setLevel(logging.DEBUG)
 
-        mylog.info("Starting solidfire on " + ", ".join(node_ips))
+        mylog.info("Stopping {} on {}".format(service_name, ", ".join(node_ips)))
 
         # Start one thread per node
         starter = multiprocessing.Event()
@@ -60,7 +61,7 @@ class StartSolidfireAction(ActionBase):
         for node_ip in node_ips:
             thread_name = "node-" + node_ip
             results[thread_name] = False
-            th = multiprocessing.Process(target=self._NodeThread, name=thread_name, args=(node_ip, ssh_user, ssh_pass, counter, starter, results))
+            th = multiprocessing.Process(target=self._NodeThread, name=thread_name, args=(service_name, node_ip, ssh_user, ssh_pass, strict, counter, starter, results))
             th.daemon = True
             th.start()
             self._threads.append(th)
@@ -82,7 +83,7 @@ class StartSolidfireAction(ActionBase):
             for th in self._threads:
                 th.terminate()
                 th.join()
-            mylog.error("Failed to start solidfire on all nodes")
+            mylog.error("Failed to stop {} on all nodes".format(service_name))
             return False
 
         mylog.debug("Releasing threads")
@@ -95,37 +96,43 @@ class StartSolidfireAction(ActionBase):
         # Look at the results
         for thread_name in results.keys():
             if not results[thread_name]:
-                mylog.error("Failed to start solidfire on all nodes")
+                mylog.error("Failed to stop {} on all nodes".format(service_name))
                 return False
 
-        mylog.passed("Successfully started solidfire on all nodes")
+        mylog.passed("Successfully stopped {} on all nodes".format(service_name))
         return True
 
-    def _NodeThread(self, node_ip, node_user, node_pass, ready_counter, starter, results):
+    def _NodeThread(self, service_name, node_ip, node_user, node_pass, strict, ready_counter, starter, results):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         try:
             myname = multiprocessing.current_process().name
             results[myname] = False
 
-            mylog.info(node_ip + ": Connecting")
+            mylog.info("  {}: Connecting".format(node_ip))
             ssh = libsf.ConnectSsh(node_ip, node_user, node_pass)
 
             mylog.debug(node_ip + ": Waiting")
             ready_counter.Increment()
             starter.wait()
 
-            mylog.info(node_ip + ": Starting solidfire")
-            _, stdout, stderr = libsf.ExecSshCommand(ssh, "start solidfire;echo $?")
+            mylog.info("  {}: Stopping {}".format(node_ip, service_name))
+            _, stdout, stderr = libsf.ExecSshCommand(ssh, "stop {};echo $?".format(service_name))
             output = stdout.readlines()
-            error = stderr.readlines()
+            error = "\n".join(stderr.readlines())
+            error = error.strip()
             ssh.close()
             retcode = int(output.pop())
             if retcode != 0:
-                mylog.error(node_ip + ": Error starting solidfire: " + "\n".join(error))
-                results[myname] = False
-                return
+                if not strict and "Unknown instance" in error:
+                    mylog.passed("  {}: {} is already stopped".format(node_ip, service_name))
+                    results[myname] = True
+                    return
+                else:
+                    mylog.error("  {}: Error stopping {}: {}".format(node_ip, service_name, error))
+                    results[myname] = False
+                    return
 
-            mylog.passed(node_ip + ": Successfully started solidfire")
+            mylog.passed("  {}: Successfully stopped {}".format(node_ip, service_name))
             results[myname] = True
         except libsf.SfError as e:
             mylog.error(node_ip + ": " + str(e))
@@ -143,12 +150,14 @@ if __name__ == '__main__':
     parser.add_option("-n", "--node_ips", action="list", dest="node_ips", default=None, help="the IP addresses of the nodes")
     parser.add_option("--ssh_user", type="string", dest="ssh_user", default=sfdefaults.ssh_user, help="the SSH username for the nodes.  Only used if you do not have SSH keys set up")
     parser.add_option("--ssh_pass", type="string", dest="ssh_pass", default=sfdefaults.ssh_pass, help="the SSH password for the nodes.  Only used if you do not have SSH keys set up")
+    parser.add_option("--service", type="string", dest="service_name", default=None, help="the name of the service to stop")
+    parser.add_option("--strict", action="store_true", dest="strict", default=False, help="fail if service is already stopped")
     parser.add_option("--debug", action="store_true", default=False, dest="debug", help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.node_ips, options.ssh_user, options.ssh_pass, options.debug):
+        if Execute(service_name=options.service_name, node_ips=options.node_ips, ssh_user=options.ssh_user, ssh_pass=options.ssh_pass, strict=options.strict, debug=options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
