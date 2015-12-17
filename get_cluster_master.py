@@ -90,9 +90,10 @@ class GetClusterMasterAction(ActionBase):
         Show the cluster master
         """
         del self
-        node_ip, node_id = Get(**locals())
-        if node_ip is False or node_id is False:
+        result = Get(**locals())
+        if result is False:
             return False
+        (node_ip, node_id) = result
 
         if csv or bash:
             mylog.debug("Cluster " + mvip + " master node is " + node_ip + " (nodeID " + str(node_id) + ")")

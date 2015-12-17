@@ -939,3 +939,17 @@ class SFCluster(object):
         """
         result = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterInfo", {})
         return result["clusterInfo"]
+
+    def GetClusterMasterNode(self):
+        """
+        Get the cluster master node
+        
+        Returns:
+            A node dictionary corresponding to the current cluster master node
+        """
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "GetClusterMasterNodeID", {})
+        master_id = result["nodeID"]
+        result = libsf.CallApiMethod(self.mvip, self.username, self.password, "ListActiveNodes", {})
+        for node in result["nodes"]:
+            if node["nodeID"] == master_id:
+                return node
