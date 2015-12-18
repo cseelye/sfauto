@@ -13,6 +13,7 @@ When run as a script, the following options/env variables apply:
     --pass              The cluster admin password
     SFPASS env var
 
+    --reverse           Delete VLANs in reverse order by tag
 """
 
 import sys
@@ -39,7 +40,7 @@ class DeleteAllVlansAction(ActionBase):
                             "password" : None},
             args)
 
-    def Execute(self, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, reverse=False, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Delete a VLAN
         """
@@ -57,8 +58,8 @@ class DeleteAllVlansAction(ActionBase):
             return False
 
         allgood = True
-        for vlan in result['virtualNetworks']:
-            mylog.info("Deleting VLAN {}".format(vlan['virtualNetworkTag']))
+        for vlan in sorted(result['virtualNetworks'], key=lambda x: x['virtualNetworkTag'], reverse=reverse):
+            mylog.info("Deleting VLAN tag {}".format(vlan['virtualNetworkTag']))
             params = {}
             params['virtualNetworkTag'] = vlan['virtualNetworkTag']
             try:
@@ -68,7 +69,7 @@ class DeleteAllVlansAction(ActionBase):
                 allgood = False
 
         if allgood:
-            mylog.passed("VLAN deleted successfully")
+            mylog.passed("VLANs deleted successfully")
             return True
         else:
             mylog.error("Failed to delete all VLANs")
@@ -86,12 +87,13 @@ if __name__ == '__main__':
     parser.add_option("-m", "--mvip", type="string", dest="mvip", default=sfdefaults.mvip, help="the management IP of the cluster")
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
+    parser.add_option("--reverse", action="store_true", dest="reverse", default=False, help="delete VLANs in reverse tag order")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(mvip=options.mvip, username=options.username, password=options.password, debug=options.debug):
+        if Execute(reverse = options.reverse, mvip=options.mvip, username=options.username, password=options.password, debug=options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
