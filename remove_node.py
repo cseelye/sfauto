@@ -101,7 +101,7 @@ class RemoveNodeAction(ActionBase):
                     return False
 
                 mylog.info("Waiting for syncing")
-                time.sleep(60)
+                time.sleep(120)
                 try:
                     # Wait for bin syncing
                     while libsf.ClusterIsBinSyncing(mvip, username, password):
@@ -154,10 +154,9 @@ if __name__ == '__main__':
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
     parser.add_option("--node_ip", type="string", dest="node_ip", default=None, help="the mIP of the node to remove")
-    parser.add_option("--remove_drives", action="store_true", dest="remove_drives", default=False, help="display more verbose messages")
+    parser.add_option("--remove_drives", action="store_true", dest="remove_drives", default=False, help="remove all of the drives in the node before removing the node")
     parser.add_option("--debug", action="store_true", dest="debug", default=False, help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
-
 
     try:
         timer = libsf.ScriptTimer()

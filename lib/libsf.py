@@ -697,6 +697,16 @@ class LocalTimezone(datetime.tzinfo):
         tt = time.localtime(stamp)
         return tt.tm_isdst > 0
 
+class UTCTimezone(datetime.tzinfo):
+    def utcoffset(self, dt):
+        return datetime.timedelta(0)
+
+    def tzname(self, dt):
+        return "UTC"
+
+    def dst(self, dt):
+        return datetime.timedelta(0)
+
 class ScriptTimer:
     def __init__(self):
         self.name = os.path.basename(inspect.stack()[-1][1])
@@ -734,9 +744,9 @@ def ParseDateTime(pTimeString):
         # 2012-11-15T19:18:46Z
     ]
     parsed = None
-    for format in known_formats:
+    for fmt in known_formats:
         try:
-            parsed = datetime.datetime.strptime(pTimeString, format)
+            parsed = datetime.datetime.strptime(pTimeString, fmt)
             break
         except ValueError: pass
 
@@ -1651,10 +1661,18 @@ def IpmiCommand(IpmiIp, IpmiUsername, IpmiPassword, IpmiCommand):
     if retcode != 0:
         raise SfError("ipmitool error: " + stdout + stderr)
 
+def GetClusterVersion(mvip, username, password):
+    """Get the functional version of this cluster, as approximated by the highest API version supported"""
+    result = CallApiMethod(mvip, username, password, "GetAPI", {}, ApiVersion=1.0)
+    try:
+        return max(map(float, result['supportedVersions']))
+    except KeyError: # Pre-boron did not have this key in GetAPI
+        return 4.0
+    except:
+        return 5.0
+
 def ClusterIsBinSyncing(Mvip, Username, Password):
-    version = CallApiMethod(Mvip, Username, Password, "GetClusterVersionInfo", {})
-    cluster_version = float(version["clusterVersion"])
-    if cluster_version >= 5.0:
+    if GetClusterVersion(Mvip, Username, Password) >= 5.0:
         # Get the bin assignments report
         result = HttpRequest("https://" + Mvip + "/reports/bins.json", Username, Password)
         bin_report = json.loads(result)
@@ -1682,9 +1700,7 @@ def ClusterIsBinSyncing(Mvip, Username, Password):
     return False
 
 def ClusterIsSliceSyncing(Mvip, Username, Password):
-    version = CallApiMethod(Mvip, Username, Password, "GetClusterVersionInfo", {})
-    cluster_version = float(version["clusterVersion"])
-    if cluster_version >= 5.0:
+    if GetClusterVersion(Mvip, Username, Password) >= 5.0:
         # Get the slice assignments report
         result = HttpRequest("https://" + Mvip + "/reports/slices.json", Username, Password)
         slice_report = json.loads(result)
