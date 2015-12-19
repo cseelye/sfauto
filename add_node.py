@@ -14,6 +14,8 @@ When run as a script, the following options/env variables apply:
     SFPASS env var
 
     --node_ip           The managementIP of the node to add
+
+    --nortfi            Skip auto RTFI when adding the node
 """
 
 import sys
@@ -45,7 +47,7 @@ class AddNodeAction(ActionBase):
                             "node_ip" : libsf.IsValidIpv4Address},
             args)
 
-    def Execute(self, node_ip, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
+    def Execute(self, node_ip, rtfi=True, mvip=sfdefaults.mvip, username=sfdefaults.username, password=sfdefaults.password, debug=False):
         """
         Add a node to the cluster
         """
@@ -80,7 +82,7 @@ class AddNodeAction(ActionBase):
         mylog.info("Adding " + node_ip + " to cluster")
         self._RaiseEvent(self.Events.BEFORE_ADD)
         try:
-            result = libsf.CallApiMethod(mvip, username, password, "AddNodes", {"pendingNodes" : [node_id]})
+            result = libsf.CallApiMethod(mvip, username, password, "AddNodes", {"pendingNodes" : [node_id], "autoInstall" : rtfi})
         except libsf.SfError as e:
             mylog.error("Failed to add node to cluster: " + str(e))
             self.RaiseFailureEvent(message=str(e), exception=e)
@@ -91,7 +93,7 @@ class AddNodeAction(ActionBase):
         self._RaiseEvent(self.Events.AFTER_ADD)
         return True
 
-# Instantate the class and add its attributes to the module
+# Instantiate the class and add its attributes to the module
 # This allows it to be executed simply as module_name.Execute
 libsf.PopulateActionModule(sys.modules[__name__])
 
@@ -104,12 +106,13 @@ if __name__ == '__main__':
     parser.add_option("-u", "--user", type="string", dest="username", default=sfdefaults.username, help="the admin account for the cluster")
     parser.add_option("-p", "--pass", type="string", dest="password", default=sfdefaults.password, help="the admin password for the cluster")
     parser.add_option("--node_ip", type="string", dest="node_ip", default=None, help="the mIP of the node to add")
+    parser.add_option("--nortfi", action="store_false", dest="rtfi", default=True, help="do not autoRTFI the node when adding")
     parser.add_option("--debug", action="store_true", dest="debug", help="display more verbose messages")
     (options, extra_args) = parser.parse_args()
 
     try:
         timer = libsf.ScriptTimer()
-        if Execute(options.node_ip, options.mvip, options.username, options.password, options.debug):
+        if Execute(node_ip=options.node_ip, rtfi=options.rtfi, mvip=options.mvip, username=options.username, password=options.password, debug=options.debug):
             sys.exit(0)
         else:
             sys.exit(1)
