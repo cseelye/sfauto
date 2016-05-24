@@ -1,0 +1,434 @@
+#!/usr/bin/env python2.7
+
+#pylint: disable=unused-argument, broad-except
+
+from libsf import logutil, sfdefaults
+from libsf import SolidFireError
+import cmd
+import importlib
+import inspect
+import multiprocessing
+import os
+import signal
+import sys
+import textwrap
+
+
+# TODO
+#  completion for default argument values
+#  completion for arguments at top level
+
+
+
+# Workaround for BSD libedit vs GNU readline, to support both MacOS and Linux
+import readline
+if 'libedit' in readline.__doc__:
+    readline.parse_and_bind("bind ^I rl_complete")
+else:
+    readline.parse_and_bind("tab: complete")
+
+class clibase(cmd.Cmd, object):
+    """Base class with common methods for all commands"""
+
+    baseprompt = "sfauto"
+    prompt = "{}> ".format(baseprompt)
+
+    def emptyline(self):
+        """Disable repeating the last command when pressing enter (entering an empty line)"""
+        pass
+
+    def do_quit(self, _):
+        """Quit the CLI"""
+        raise SystemExit
+
+    def do_q(self, _):
+        """Quit the CLI"""
+        raise SystemExit
+
+    def do_exit(self, _):
+        """Exit a subcommand, or exit the CLI from the top level"""
+        return True
+
+    def do_debug(self, text):
+        """Turn debug output on or off"""
+        kwargs = cmdline_to_kwargs(text)
+        level = kwargs.get("level", 1)
+        if "on" in kwargs:
+            log.ShowDebug(level=level)
+            print "Debug output enabled level {}".format(level)
+        elif "off" in kwargs:
+            log.HideDebug()
+            print "Debug output disabled"
+        else:
+            log.error("Unknown command")
+            return False
+
+    def complete_debug(self, text, line, begidx, endidx):
+        options = ["on", "off", "level"]
+        exclusive = [("on", "off")]
+        return match_args(text, line, options, exclusive)
+
+
+class cli_defaults(clibase):
+    """
+    Get/set/list default values
+    """
+    prompt = "{}.defaults> ".format(clibase.baseprompt)
+
+    blacklist_vars = ["blacklisted_vm_names"]
+
+    def do_list(self, text):
+        """
+        Show the current values of defaults
+            defaults list
+            defaults list var1 var2 ...
+        """
+        varnames = dict.fromkeys(text.split(" ")) if text else None
+        list_defaults(varnames)
+    
+    def do_set(self, text):
+        """
+        Set one or more defaults
+            defaults set var1=value1 var2=value2
+        """
+        varnames = cmdline_to_kwargs(text)
+        set_defaults(varnames)
+
+    def complete_set(self, text, line, begidx, endidx):
+        return defaults_completion(text, line)
+
+    def complete_list(self, text, line, begidx, endidx):
+        return defaults_completion(text, line)
+
+def defaults_completion(text, line):
+    """
+    Completion for defaults commands
+    """
+    # Make a list of commands
+    matches = [f for f in inspect.getmembers(sys.modules[__name__], inspect.isfunction) if f[0].endswith("_defaults") ]
+    defaults_commands = [m[0].split("_")[0] for m in matches]
+    # Existing args on commandline
+    existing_args = [s.split("=")[0] for s in line.split(" ") if s and s != "defaults"] if line else None
+    # Possible variable names
+    varnames = [d for d in sfdefaults.GetDefaults() if d not in cli_defaults.blacklist_vars]
+
+    if not existing_args:
+        # Complete the possible commands
+        return defaults_commands
+    elif "set" in existing_args and line.endswith("="):
+        # Complete the default value for a variable
+        varname = existing_args[-1]
+        return [str(getattr(sfdefaults, varname, None))]
+    else:
+        # Complete the variable names
+        return [v for v in varnames if v not in existing_args and v.startswith(text)]
+
+def list_defaults(varnames=None):
+    """
+    Show the current values of defaults
+        defaults list
+        defaults list var1 var2 ...
+    """
+    defaults = sfdefaults.GetDefaults()
+    for name in sorted(defaults.keys()):
+        if name in cli_defaults.blacklist_vars:
+            continue
+        if not varnames or name in varnames.keys():
+            value = defaults[name]
+            print "{} = {}".format(name, value)
+
+def set_defaults(args):
+    """
+    Set one or more defaults
+        defaults set var1=value1 var2=value2
+    """
+    for name, value in args.iteritems():
+        if name in cli_defaults.blacklist_vars:
+            print "{} cannot be set".format(name)
+        if hasattr(sfdefaults, name):
+            setattr(sfdefaults, name, value)
+        else:
+            print "No default named '{}'".format(name)
+
+class sfautocli(clibase):
+    """Starting class for the root of the CLI"""
+
+    def __init__(self):
+        super(sfautocli, self).__init__()
+
+        # Make an index of the available scripts
+        commands = [filename for filename in os.listdir(".") if os.path.isfile(filename) and filename.endswith(".py") and filename != "cli.py"]
+        objects = {}
+        for filename in commands:
+            pieces = filename.split("_")
+            obj = pieces[0]
+            action = "_".join(pieces[1:])
+            action = action.split(".")[0]
+            if obj not in objects:
+                objects[obj] = []
+            objects[obj].append(action)
+
+        # Add all of the discovered objects and actions to the CLI
+        for obj_name, obj_actions in objects.items():
+            objfunc = object_complete_generator(obj_name, obj_actions)
+            setattr(sfautocli, objfunc.__name__, objfunc)
+
+            objfunc = object_do_generator(obj_name, objects)
+            setattr(sfautocli, objfunc.__name__, objfunc)
+
+    def help_defaults(self):
+        matches = [f[1] for f in inspect.getmembers(sys.modules[__name__], inspect.isfunction) if f[0].endswith("_defaults") ]
+        print "View and change default values"
+        for matchfunc in matches:
+            print textwrap.dedent(matchfunc.__doc__)
+
+    def do_defaults(self, text):
+        if not text:
+            cli = cli_defaults()
+            runcli(cli)
+        else:
+            cmd_pieces = text.split(" ", 1)
+            command = cmd_pieces[0]
+            argline = cmd_pieces[1] if len(cmd_pieces) > 1 else ""
+
+            func_name = "{}_defaults".format(command)
+            matches = [f[1] for f in inspect.getmembers(sys.modules[__name__], inspect.isfunction) if f[0] == func_name]
+            if len(matches) <= 0:
+                print "Unknown command '{}'".format(command)
+                return False
+
+            args = cmdline_to_kwargs(argline) # if argline else None
+            matches[0](args)
+
+    def complete_defaults(self, text, line, begidx, endidx):
+        return defaults_completion(text, line)
+
+def match_args(text, line, options, exclusive):
+    """Return a list of matching options"""
+    if line:
+        args = line.split(" ")
+        args.pop(0)
+    else:
+        args = []
+
+    # Make a list of possible matches, then filter out exclusive args
+    matches = [opt for opt in options if opt.startswith(text) and opt not in args]
+    for i in reversed(xrange(len(matches))):
+        for ex in exclusive:
+            if matches[i] in ex and any(arg in ex for arg in args):
+                del matches[i]
+    return matches
+
+def cmdline_to_kwargs(line):
+    """Map a command line to an argument dictionary"""
+    args = {}
+    for opt in line.split(" "):
+        if not opt:
+            continue
+        if "=" in opt:
+            key, value = opt.split("=")
+        else:
+            key = opt
+            value = None
+        args[key] = value
+    return args
+
+def object_complete_generator(name, actions):
+    """
+    Create the complete_ functions for top level CLI objects  (eg cluster, node, client, etc)
+    """
+    func_name = "complete_{}".format(name)
+    def complete_func(self, text, line, begidx, endidx):
+        if line:
+            existing_args = [ a.split("=")[0] for a in line.split(" ") if a ]
+            # autocomplete the script name
+            if len(existing_args) == 1 or (len(existing_args) == 2 and not line.endswith(" ")):
+                return ["{} ".format(comm) for comm in actions if comm.startswith(text)]
+            # autocomplete the args to the script
+            else:
+                comp = action_complete_generator(existing_args[0], existing_args[1])
+                return comp(self, text, line[line.find(" "):].strip(), begidx, endidx)
+        else:
+            return actions
+    complete_func.__name__ = func_name
+    return complete_func
+
+def object_do_generator(name, objects):
+    """
+    Create the do_ functions for top level CLI objects (eg cluster, node, client, etc)
+    """
+    def do_func(self, text):
+        if not text:
+            # Create a class type for this object
+            cli_class = type("cli_{}".format(name), (clibase,), {"prompt" : "{}.{}> ".format(clibase.baseprompt, name)})
+            # Add do_ functions for each object action available
+            for action_name in objects[name]:
+                action_func = action_do_generator(name, action_name)
+                setattr(cli_class, action_func.__name__, action_func)
+                action_comp = action_complete_generator(name, action_name)
+                setattr(cli_class, action_comp.__name__, action_comp)
+            # Instantiate the class and start the CLI
+            cli = cli_class()
+            runcli(cli)
+        else:
+            cmd_pieces = text.split(" ")
+            execute_action("{}_{}".format(name, cmd_pieces[0]), " ".join(cmd_pieces[1:]))
+
+    do_func.__name__ = "do_{}".format(name)
+    do_func.__doc__ = "Actions on {} objects\n".format(name)
+    for action_name in objects[name]:
+        do_func.__doc__ += "    {}\n".format(action_name)
+    return do_func
+
+def action_do_generator(parent, name):
+    """
+    Create the do_ functions for object level CLI actions (eg cluster_create, node_rtfi, client_login_volumes, etc)
+    """
+    def do_func(self, text):
+        execute_action("{}_{}".format(parent, name), text)
+
+    action_func = get_action("{}_{}".format(parent, name))
+
+    do_func.__name__ = "do_{}".format(name)
+    do_func.__doc__ = action_func.__doc__
+    return do_func
+
+def action_complete_generator(parent, name):
+    """
+    Create the complete_ function for object level CLI actions (eg cluster_create, node_rtfi, client_login_volumes, etc)
+    """
+    def complete_func(self, text, line, begidx, endidx):
+        action_func = get_action("{}_{}".format(parent, name))
+        if not action_func:
+            return None
+        action_args = get_action_args(action_func)
+        if line.endswith("="):
+            # autocomplete the default value if there is one
+            arg_name = line.split(" ")[-1][:-1]
+            if action_args[arg_name]:
+                return [str(action_args[arg_name]) + " "]
+            else:
+                return None
+        else:
+            # autocomplete the remaining args
+            existing_args = [ a.split("=")[0] for a in line.split(" ")[1:] ]
+            return [a for a in action_args.keys() if a.startswith(text) and a not in existing_args]
+    complete_func.__name__ = "complete_{}".format(name)
+    return complete_func
+
+def get_action(fullname):
+    """
+    Get the function for an action
+    """
+    # Import the module
+    try:
+        mod = importlib.import_module(fullname)
+    except ImportError:
+        return None
+    # Find the first function in the module that is not an import and not private
+    action_func = [f for f in inspect.getmembers(mod, inspect.isfunction) if not f[0].startswith("_") and f[1].__module__ == mod.__name__][0]
+    return action_func[1]
+
+def get_action_args(action_func):
+    """
+    Get a list of args and default values for a function
+    """
+    inner = getattr(action_func, "__innerfunc__", None)
+    while hasattr(inner, "__innerfunc__"):
+        inner = getattr(inner, "__innerfunc__", None)
+
+    if inner:
+        spec = inspect.getargspec(inner)
+    else:
+        spec = inspect.getargspec(action_func)
+
+    arg_names = list(spec.args)
+    if spec.defaults:
+        arg_defaults = list(spec.defaults)
+    else:
+        arg_defaults = []
+    while len(arg_defaults) < len(arg_names):
+        arg_defaults.insert(0, None)
+
+    args = dict(zip(arg_names, arg_defaults))
+    for arg_name in args.keys():
+        if args[arg_name] == None:
+            args[arg_name] = getattr(sfdefaults, arg_name, None)
+
+    return args
+
+def execute_action(fullname, cmdline):
+    """
+    Execute an action
+    """
+    action_func = get_action(fullname)
+    if not action_func:
+        print "Unknown action {}".format(fullname)
+        return
+    args = get_action_args(action_func)
+
+    # Map commandline to the function argument list
+    user_args = cmdline_to_kwargs(cmdline)
+    for name, value in user_args.iteritems():
+        if name in args:
+            args[name] = value
+        else:
+            log.error("Unknown argument '{}'".format(name))
+            return False
+
+    # Call the function with the args
+    log.debug("Calling {}({})".format(action_func.__name__, args))
+    # try:
+    #     action_func(**args)
+    # except SolidFireError as ex:
+    #     log.error(str(ex))
+    #     return False
+
+    import ctypes
+    retval = multiprocessing.Value(ctypes.c_bool)
+    retval.value = False
+    action_process = multiprocessing.Process(target=action_thread, args=(action_func, args, retval))
+    action_process.daemon = True
+    try:
+        action_process.start()
+        action_process.join()
+    except KeyboardInterrupt:
+        action_process.terminate()
+        action_process.join()
+        return
+
+    if retval.value != True:
+        print "CLI Command failed"
+
+def action_thread(actionFunc, args, retval):
+    """Wrapper for an action function running in a subprocess"""
+    
+    # Ignore control-c inside this subprocess (handle in parent)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    retval.value = False
+    try:
+        retval.value = actionFunc(**args)
+    except SolidFireError as ex:
+        log.error(str(ex))
+        retval.value = False
+
+def runcli(cli):
+    """
+    Wrapper to run a CLI and handle exceptions
+    """
+    while True:
+        try:
+            cli.cmdloop()
+            break
+        except KeyboardInterrupt:
+            print
+            continue
+        except Exception as ex:
+            log.exception("Unexpected error: {}".format(ex))
+
+
+if __name__ == '__main__':
+    log = logutil.GetLogger()
+    sfauto = sfautocli()
+    runcli(sfauto)

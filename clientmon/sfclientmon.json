@@ -1,9 +1,0 @@
-{
-    "server" : "172.16.150.254",
-    "database" : "monitor",
-    "listenPort" : 58083,
-    "username" : "root",
-    "password" : "solidfire",
-    "ipFilter" : "172.30",   // Only monitor clients whose IP starts with this string
-    "templateNames" : ["gold", "template"]  // Ignore clients with these strings in their hostnames
-}
