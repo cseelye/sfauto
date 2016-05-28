@@ -378,8 +378,8 @@ def GetLogger(name="sfauto", logConfig=None):
 
     logging.raiseExceptions = False
     logging._srcfile = None
-    logging.logThreads = 0
-    logging.logProcesses = 0
+    logging.logThreads = 1
+    logging.logProcesses = 1
     sflog = logging.getLogger(name)
 
     # If the logger is already initialized, just return it
@@ -388,6 +388,8 @@ def GetLogger(name="sfauto", logConfig=None):
 
     # Add the custom log levels to the logger
     for name, level in vars(CustomLogLevels).iteritems():
+        if name.startswith("_"):
+            continue
         logging.addLevelName(name, level)
     sflog.setLevel(CustomLogLevels.DEBUG2)
 
