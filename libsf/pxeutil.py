@@ -65,7 +65,7 @@ PROMPT 0
 LABEL BootImage
     KERNEL images/{imageType}/solidfire-{imageType}-{repo}-{version}/casper/vmlinuz
     INITRD images/{imageType}/solidfire-{imageType}-{repo}-{version}/casper/initrd.lz
-    APPEND console=tty0 ip={ip}::{gateway}:{netmask}:{hostname}:{bootNic}:{autoconf} boot=casper vga=791 fetch=ftp://{pxeServer}/images/{imageType}/solidfire-{imageType}-{repo}-{version}/casper/filesystem.squashfs {options} --
+    APPEND console=tty0 ip={ip}::{gateway}:{netmask}:{hostname}:{bootNic}:{autoconf} boot=casper vga=791 console=tty0 console=ttyS1,115200n8 fetch=ftp://{pxeServer}/images/{imageType}/solidfire-{imageType}-{repo}-{version}/casper/filesystem.squashfs {options} --
 LABEL BootLocal
     localboot 0
 """.format(imageType=imageType,

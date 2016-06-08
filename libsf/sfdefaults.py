@@ -101,7 +101,7 @@ qmetry_build = "1"
 hipchat_user = "testscript"
 hipchat_color = "gray"
 connection_type = "iscsi"           # Type of volume connection (FC or iSCSI)
-rtfi_options = "sf_auto=1,sf_test_hardware=0,sf_status_json=0,sf_disable_otpw=1,sf_ssh_key=1,sf_secure_erase=0"
+rtfi_options = "sf_auto=1,sf_secure_erase=0"
 pxe_server = "192.168.100.4"        # PXE server to use to RTFI
 pxe_username = "root"               # PXE server username
 pxe_password = "password"           # PXE server password
