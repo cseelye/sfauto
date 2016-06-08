@@ -16,6 +16,28 @@ import json
 import random
 import time
 
+KNOWN_STATE_TIMEOUTS = {
+    "DEFAULT" : 180,
+    "PreparePivotRootKexecLoad" : 60,
+    "Start" : 30,
+    "DriveUnlock" : 300,
+    "Backup" : 180,
+    "BackupKexecLoad" : 60,
+    "UpgradeFirmware" : 300,
+    "DriveErase" : 300,
+    "Partition" : 30,
+    "Image" : 600, # This can take a long time on FDVA on spinning disk
+    "Configure" : 90,
+    "Restore" : 60,
+    "InternalConfiguration" : 20,
+    "PostInstallPre" : 300, # Updating ELF headers is slow
+    "PostInstall" : 120,
+    "PostInstallKexecLoad" : 60,
+    "PostInstallKexec" : 180,
+    "Stop" : 180,
+    "Coldboot" : 600,
+}
+
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
@@ -194,7 +216,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_s
 
         # Wait for RTFI to complete
         try:
-            _MonitorStatusServer(node, startTimeout=start_timeout, agentID=agent)
+            _MonitorStatusServerPXE(node, startTimeout=start_timeout, agentID=agent)
         except TimeoutError as ex:
             log.error(str(ex))
 
@@ -223,7 +245,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_s
         node.StartRTFI(repo, version, rtfi_options)
 
         # Wait for RTFI to complete
-        _MonitorStatusServer(node, agentID=agent)
+        _MonitorStatusServerIRTFI(node, agentID=agent)
 
     # Wait for the node to be fully up
     if preserve_networking:
@@ -233,38 +255,15 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_s
     return True
 
 
-def _MonitorStatusServer(node, startTimeout=360, timeout=900, agentID=None):
+def _MonitorStatusServerIRTFI(node, startTimeout=360, timeout=900, agentID=None):
     """
     Monitor RTFI status and return when RTFI is complete
     """
-    known_state_timeouts = {
-        "DEFAULT" : 180,
-        "PreparePivotRootKexecLoad" : 20,
-        "Start" : 30,
-        "DriveUnlock" : 300,
-        "Backup" : 180,
-        "BackupKexecLoad" : 20,
-        "UpgradeFirmware" : 300,
-        "DriveErase" : 300,
-        "Partition" : 30,
-        "Image" : 600, # This can take a long time on FDVA on spinning disk
-        "Configure" : 90,
-        "Restore" : 60,
-        "InternalConfiguration" : 20,
-        "PostInstallPre" : 300, # Updating ELF headers is slow
-        "PostInstall" : 120,
-        "PostInstallKexecLoad" : 20,
-        "PostInstallKexec" : 180,
-        "Stop" : 180,
-        "Coldboot" : 600,
-    }
     log = GetLogger()
     log.info("Monitoring RTFI status")
     status = None
     previous_status = []
-    last_power_check = time.time()
-    last_api_check = time.time()
-    state_timeout = known_state_timeouts["DEFAULT"]
+    state_timeout = KNOWN_STATE_TIMEOUTS["DEFAULT"]
     state_start_time = 0
     start_time = time.time()
     log.debug("Waiting for RTFI status server timeout={}".format(startTimeout))
@@ -279,12 +278,6 @@ def _MonitorStatusServer(node, startTimeout=360, timeout=900, agentID=None):
         # Timeout if we haven't gotten any status within the startTimeout period
         if not previous_status and time.time() - start_time > startTimeout * sfdefaults.TIME_SECOND:
             raise TimeoutError("Timeout waiting for RTFI to start")
-
-        # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
-        if not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
-            last_api_check = time.time()
-            if node.IsUp():
-                raise SolidFireError("Node did not start RTFI (API up)")
 
         # See if the current state has changed
         if status and status != previous_status:
@@ -315,7 +308,7 @@ def _MonitorStatusServer(node, startTimeout=360, timeout=900, agentID=None):
 
             previous_status = status
             state_start_time = time.time()
-            state_timeout = known_state_timeouts.get(previous_status[-1]["state"], None) or known_state_timeouts["DEFAULT"]
+            state_timeout = KNOWN_STATE_TIMEOUTS.get(previous_status[-1]["state"], None) or KNOWN_STATE_TIMEOUTS["DEFAULT"]
             log.debug("CurrentState={} timeout={}".format(previous_status[-1]["state"], state_timeout))
             log.debug("Waiting for a new status")
 
@@ -324,8 +317,92 @@ def _MonitorStatusServer(node, startTimeout=360, timeout=900, agentID=None):
             break
 
         # If the status indicates a failure, raise an error
-        if status and (status[-1]["state"] == "FinishFailure" or "Abort" in status[-1]["state"]):
+        if status and status[-1]["state"] == "FinishFailure":
             log.error("RTFI failed, last status:\n{}".format(json.dumps(status[-1], indent=2, sort_keys=True)))
+            raise SolidFireError("RTFI failed")
+
+        # Timeout if the current state has lasted too long
+        if state_start_time > 0 and time.time() - state_start_time > state_timeout:
+            raise TimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
+
+        # Timeout if the total time has been too long
+        if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
+            raise TimeoutError("Timeout waiting for RTFI to complete")
+
+def _MonitorStatusServerPXE(node, startTimeout=360, timeout=900, agentID=None):
+    """
+    Monitor RTFI status and return when RTFI is complete
+    """
+    log = GetLogger()
+    log.info("Monitoring RTFI status")
+    status = None
+    previous_status = []
+    last_power_check = time.time()
+    last_api_check = time.time()
+    state_timeout = KNOWN_STATE_TIMEOUTS["DEFAULT"]
+    state_start_time = 0
+    start_time = time.time()
+    log.debug("Waiting for RTFI status server timeout={}".format(startTimeout))
+    while True:
+        try:
+            status = node.GetAllRTFIStatus()
+        except ConnectionError as ex:
+            if not ex.IsRetryable() and ex.code not in [404, 403, 54, 60, 61, 110]:
+                log.warning(str(ex))
+            status = None
+
+        # Timeout if we haven't gotten any status within the startTimeout period
+        if not previous_status and time.time() - start_time > startTimeout * sfdefaults.TIME_SECOND:
+            raise TimeoutError("Timeout waiting for RTFI to start")
+
+        # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
+        if not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
+            last_api_check = time.time()
+            if node.IsUp():
+                raise SolidFireError("Node did not start RTFI (API up)")
+
+        # See if the current state has changed
+        if status and status != previous_status:
+            new_status = [stat for stat in status if stat not in previous_status]
+
+            # Sanity check the status we received
+            for stat in new_status:
+                log.debug("status={}".format(stat))
+                # If the status does not match our agent ID, this is a stale status and it is probably from an earlier RTFI
+                if agentID and "sf_agent" in stat and stat["sf_agent"] != agentID and stat["sf_agent"] != "Manual":
+                    log.debug("sf_caller does not match agentID={}".format(agentID))
+                    raise SolidFireError("Node did not start RTFI (stale status)")
+
+                # If the timestamp from the status is too old, then it is probably from an earlier RTFI, and this RTFI never started
+                if ParseTimestamp(stat["time"]) < start_time - 30:
+                    log.debug("Status timestamp is too old start_time={} status_time={}".format(start_time, ParseTimestamp(stat["time"])))
+                    raise SolidFireError("Node did not start RTFI (stale status)")
+
+            # Show the new status to the user
+            for stat in new_status:
+                log.info("  {}: {}".format(stat["state"], stat["message"]))
+
+            if "Abort" in status[-1]["state"]:
+                log.error("RTFI error:\n{}".format(json.dumps(status[-1], indent=2, sort_keys=True)))
+
+            # Log some info about how long state transitions take
+            if previous_status:
+                log.debug("PreviousState={} duration={} timeout={}".format(previous_status[-1]["state"], time.time() - state_start_time, state_timeout))
+            else:
+                log.debug("FirstState duration={}".format(time.time() - start_time))
+
+            previous_status = status
+            state_start_time = time.time()
+            state_timeout = KNOWN_STATE_TIMEOUTS.get(previous_status[-1]["state"], None) or KNOWN_STATE_TIMEOUTS["DEFAULT"]
+            log.debug("CurrentState={} timeout={}".format(previous_status[-1]["state"], state_timeout))
+            log.debug("Waiting for a new status")
+
+        # If the status indicates we are finished with iRTFI, break
+        if status and status[-1]["state"] == "FinishSuccess":
+            break
+
+        # If the status indicates a failure, raise an error
+        if status and status[-1]["state"] == "FinishFailure":
             raise SolidFireError("RTFI failed")
 
         # If the node has powered off, assume that RTFI completed
@@ -356,7 +433,12 @@ if __name__ == '__main__':
     parser.add_argument("--rtfi-type", required=True, choices=["pxe", "irtfi"],  default="irtfi", help="the type of RTFI to attempt")
     parser.add_argument("--nonet", action="store_false", dest="preserve_networking", default=True, help="do not preserve the current hostname/network config of the node")
     parser.add_argument("--fail", type=str, required=False, help="inject an error during this RTFI state")
-    parser.add_ipmi_args()
+    net_override_group = parser.add_argument_group("Network Overrides", description="These settings can be used to override the network settings from AT2")
+    net_override_group.add_argument("--netmask", type=IPv4AddressType, required=False, help="use this netmask for all nodes during RTFI")
+    net_override_group.add_argument("--gateway", type=IPv4AddressType, required=False, help="use this gateway for all nodes during RTFI")
+    net_override_group.add_argument("-I", "--ipmi-ips", type=IPv4AddressType, metavar="IP1,IP2...", help="the IPMI IP addresses for the nodes")
+    net_override_group.add_argument("--ipmi-user", type=str, default=sfdefaults.ipmi_user, metavar="USERNAME", help="the IPMI username for all nodes")
+    net_override_group.add_argument("--ipmi-pass", type=str, default=sfdefaults.ipmi_pass, metavar="PASSWORD", help="the IPMI password for all nodes")
     args = parser.parse_args_to_dict()
 
     app = PythonApp(RtfiNodes, args)
