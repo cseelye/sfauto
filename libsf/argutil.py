@@ -2275,8 +2275,6 @@ class SFArgumentParser(_AttributeHolder, _ActionsContainer):
 
     def parse_args_to_dict(self, args=None, namespace=None):
         parsed = self.parse_args(args=args, namespace=namespace)
-        from pprint import pprint
-        pprint(namespace)
         return { key : value for key, value in vars(parsed).iteritems() if value != None }
 
     # ========================
