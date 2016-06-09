@@ -18,7 +18,7 @@ from libsf import SolidFireError
     "node_ip" : (IPv4AddressType, None),
     "username" : (StrType, sfdefaults.username),
     "password" : (StrType, sfdefaults.password),
-    "hostname" : (StrType, None),
+    "new_hostname" : (StrType, None),
 })
 def NodeSetHostname(node_ip,
                     new_hostname,
@@ -28,10 +28,10 @@ def NodeSetHostname(node_ip,
     Set the hostname on a node
 
     Args:
-        node_ip:    the IP address of the node (str)
-        username:   the cluster admin name (str)
-        password:   the cluster admin password (str)
-        hostname:   the hostname to set (str)
+        node_ip:        the IP address of the node (str)
+        username:       the cluster admin name (str)
+        password:       the cluster admin password (str)
+        new_hostname:   the hostname to set (str)
     """
     log = GetLogger()
 
