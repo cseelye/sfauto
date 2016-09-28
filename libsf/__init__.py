@@ -161,11 +161,13 @@ class ConnectionError(SolidFireError):
             elif type(self.innerException) in [socket.error, socket.herror, socket.gaierror]:
                 self.message = 'Socket error {}: {}'.format(self.innerException.args[0], self.innerException.args[1])
                 self.code = self.innerException.args[0]
+                #  54  - connection reset by peer
+                #  61  - connection refused (transient on restarts)
                 #  104 - connection reset by peer
                 #  110 - connection timed out
                 #  111 - connection refused (transient on restarts)
                 #  113 - no route to host (transient when node is rebooted)
-                if self.code in (104, 110, 111, 113, 54):
+                if self.code in (54, 61, 104, 110, 111, 113):
                     self.retryable = True
             elif type(self.innerException) == OSError:
                 self.message = 'OSError {}: {}'.format(self.innerException.errno, self.innerException.strerror)
