@@ -80,7 +80,7 @@ LABEL BootLocal
            gateway=gateway,
            hostname=hostname)
 
-    log.debug("Sending PXE config file {} with contents:\n{}".format(transformed_mac, pxe_file_contents))
+    log.debug("Sending PXE config file {} to server {} with contents:\n{}".format(transformed_mac, pxeServer, pxe_file_contents))
     with tempfile.NamedTemporaryFile() as temp:
         temp.write(pxe_file_contents)
         temp.flush()
@@ -93,6 +93,7 @@ def DeletePXEFile(macAddress, pxeServer=sfdefaults.pxe_server, pxeUser=sfdefault
     Remove a PXE config file from the PXE server
     """
     transformed_mac = macAddress.lower().replace(":", "-")
+    log.debug("Removing PXE config file {} from server {}".format(transformed_mac, pxeServer))
     with SSHConnection(pxeServer, pxeUser, pxePassword) as ssh:
         ssh.RunCommand("rm -f " + PXE_CONFIG_PATH.format(transformed_mac))
 
