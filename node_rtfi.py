@@ -9,11 +9,11 @@ from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs, SetThreadLogPrefix
 from libsf.sfnode import SFNode
 from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SelectionType, BoolType, StrType
-from libsf.util import GetFilename, SolidFireVersion, ParseTimestamp
+from libsf.util import GetFilename, SolidFireVersion, ParseTimestamp, PrettyJSON, EnsureKeys
 from libsf import sfdefaults, threadutil, pxeutil, labutil
 from libsf import SSHConnection, SolidFireError, ConnectionError, InvalidArgumentError, TimeoutError
-import json
 import random
+import re
 import time
 
 KNOWN_STATE_TIMEOUTS = {
@@ -21,22 +21,24 @@ KNOWN_STATE_TIMEOUTS = {
     "PreparePivotRootKexecLoad" : 60,
     "Start" : 30,
     "DriveUnlock" : 300,
-    "Backup" : 180,
+    "Backup" : 1200,
     "BackupKexecLoad" : 60,
     "UpgradeFirmware" : 300,
-    "DriveErase" : 300,
+    "DriveErase" : 600,
     "Partition" : 30,
     "Image" : 600, # This can take a long time on FDVA on spinning disk
     "Configure" : 90,
     "Restore" : 60,
     "InternalConfiguration" : 20,
     "PostInstallPre" : 300, # Updating ELF headers is slow
-    "PostInstall" : 120,
+    "PostInstall" : 240,
     "PostInstallKexecLoad" : 60,
     "PostInstallKexec" : 180,
     "Stop" : 180,
-    "Coldboot" : 600,
+    "Coldboot" : 660,
 }
+
+RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 54, 60, 61, 110]
 
 @logargs
 @ValidateAndDefault({
@@ -55,6 +57,12 @@ KNOWN_STATE_TIMEOUTS = {
     "ipmi_pass" : (StrType, sfdefaults.ipmi_pass),
     "netmask" : (OptionalValueType(IPv4AddressType), None),
     "gateway" : (OptionalValueType(IPv4AddressType), None),
+    "pxe_server" : (OptionalValueType(IPv4AddressType), sfdefaults.pxe_server),
+    "mac_addresses" : (OptionalValueType(ItemList(str)), None),
+    "vm_names" : (OptionalValueType(ItemList(str)), None),
+    "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vmware_mgmt_server),
+    "vm_mgmt_user" : (OptionalValueType(str), sfdefaults.vmware_mgmt_user),
+    "vm_mgmt_pass" : (OptionalValueType(str), sfdefaults.vmware_mgmt_pass),
 })
 def RtfiNodes(node_ips,
               repo,
@@ -69,7 +77,13 @@ def RtfiNodes(node_ips,
               ipmi_user,
               ipmi_pass,
               netmask,
-              gateway):
+              gateway,
+              pxe_server,
+              mac_addresses,
+              vm_names,
+              vm_mgmt_server,
+              vm_mgmt_user,
+              vm_mgmt_pass):
     """
     RTFI a list of nodes
 
@@ -86,41 +100,91 @@ def RtfiNodes(node_ips,
         ipmi_ips:               the IPMI IPs of the nodes
         ipmi_user:              the IPMI username
         ipmi_pass:              the IPMI password
-        netmask:                the netmask for the nodes (only PXE if AT2 is inaccessible)
-        gateway:                the gateway for the nodes (only PXE if AT2 is inaccessible)
+        netmask:                the netmask for the nodes (only PXE and only if AT2 is inaccessible)
+        gateway:                the gateway for the nodes (only PXE and only if AT2 is inaccessible)
+        pxe_server:             the PXE server for the nodes (only PXE and only if AT2 is inaccessible)
+        mac_addresses:          the MAC address to use for each node (override auto discovery)
+        vm_names:               the VM names if these are virt nodes
+        vm_mgmt_server:         the management server for the VMs (vSphere for VMware, hypervisor for KVM)
+        vm_mgmt_user:           the management user for the VMs
+        vm_mgmt_pass:           the management password for the VMs
     """
     log = GetLogger()
 
     if ipmi_ips and len(node_ips) != len(ipmi_ips):
         raise InvalidArgumentError("If ipmi_ips is specified, it must have the same number of elements as node_ips")
+    if mac_addresses and len(node_ips) != len(mac_addresses):
+        raise InvalidArgumentError("If mac_addresses is specified, it must have the same number of elements as node_ips")
+    if vm_names and len(node_ips) != len(vm_names):
+        raise InvalidArgumentError("If vm_names is specified, it must have the same number of elements as node_ips")
 
-    # Make sure the build exists
-    iso_name = "solidfire-{}-{}-{}.iso".format(image_type, repo, version)
-    log.info("Checking that {} exists".format(iso_name))
-    with SSHConnection("192.168.137.1", "root", "solidfire") as ssh:
-        try:
-            retcode, _, _ = ssh.RunCommand(r"find /builds/iso/{} -type f -name '*.iso' -exec basename {{}} \; | grep -q {}".format(image_type, iso_name), exceptOnError=False)
-        except SolidFireError as ex:
-            log.error(str(ex))
+    if version == "latest":
+        log.info("Looking for the latest {} version".format(repo))
+        with SSHConnection("192.168.137.1", "root", "solidfire") as ssh:
+            try:
+                retcode, stdout, stderr = ssh.RunCommand(r"find /builds/iso/{} -type f -name 'solidfire-{}-{}*.iso' -exec basename {{}} \;".format(image_type, image_type, repo), exceptOnError=False)
+            except SolidFireError as ex:
+                log.error(str(ex))
+                return False
+        if retcode != 0:
+            log.error("Cannot list builds on jenkins: {}".format(stderr))
             return False
-    if retcode != 0:
-        log.error("Cannot find build on jenkins. Check http://192.168.137.1/rtfi/ to see if the build is actually there")
-        return False
 
-    log.info("Looking up network profile for nodes")
-    try:
-        net_info = labutil.GetNetworkProfile(node_ips)
-    except SolidFireError:
-        net_info = {}
+        version = "0.0.0.0"
+        for line in stdout.split("\n"):
+            m = re.search(r"solidfire-{}-{}-([0-9]\.[0-9]\.[0-9]\.[0-9]+).iso".format(image_type, repo), line)
+            if not m:
+                continue
+            found_version = m.group(1)
+            if int(found_version.split(".")[3]) > int(version.split(".")[3]):
+                version = found_version
+        if version == "0.0.0.0":
+            log.error("Could not find any {} builds".format(repo))
+            return False
+        log.info("Found {}-{}".format(repo, version))
+    else:
+        # Make sure the build exists
+        iso_name = "solidfire-{}-{}-{}.iso".format(image_type, repo, version)
+        log.info("Checking that {} exists".format(iso_name))
+        with SSHConnection("192.168.137.1", "root", "solidfire") as ssh:
+            try:
+                retcode, _, _ = ssh.RunCommand(r"find /builds/iso/{} -type f -name '*.iso' -exec basename {{}} \; | grep -q {}".format(image_type, iso_name), exceptOnError=False)
+            except SolidFireError as ex:
+                log.error(str(ex))
+                return False
+        if retcode != 0:
+            log.error("Cannot find build on jenkins. Check http://192.168.137.1/rtfi/ to see if the build is actually there")
+            return False
+
+    net_info = {}
+    for node_ip in node_ips:
+        net_info[node_ip] = {}
+
+    if not vm_names:
+        log.info("Looking up network profile for nodes")
+        try:
+            net_info = labutil.GetNetworkProfile(node_ips)
+        except SolidFireError:
+            pass
 
     # Add user supplied config info and check that we have all required info
     for idx, node_ip in enumerate(node_ips):
+        EnsureKeys(net_info[node_ip], ["ipmi", "netmask", "gateway", "pxe", "mac", "hostname", "vm_name"])
+
         if ipmi_ips:
             net_info[node_ip]["ipmi"] = ipmi_ips[idx]
         if netmask and gateway:
             net_info[node_ip]["netmask"] = netmask
             net_info[node_ip]["gateway"] = gateway
-        if "hostname" not in net_info[node_ip] or not net_info[node_ip]["hostname"]:
+        if pxe_server:
+            net_info[node_ip]["pxe"] = pxe_server
+        if mac_addresses:
+            net_info[node_ip]["mac"] = mac_addresses[idx]
+        if vm_names:
+            net_info[node_ip]["vm_name"] = vm_names[idx]
+            net_info[node_ip]["hostname"] = vm_names[idx]
+
+        if not net_info[node_ip]["hostname"]:
             node = SFNode(node_ip, clusterUsername=username, clusterPassword=password)
             try:
                 net_info[node_ip]["hostname"] = node.GetHostname()
@@ -128,19 +192,25 @@ def RtfiNodes(node_ips,
                 net_info[node_ip]["hostname"] = "node-{}".format(node_ip.replace(".", "-"))
 
         if rtfi_type == "pxe":
-            if not net_info[node_ip].get("ipmi", None):
+            if not net_info[node_ip].get("vm_name", None) and not net_info[node_ip].get("ipmi", None):
                 raise SolidFireError("Could not find IPMI address for {}".format(node_ip))
             if not net_info[node_ip].get("netmask", None):
                 raise SolidFireError("Could not find netmask for {}".format(node_ip))
             if not net_info[node_ip].get("gateway", None):
                 raise SolidFireError("Could not find gateway for {}".format(node_ip))
+            if net_info[node_ip].get("vm_name", None):
+                if not vm_mgmt_server or not vm_mgmt_user or not vm_mgmt_pass:
+                    raise SolidFireError("Missing VM management server info")
+            else:
+                if not net_info[node_ip].get("ipmi", None):
+                    raise SolidFireError("Could not find IPMI address for {}".format(node_ip))
 
     # Start a thread for each node
     log.info("RTFI {} nodes to {}-{}".format(len(node_ips), repo, version))
     pool = threadutil.GlobalPool()
     results = []
     for node_ip in node_ips:
-        results.append(pool.Post(_NodeThread, rtfi_type, image_type, repo, version, preserve_networking, net_info[node_ip]["pxe"], node_ip, net_info[node_ip]["hostname"], net_info[node_ip]["netmask"], net_info[node_ip]["gateway"], fail, username, password, net_info[node_ip]["ipmi"], ipmi_user, ipmi_pass))
+        results.append(pool.Post(_NodeThread, rtfi_type, image_type, repo, version, preserve_networking, net_info[node_ip]["pxe"], node_ip, net_info[node_ip]["hostname"], net_info[node_ip]["netmask"], net_info[node_ip]["gateway"], fail, username, password, net_info[node_ip]["ipmi"], ipmi_user, ipmi_pass, net_info[node_ip]["mac"], net_info[node_ip]["vm_name"], vm_mgmt_server, vm_mgmt_user, vm_mgmt_pass))
 
     # Wait for all threads to complete
     allgood = True
@@ -163,7 +233,7 @@ def RtfiNodes(node_ips,
 
 
 @threadutil.threadwrapper
-def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_server, node_ip, node_hostname, netmask, gateway, fail, username, password, ipmi_ip, ipmi_user, ipmi_pass):
+def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_server, node_ip, node_hostname, netmask, gateway, fail, username, password, ipmi_ip, ipmi_user, ipmi_pass, mac_address=None, vm_name=None, vm_mgmt_server=None, vm_mgmt_user=None, vm_mgmt_pass=None):
     """RTFI a node"""
     log = GetLogger()
     SetThreadLogPrefix(node_ip)
@@ -171,7 +241,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_s
     # Generate a random identifier
     agent = "rtfiscript{}".format(random.randint(1000, 9999))
 
-    node = SFNode(node_ip, clusterUsername=username, clusterPassword=password, ipmiIP=ipmi_ip, ipmiUsername=ipmi_user, ipmiPassword=ipmi_pass)
+    node = SFNode(node_ip, clusterUsername=username, clusterPassword=password, ipmiIP=ipmi_ip, ipmiUsername=ipmi_user, ipmiPassword=ipmi_pass, vmName=vm_name, vmManagementServer=vm_mgmt_server, vmManagementUsername=vm_mgmt_user, vmManagementPassword=vm_mgmt_pass)
     rtfi_opts = [
         "sf_hostname={}-rtfi".format(node_hostname),
         "sf_agent={}".format(agent),
@@ -188,8 +258,9 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_s
 
     # PXE boot traditional RTFI
     if rtfi_type == "pxe":
-        log.info("Getting MAC address from iDRAC")
-        mac_address = node.GetPXEMacAddress()
+        if not mac_address:
+            log.info("Getting MAC address from {}".format("hypervisor" if vm_name else "BMC"))
+            mac_address = node.GetPXEMacAddress()
 
         log.info("Creating PXE config file")
         pxeutil.DeletePXEFile(mac_address)
@@ -203,20 +274,24 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_s
                               netmask=netmask,
                               gateway=gateway)
 
+        # Make sure the boot order is correct
+        node.SetPXEBoot()
+
         log.info("Power cycling node")
         node.PowerOff()
         node.PowerOn(waitForUp=False)
 
-        start_timeout = 360
-        if SolidFireVersion(version) < SolidFireVersion("8.0.0.0"):
-            log.warning("This RTFI version does not support monitoring other than power status")
-            start_timeout = 960
-        elif SolidFireVersion(version) < SolidFireVersion("9.0.0.0"):
-            log.warning("This RTFI version supports incomplete status monitoring")
-
         # Wait for RTFI to complete
         try:
-            _MonitorStatusServerPXE(node, startTimeout=start_timeout, agentID=agent)
+            if SolidFireVersion(version) < SolidFireVersion("8.0.0.0"):
+                log.warning("This RTFI version does not support monitoring other than power status")
+            elif SolidFireVersion(version) < SolidFireVersion("9.0.0.0"):
+                log.warning("This RTFI version supports incomplete status monitoring")
+            elif SolidFireVersion(version) < SolidFireVersion("10.0.0.0"):
+                _monitor_v90(rtfi_type, node, startTimeout=360)
+            else:
+                log.warning("RTFI status monitoring not implemented for this Element version")
+                return False
         except TimeoutError as ex:
             log.error(str(ex))
 
@@ -234,18 +309,17 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_s
             log.info("Removing PXE config file")
             pxeutil.DeletePXEFile(mac_address)
 
-        node.WaitForOff()
-
-        log.info("Powering on node")
-        node.PowerOn(waitForUp=False)
-
     # in place RTFI
     elif rtfi_type == "irtfi":
         log.info("Calling StartRtfi")
         node.StartRTFI(repo, version, rtfi_options)
 
         # Wait for RTFI to complete
-        _MonitorStatusServerIRTFI(node, agentID=agent)
+        if SolidFireVersion(version) >= SolidFireVersion("9.0.0.0"):
+            _monitor_v90(rtfi_type, node, agentID=agent)
+        else:
+            log.warning("RTFI status monitoring not implemented for this Element version")
+            return False
 
     # Wait for the node to be fully up
     if preserve_networking:
@@ -254,100 +328,25 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, pxe_s
 
     return True
 
-
-def _MonitorStatusServerIRTFI(node, startTimeout=360, timeout=900, agentID=None):
+def _monitor_v90(rtfiType, node, startTimeout=360, timeout=3600, agentID=None):
     """
-    Monitor RTFI status and return when RTFI is complete
-    """
-    log = GetLogger()
-    log.info("Monitoring RTFI status")
-    status = None
-    previous_status = []
-    state_timeout = KNOWN_STATE_TIMEOUTS["DEFAULT"]
-    state_start_time = 0
-    start_time = time.time()
-    log.debug("Waiting for RTFI status server timeout={}".format(startTimeout))
-    while True:
-        try:
-            status = node.GetAllRTFIStatus()
-        except ConnectionError as ex:
-            if not ex.IsRetryable() and ex.code not in [404, 403, 54, 60, 61, 110]:
-                log.warning(str(ex))
-            status = None
-
-        # Timeout if we haven't gotten any status within the startTimeout period
-        if not previous_status and time.time() - start_time > startTimeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to start")
-
-        # See if the current state has changed
-        if status and status != previous_status:
-            new_status = [stat for stat in status if stat not in previous_status]
-            
-            # Sanity check the status we received
-            for stat in new_status:
-                log.debug("status={}".format(stat))
-                # If the status does not match our agent ID, this is a stale status and it is probably from an earlier RTFI
-                if agentID and "sf_agent" in stat and stat["sf_agent"] != agentID and stat["sf_agent"] != "Manual":
-                    log.debug("sf_caller does not match agentID={}".format(agentID))
-                    raise SolidFireError("Node did not start RTFI (stale status)")
-
-                # If the timestamp from the status is too old, then it is probably from an earlier RTFI, and this RTFI never started
-                if ParseTimestamp(stat["time"]) < start_time - 30:
-                    log.debug("Status timestamp is too old start_time={} status_time={}".format(start_time, ParseTimestamp(stat["time"])))
-                    raise SolidFireError("Node did not start RTFI (stale status)")
-
-            # Show the new status to the user
-            for stat in new_status:
-                log.info("  {}: {}".format(stat["state"], stat["message"]))
-
-            # Log some info about how long state transitions take
-            if previous_status:
-                log.debug("PreviousState={} duration={} timeout={}".format(previous_status[-1]["state"], time.time() - state_start_time, state_timeout))
-            else:
-                log.debug("FirstState duration={}".format(time.time() - start_time))
-
-            previous_status = status
-            state_start_time = time.time()
-            state_timeout = KNOWN_STATE_TIMEOUTS.get(previous_status[-1]["state"], None) or KNOWN_STATE_TIMEOUTS["DEFAULT"]
-            log.debug("CurrentState={} timeout={}".format(previous_status[-1]["state"], state_timeout))
-            log.debug("Waiting for a new status")
-
-        # If the status indicates we are finished with iRTFI, break
-        if status and status[-1]["state"] == "FinishSuccess":
-            break
-
-        # If the status indicates a failure, raise an error
-        if status and status[-1]["state"] == "FinishFailure":
-            log.error("RTFI failed, last status:\n{}".format(json.dumps(status[-1], indent=2, sort_keys=True)))
-            raise SolidFireError("RTFI failed")
-
-        # Timeout if the current state has lasted too long
-        if state_start_time > 0 and time.time() - state_start_time > state_timeout:
-            raise TimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
-
-        # Timeout if the total time has been too long
-        if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to complete")
-
-def _MonitorStatusServerPXE(node, startTimeout=360, timeout=900, agentID=None):
-    """
-    Monitor RTFI status and return when RTFI is complete
+    Monitor Fluorine RTFI status and return when RTFI is complete
     """
     log = GetLogger()
-    log.info("Monitoring RTFI status")
+    log.info("Waiting for RTFI status")
+    removed_pxe = False
     status = None
     previous_status = []
-    last_power_check = time.time()
     last_api_check = time.time()
     state_timeout = KNOWN_STATE_TIMEOUTS["DEFAULT"]
     state_start_time = 0
     start_time = time.time()
-    log.debug("Waiting for RTFI status server timeout={}".format(startTimeout))
+    log.debug("Waiting for status server timeout={}".format(startTimeout))
     while True:
         try:
             status = node.GetAllRTFIStatus()
         except ConnectionError as ex:
-            if not ex.IsRetryable() and ex.code not in [404, 403, 54, 60, 61, 110]:
+            if not ex.IsRetryable() and ex.code not in RETRYABLE_RTFI_STATUS_ERRORS:
                 log.warning(str(ex))
             status = None
 
@@ -356,34 +355,22 @@ def _MonitorStatusServerPXE(node, startTimeout=360, timeout=900, agentID=None):
             raise TimeoutError("Timeout waiting for RTFI to start")
 
         # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
-        if not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
+        if rtfiType == "pxe" and not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
             last_api_check = time.time()
             if node.IsUp():
-                raise SolidFireError("Node did not start RTFI (API up)")
+                log.debug("API is back up but never got any RTFI status")
+                raise SolidFireError("Node did not RTFI, check PXE boot settings")
 
         # See if the current state has changed
         if status and status != previous_status:
             new_status = [stat for stat in status if stat not in previous_status]
 
-            # Sanity check the status we received
+            # Sanity check the status and display it to the user
             for stat in new_status:
-                log.debug("status={}".format(stat))
-                # If the status does not match our agent ID, this is a stale status and it is probably from an earlier RTFI
-                if agentID and "sf_agent" in stat and stat["sf_agent"] != agentID and stat["sf_agent"] != "Manual":
-                    log.debug("sf_caller does not match agentID={}".format(agentID))
-                    raise SolidFireError("Node did not start RTFI (stale status)")
-
-                # If the timestamp from the status is too old, then it is probably from an earlier RTFI, and this RTFI never started
-                if ParseTimestamp(stat["time"]) < start_time - 30:
-                    log.debug("Status timestamp is too old start_time={} status_time={}".format(start_time, ParseTimestamp(stat["time"])))
-                    raise SolidFireError("Node did not start RTFI (stale status)")
-
-            # Show the new status to the user
-            for stat in new_status:
-                log.info("  {}: {}".format(stat["state"], stat["message"]))
+                _check_and_log_new_status(stat, start_time, agentID)
 
             if "Abort" in status[-1]["state"]:
-                log.error("RTFI error:\n{}".format(json.dumps(status[-1], indent=2, sort_keys=True)))
+                log.error("RTFI error:\n{}".format(PrettyJSON(status[-1])))
 
             # Log some info about how long state transitions take
             if previous_status:
@@ -397,23 +384,22 @@ def _MonitorStatusServerPXE(node, startTimeout=360, timeout=900, agentID=None):
             log.debug("CurrentState={} timeout={}".format(previous_status[-1]["state"], state_timeout))
             log.debug("Waiting for a new status")
 
-        # If the status indicates we are finished with iRTFI, break
+        # If we got a good status, then we did successfully PXE boot and don't need the PXE config file anymore
+        if rtfiType == "pxe" and previous_status and not removed_pxe:
+            pxeutil.DeletePXEFile(node.GetPXEMacAddress())
+            removed_pxe = True
+
+        # If the status is Coldboot, wait for the node to power off and come back
+        if status and status[-1]["state"] == "Coldboot":
+            _handle_coldboot(node)
+
+        # If the status indicates we are finished with RTFI, break
         if status and status[-1]["state"] == "FinishSuccess":
             break
 
         # If the status indicates a failure, raise an error
         if status and status[-1]["state"] == "FinishFailure":
             raise SolidFireError("RTFI failed")
-
-        # If the node has powered off, assume that RTFI completed
-        # Checking continuously exhausts the resources in the BMC leading to errors like
-        #       Error in open session response message : insufficient resources for session
-        #       Error: Unable to establish IPMI v2 / RMCP+ session
-        if time.time() - last_power_check > 20 * sfdefaults.TIME_SECOND:
-            last_power_check = time.time()
-            if node.GetPowerState() == "off":
-                log.warning("Node powered off, assuming it finished RTFI")
-                break
 
         # Timeout if the current state has lasted too long
         if state_start_time > 0 and time.time() - state_start_time > state_timeout:
@@ -422,6 +408,50 @@ def _MonitorStatusServerPXE(node, startTimeout=360, timeout=900, agentID=None):
         # Timeout if the total time has been too long
         if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
             raise TimeoutError("Timeout waiting for RTFI to complete")
+
+
+def _handle_coldboot(node):
+    log = GetLogger()
+
+    # Wait for the node to power down
+    log.info("Waiting for node to power off")
+    node.WaitForOff()
+
+    # If this is a virt node, we must power it on because ACPI wakeup does not work
+    if node.IsVirtual():
+        log.info("Powering on node")
+        node.PowerOn(waitForUp=False)
+
+    # If this is not a virt node, wait for the node to auto wakeup
+    else:
+        log.info("Waiting for node to power on")
+        node.WaitForOn(timeout=330)
+
+    # Wait for the node to be up on the network again
+    node.WaitForPing()
+
+def _check_and_log_new_status(status, startTime, agentID):
+    log = GetLogger()
+    log.debug("found new status:\n{}".format(PrettyJSON(status)))
+
+    # If the status does not match our agent ID, this is probably a stale status from an earlier RTFI
+    #   Older traditional RTFI does not honor sf_agent so don't check it (SF_AGENT=Manual)
+    #   PreparePivotRoot state does not show the correct agent so don't check it
+    if agentID and "sf_agent" in status and status["sf_agent"] != "Manual" and status["state"] != "PreparePivotRoot":
+        if status["sf_agent"] != agentID:
+            log.debug("sf_agent does not match agentID={}".format(agentID))
+            raise SolidFireError("Node did not start RTFI (stale status)")
+
+    # If the timestamp from the status is too old, then it is probably from an earlier RTFI, and this RTFI never started
+    if ParseTimestamp(status["time"]) < startTime - 30:
+        log.debug("Status timestamp is too old startTime={} statusTime={}".format(startTime, ParseTimestamp(status["time"])))
+        raise SolidFireError("Node did not start RTFI (stale status)")
+
+    if "percent" in status:
+        state = "{}% - {}".format(status["percent"], status["state"])
+    else:
+        state = "{}".format(status["state"])
+    log.info("  {}: {}".format(state, status["message"]))
 
 
 if __name__ == '__main__':
@@ -433,12 +463,22 @@ if __name__ == '__main__':
     parser.add_argument("--rtfi-type", required=True, choices=["pxe", "irtfi"],  default="irtfi", help="the type of RTFI to attempt")
     parser.add_argument("--nonet", action="store_false", dest="preserve_networking", default=True, help="do not preserve the current hostname/network config of the node")
     parser.add_argument("--fail", type=str, required=False, help="inject an error during this RTFI state")
+
     net_override_group = parser.add_argument_group("Network Overrides", description="These settings can be used to override the network settings from AT2")
+    net_override_group.add_argument("--pxe-server", type=IPv4AddressType, default=sfdefaults.pxe_server, required=False, help="use this PXE server for all nodes during RTFI")
     net_override_group.add_argument("--netmask", type=IPv4AddressType, required=False, help="use this netmask for all nodes during RTFI")
     net_override_group.add_argument("--gateway", type=IPv4AddressType, required=False, help="use this gateway for all nodes during RTFI")
-    net_override_group.add_argument("-I", "--ipmi-ips", type=IPv4AddressType, metavar="IP1,IP2...", help="the IPMI IP addresses for the nodes")
+    net_override_group.add_argument("-I", "--ipmi-ips", type=ItemList(IPv4AddressType), metavar="IP1,IP2...", help="the IPMI IP addresses for the nodes")
     net_override_group.add_argument("--ipmi-user", type=str, default=sfdefaults.ipmi_user, metavar="USERNAME", help="the IPMI username for all nodes")
     net_override_group.add_argument("--ipmi-pass", type=str, default=sfdefaults.ipmi_pass, metavar="PASSWORD", help="the IPMI password for all nodes")
+    net_override_group.add_argument("--mac-addresses", type=ItemList(str), metavar="MAC1,MAC2...", help="the MAC addresses for the nodes")
+
+    vm_group = parser.add_argument_group("Virtual Node Options", description="These settings are required for virt nodes, along with the network override settings.")
+    vm_group.add_argument("--vm-names", type=str, metavar="NAME", help="the name of the VMs to RTFI")
+    vm_group.add_argument("-s", "--vm-mgmt-server", type=IPv4AddressType, default=sfdefaults.vmware_mgmt_server, metavar="IP", help="the IP address of the hypervisor/management server")
+    vm_group.add_argument("-e", "--vm-mgmt-user", type=str, default=sfdefaults.vmware_mgmt_user, help="the hypervisor admin username")
+    vm_group.add_argument("-a", "--vm-mgmt-pass", type=str, default=sfdefaults.vmware_mgmt_pass, help="the hypervisor admin password")
+
     args = parser.parse_args_to_dict()
 
     app = PythonApp(RtfiNodes, args)
