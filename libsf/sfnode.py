@@ -12,6 +12,7 @@ from . import util
 from . import SSHConnection, SolidFireClusterAPI, SolidFireNodeAPI, SolidFireError, UnknownObjectError, TimeoutError
 from .shellutil import Shell
 from .logutil import GetLogger
+from .virtutil import VMwareVM
 
 class NetworkInterfaceType(object):
     """Type of network interfaces in nodes"""
@@ -35,7 +36,7 @@ class SFNode(object):
     DEFAULT_IPMI_USERNAME = "root"
     DEFAULT_IPMI_PASSWOD = "calvin"
 
-    def __init__(self, ip, sshUsername=None, sshPassword=None, clusterMvip=None, clusterUsername=None, clusterPassword=None, ipmiIP=None, ipmiUsername=None, ipmiPassword=None):
+    def __init__(self, ip, sshUsername=None, sshPassword=None, clusterMvip=None, clusterUsername=None, clusterPassword=None, ipmiIP=None, ipmiUsername=None, ipmiPassword=None, vmName=None, vmManagementServer=None, vmManagementUsername=None, vmManagementPassword=None):
         self.ipAddress = ip
         self.sshUsername = sshUsername
         self.sshPassword = sshPassword
@@ -62,6 +63,11 @@ class SFNode(object):
                                               retrySleep=20,
                                               errorLogThreshold=1,
                                               errorLogRepeat=1)
+        self.vmName = vmName
+        self.vm = None
+        if self.vmName:
+            self.vm = VMwareVM(vmName, vmManagementServer, vmManagementUsername, vmManagementPassword)
+
         self._unpicklable = ["log", "api", "clusterAPI"]
 
 
@@ -95,6 +101,18 @@ class SFNode(object):
         for key in self._unpicklable:
             assert hasattr(self, key)
 
+    def IsVirtual(self):
+        """
+        Check if this is a virtual node
+
+        Returns:
+            True if this is a virt node, False otherwise
+        """
+        if self.vm:
+            return True
+        else:
+            return False
+
     def GetHighestVersion(self):
         """
         Get the highest API version this node supports
@@ -126,7 +144,9 @@ class SFNode(object):
         Returns:
             String containing the IPMI IP address
         """
-        print "SSHConnection = {}".format(SSHConnection)
+        if self.vm:
+            raise NotImplementedError("Cannot get IPMI IP for virtual machines")
+
         with SSHConnection(self.ipAddress, self.sshUsername, self.sshPassword) as ssh:
             _, stdout, _ = ssh.RunCommand(r"ipmitool lan print | egrep 'IP Address\s+:' | awk '{print $4}'")
             return stdout.strip()
@@ -138,6 +158,9 @@ class SFNode(object):
         Returns:
             The stdout of the command (str)
         """
+        if self.vm:
+            raise NotImplementedError("Cannot execute IPMI commands against virtual machines")
+
         cmd = "ipmitool -Ilanplus -U{} -P{} -H{} {}".format(self.ipmiUsername, self.ipmiPassword, self.ipmiIP, command)
         self.log.debug(cmd)
         retry = 3
@@ -212,12 +235,17 @@ class SFNode(object):
         Args:
             waitForUp:  wait for the node to turn on and come fully up
         """
-        self.IPMICommand("chassis power on")
-        self.log.info("Waiting for {} to turn on".format(self.ipAddress))
-        while True:
-            if self.GetPowerState() == "on":
-                break
-            time.sleep(sfdefaults.TIME_SECOND)
+        
+        if self.vm:
+            self.vm.PowerOn()
+
+        else:
+            self.IPMICommand("chassis power on")
+            self.log.info("Waiting for {} to turn on".format(self.ipAddress))
+            while True:
+                if self.GetPowerState() == "on":
+                    break
+                time.sleep(sfdefaults.TIME_SECOND)
 
         if waitForUp:
             self.WaitForUp()
@@ -226,12 +254,16 @@ class SFNode(object):
         """
         Power on this node
         """
-        self.IPMICommand("chassis power off")
-        self.log.info("Waiting for {} to turn off".format(self.ipAddress))
-        while True:
-            if self.GetPowerState() == "off":
-                break
-            time.sleep(sfdefaults.TIME_SECOND)
+        if self.vm:
+            self.vm.PowerOff()
+
+        else:
+            self.IPMICommand("chassis power off")
+            self.log.info("Waiting for {} to turn off".format(self.ipAddress))
+            while True:
+                if self.GetPowerState() == "off":
+                    break
+                time.sleep(sfdefaults.TIME_SECOND)
 
     def GetPowerState(self):
         """
@@ -240,15 +272,18 @@ class SFNode(object):
         Returns:
             A string with the current power state (str)
         """
-        stdout = self.IPMICommand("chassis power status")
-        m = re.search(r"Chassis Power is (\S+)", stdout)
-        if m:
-            return m.group(1)
-        raise SolidFireError("Could not determine power state")
+        if self.vm:
+            return self.vm.GetPowerState()
+        else:
+            stdout = self.IPMICommand("chassis power status")
+            m = re.search(r"Chassis Power is (\S+)", stdout)
+            if m:
+                return m.group(1)
+            raise SolidFireError("Could not determine power state")
 
     def WaitForDown(self):
         """
-        Wait for this node to be down and no longer responding on the network
+        Wait for this node to be no longer responding on the network
         """
         self.log.info("Waiting for {} to go down".format(self.ipAddress))
         while (netutil.Ping(self.ipAddress)):
@@ -256,15 +291,44 @@ class SFNode(object):
 
     def WaitForOff(self, timeout=180):
         """
+        Wait for this node's power state to be OFF
+        This is checking a state, not a transition
         """
-        self.log.info("Waiting for {} to power off".format(self.ipAddress))
         start_time = time.time()
         while True:
             if self.GetPowerState() == "off":
                 break
             if time.time() - start_time > timeout:
                 raise TimeoutError("Timeout waiting for node {} to power off".format(self.ipAddress))
-            time.sleep(1)
+            time.sleep(2 * sfdefaults.TIME_SECOND)
+
+    def WaitForOn(self, timeout=300):
+        """
+        Wait for this node's power state to be ON
+        This is checking a state, not a transition
+        """
+        start_time = time.time()
+        while True:
+            if self.GetPowerState() == "on":
+                break
+            if time.time() - start_time > timeout:
+                raise TimeoutError("Timeout waiting for node {} to power on".format(self.ipAddress))
+            time.sleep(2 * sfdefaults.TIME_SECOND)
+
+    def WaitForPing(self, timeout=300):
+        """
+        Wait for the IP of this node t be pingable
+
+        Args:
+            timeout:        how long to wait for the node
+        """
+        start_time = time.time()
+        self.log.info("Waiting for {} to be pingable".format(self.ipAddress))
+        while (not netutil.Ping(self.ipAddress)):
+            time.sleep(sfdefaults.TIME_SECOND)
+            current_time = time.time()
+            if current_time - start_time >= timeout:
+                raise TimeoutError("Timeout waiting for node {} to come up".format(self.ipAddress))
 
     def WaitForUp(self, timeout=600, initialWait=20):
         """
@@ -587,37 +651,52 @@ class SFNode(object):
         Returns:
             A string MAC address (str)
         """
-        ex = None
-        with SSHConnection(self.ipmiIP, self.ipmiUsername, self.ipmiPassword) as ssh:
-            # R630
-            _, stdout, _ = ssh.RunCommand("racadm get NIC.VndrConfigPage.3.MacAddr", pipeFail=False)
-            for line in stdout.split("\n"):
-                m = re.match(r"error_tag\s+:\s(.+)$", line.strip())
-                if m:
-                    ex = SolidFireError("racadm command failed: {}".format(m.group(1)))
-                    break
-                if line.startswith("ERROR"):
-                    ex = SolidFireError("racadm command failed: {}".format(line))
-                    break
-                m = re.match(r"MacAddr=(\S+)", line.strip())
-                if m:
-                    return m.group(1)
-            # R620
-            _, stdout, _ = ssh.RunCommand("racadm get NIC.VndrConfigGroup.3.MacAddr", pipeFail=False)
-            for line in stdout.split("\n"):
-                m = re.match(r"error_tag\s+:\s(.+)$", line.strip())
-                if m:
-                    ex = SolidFireError("racadm command failed: {}".format(m.group(1)))
-                    break
-                if line.startswith("ERROR"):
-                    ex = SolidFireError("racadm command failed: {}".format(line))
-                    break
-                m = re.match(r"MacAddr=(\S+)", line.strip())
-                if m:
-                    return m.group(1)
-        if ex:
-            raise ex
-        raise SolidFireError("Could not find MAC address")
+        if self.vm:
+            return self.vm.GetPXEMacAddress()
+
+        else:
+            ex = None
+            with SSHConnection(self.ipmiIP, self.ipmiUsername, self.ipmiPassword) as ssh:
+                # R630
+                _, stdout, _ = ssh.RunCommand("racadm get NIC.VndrConfigPage.3.MacAddr", pipeFail=False)
+                for line in stdout.split("\n"):
+                    m = re.match(r"error_tag\s+:\s(.+)$", line.strip())
+                    if m:
+                        ex = SolidFireError("racadm command failed: {}".format(m.group(1)))
+                        break
+                    if line.startswith("ERROR"):
+                        ex = SolidFireError("racadm command failed: {}".format(line))
+                        break
+                    m = re.match(r"MacAddr=(\S+)", line.strip())
+                    if m:
+                        return m.group(1)
+                # R620
+                _, stdout, _ = ssh.RunCommand("racadm get NIC.VndrConfigGroup.3.MacAddr", pipeFail=False)
+                for line in stdout.split("\n"):
+                    m = re.match(r"error_tag\s+:\s(.+)$", line.strip())
+                    if m:
+                        ex = SolidFireError("racadm command failed: {}".format(m.group(1)))
+                        break
+                    if line.startswith("ERROR"):
+                        ex = SolidFireError("racadm command failed: {}".format(line))
+                        break
+                    m = re.match(r"MacAddr=(\S+)", line.strip())
+                    if m:
+                        return m.group(1)
+            if ex:
+                raise ex
+            raise SolidFireError("Could not find MAC address")
+
+    def SetPXEBoot(self):
+        """
+        Set the boot order of the node so that it will PXE boot before local disk
+        """
+        if self.vm:
+            self.vm.SetPXEBoot()
+
+        else:
+            # TODO - implement set PXE boot order for physical nodes
+            pass
 
     def Ping(self):
         """
