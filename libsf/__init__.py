@@ -795,6 +795,7 @@ class SolidFireBootstrapAPI(SolidFireAPI):
         params["username"] = username
         params["password"] = password
         params["nodes"] = self.GetBootstrapNodes()
+        params["acceptEula"] = True
         if len(params["nodes"]) == 1:
             self.CreateStandaloneCluster(mvip, svip, username, password)
             return
