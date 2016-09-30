@@ -5,6 +5,7 @@ import calendar as _calendar
 import datetime as _datetime
 import functools as _functools
 import inspect as _inspect
+import json as _json
 import os as _os
 import re as _re
 import socket as _socket
@@ -708,6 +709,18 @@ def HumanizeWWN(hexWWN):
         pretty += ':' + hexWWN[i:i+2]
     return pretty.strip(":")
 
+def PrettyJSON(obj):
+    """
+    Get a pretty printed representation of an object
+
+    Args:
+        obj:    a dictionary to pretty-fy (dict)
+
+    Returns:
+        A string of pretty JSON (str)
+    """
+    return _json.dumps(obj, indent=2, sort_keys=True)
+
 # ===================================================================================================
 #  Misc
 # ===================================================================================================
@@ -780,3 +793,17 @@ def GetFilename(baseName):
         idx += 1
         filename = "{}.{}".format(baseName, idx)
     return filename
+
+def EnsureKeys(dictionary, keyList, defaultValue=None):
+    """
+    Ensure that the given dictionary contains the given keys.
+    If the dict does not have the key, create it with the given default value
+
+    Args:
+        dictionary:     the dict to operate on (dict)
+        keyList:        the keys to ensure (list of str)
+        defaultValue    the default value to set if the key does not exist
+    """
+    for keyname in keyList:
+        if keyname not in dictionary:
+            dictionary[keyname] = defaultValue
