@@ -20,42 +20,54 @@ stop_on_error = False               # Behavior when an error occurs
 use_multiprocessing = False         # Use multiprocessing instead of multithreading
 all_api_versions = [                # All known endpoint versions
     0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 7.1, 7.2, 7.3, 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, 9.0]
+parallel_thresh = 5                 # Run multi-client actions in parallel if there are more than this many
+parallel_max = 20                   # Run at most this many multi-client actions in parallel
+parallel_calls_min = 2              # Run multiple operations in parallel if there are at least this many
+parallel_calls_max = 100            # Run at most this many operations in parallel
+xenapi_parallel_calls_thresh = 2    # Run multiple XenServer API operations in parallel if there are more than this many
+xenapi_parallel_calls_max = 5       # Run at most this many parallel operations with XenServer API
 
 # =============================================================================
 # Default Values
 #
 # DO NOT USE AN EMPTY LIST [] OR EMPTY DICT {} FOR ANY OF THESE VALUES
 #
+
+# CLuster/node
 mvip = None                         # Cluster MVIP
 svip = None                         # Cluster SVIP
-username = "admin"                  # Cluster admin username
-password = "admin"                  # Cluster admin password
 node_ips = None                     # List of node IP addresses
-ssh_user = "root"                   # Cluster node SSH username
-ssh_pass = "password"               # Cluster node ssh password
-ipmi_user = "root"                  # IPMI username
-ipmi_pass = "calvin"                # IPMI password
 min_iops = 100                      # QoS nin IOPS
 max_iops = 100000                   # QoS max IOPS
 burst_iops = 100000                 # QoS burst IOPS
-client_ips = None                   # List of client IP addresses
-client_user = "root"                # Client SSH username
-client_pass = "password"            # Client SSH password
-client_volume_sort = "iqn"          # Sort order for displaying client volumes
-login_order = "serial"              # Order to log in to volumes on the client (serial or parallel)
-auth_type = "chap"                  # iSCSI auth type - chap or none
-parallel_thresh = 5                 # Run multi-client actions in parallel if there are more than this many
-parallel_max = 20                   # Run at most this many multi-client actions in parallel
-parallel_calls_min = 2              # Run multiple operations in parallel if there are at least this many
-parallel_calls_max = 100            # Run at most this many operations in parallel
 fault_whitelist = [                 # Ignore these faults if they are present on the cluster
     "clusterFull",
     "clusterIOPSAreOverProvisioned",
     "nodeHardwareFault"
 ]
+rtfi_options = "sf_auto=1,sf_secure_erase=0"
+username = "admin"                  # Cluster admin username
+password = "admin"                  # Cluster admin password
+ssh_user = "root"                   # Cluster node SSH username
+ssh_pass = "password"               # Cluster node ssh password
+ipmi_user = "root"                  # IPMI username
+ipmi_pass = "calvin"                # IPMI password
+
+# CLients
+client_ips = None                   # List of client IP addresses
+client_user = "root"                # Client SSH username
+client_pass = "password"            # Client SSH password
+client_volume_sort = "iqn"          # Sort order for displaying client volumes
+
+# Volumes
+login_order = "serial"              # Order to log in to volumes on the client (serial or parallel)
+auth_type = "chap"                  # iSCSI auth type - chap or none
+connection_type = "iscsi"           # Type of volume connection (FC or iSCSI)
 volume_access = "readWrite"         # Volume access level
-vdbench_inputfile = "vdbench_input" # Input file for vdbench
-vdbench_outputdir = "output.tod"    # Output directory for vdbench
+
+# VDbench
+vdbench_inputfile = "vdbench_input"         # Input file for vdbench
+vdbench_outputdir = "output.tod"            # Output directory for vdbench
 vdbench_workload = "rdpct=50,seekpct=random,xfersize=8k"    # IO workload to run
 vdbench_data_errors = 5             # How many IO errors to fail vdbench after
 vdbench_compratio = 2               # IO compression ratio
@@ -65,13 +77,22 @@ vdbench_interval = 10               # How often to report results
 vdbench_threads = 4                 # Queue depth per device
 vdbench_warmup = 0                  # How long to warmup before recording results
 vdbench_data_vaidation = True       # Use data validation
+
+# Infrastructure
 nfs_ip = "192.168.154.7"            # The IP address of the main NFS datastore
 nfs_mount_point = "/mnt/nfs"        # The mount point for the NFS datastore
-email_notify = None                 # List of email addresses to notification
-email_from = "testscript@example.com"   # Email address to send notifications from
-smtp_server = "aspmx.l.google.com"  # SMTP server for sending email
-host_user = "root"                  # Hypervisor host username
-host_pass = "password"              # Hypervisor host password
+email_notify = None                 # List of email addresses to send notifications to
+email_from = "testscript@example.com"     # Email address to send notifications from
+smtp_server = "aspmx.l.google.com"        # SMTP server for sending email
+hipchat_user = "testscript"
+hipchat_color = "gray"
+pxe_server = "192.168.100.4"        # PXE server to use to RTFI
+pxe_username = "root"               # PXE server username
+pxe_password = "password"           # PXE server password
+
+# Virtualization
+vmhost_user = "root"                # Hypervisor host username
+vmhost_pass = "solidfire"           # Hypervisor host password
 vmhost_kvm = None                   # KVM hypervisor host
 kvm_qcow2_name = "kvm-ubuntu-gold.qcow2"    # KVM template name
 kvm_qcow2_path = nfs_mount_point + "/" + kvm_qcow2_name     # KVM qcow2 path
@@ -80,34 +101,17 @@ kvm_cpu_count = 1                   # KVM cpu count
 kvm_mem_size = 512                  # KVM memory size
 kvm_os = "linux"                    # KVM OS type
 kvm_clone_name = "KVM-clone"        # KVM Clone name
-kvm_network = "PrivateNet"           # KVM network bridge
+kvm_network = "PrivateNet"          # KVM network bridge
 kvm_connection = "tcp"              # KVM connection type
 vmhost_xen = None                   # XenServer hypervisor host
-xenapi_parallel_calls_thresh = 2    # Run multiple XenServer API operations in parallel if there are more than this many
-xenapi_parallel_calls_max = 5       # Run at most this many parallel operations with XenServer API
-esx_vm_count = 40                   # Number of VMs to make
-esx_nfs_path = "/templates/esx50-templates"         # Path of ESX images on NFS Datastore
-esx_nfs_local_path = "ESX-Templates-NFS"            # Name of the NFS Datastore
-esx_template_path = "ubuntu-template-vdbench.vmtx"  # Path to the template VM image on NFS Datastore
-esx_parent_folder = "Test-VMs"                      # Parent folder for test VMS
-esx_mgmt_server = "192.168.144.20"                  # Mgmt Server for ESXi
-esx_vmhost = "192.168.135.50"                       # VM host for ESXi
-qmetry_soap_url = "http://example.qmetry.com/qmetryapp/WEB-INF/ws/service.php?wsdl"
-qmetry_username = "autouser"
-qmetry_password = "password"
-qmetry_project = "proj"
-qmetry_release = "rel"
-qmetry_build = "1"
-hipchat_user = "testscript"
-hipchat_color = "gray"
-connection_type = "iscsi"           # Type of volume connection (FC or iSCSI)
-rtfi_options = "sf_auto=1,sf_secure_erase=0"
-pxe_server = "192.168.100.4"        # PXE server to use to RTFI
-pxe_username = "root"               # PXE server username
-pxe_password = "password"           # PXE server password
+vmware_mgmt_server = "192.168.100.10"   # VMware vSphere management server
+vmware_mgmt_user = "script"             # VMware username
+vmware_mgmt_pass = "password"           # VMware password
+
 
 # =============================================================================
 # Timeouts
+
 bin_sync_timeout = 3600             # Bin sync timeout, sec
 slice_sync_timeout = 3600           # Slice sync timeout, sec
 fill_timeout = 43200                # Cluster fill timeout, sec
@@ -117,6 +121,7 @@ available_drives_timeout = 600      # Seconds to wait for available drives to sh
 
 # =============================================================================
 # Default Choices
+
 all_output_formats = [
     "json",
     "bash"
