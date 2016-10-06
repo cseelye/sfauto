@@ -3,6 +3,7 @@
 SolidFire node object and related data structures
 """
 import multiprocessing
+import platform
 import re
 import time
 
@@ -160,6 +161,11 @@ class SFNode(object):
         """
         if self.vm:
             raise NotImplementedError("Cannot execute IPMI commands against virtual machines")
+
+        if "Darwin" in platform.system():
+            retcode, _, _ = Shell("ipmitool -h 2>&1 | grep -- -I")
+            if retcode != 0:
+                raise SolidFireError("Please install an ipmitool that supports the -I option")
 
         cmd = "ipmitool -Ilanplus -U{} -P{} -H{} {}".format(self.ipmiUsername, self.ipmiPassword, self.ipmiIP, command)
         self.log.debug(cmd)
