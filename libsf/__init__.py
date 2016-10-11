@@ -181,7 +181,7 @@ class ConnectionError(SolidFireError):
             elif type(self.innerException) == ValueError:
                 self.message = 'Received invalid JSON'
                 self.retryable = True
-            elif type(self.innerException) == ssl.SSLError:
+            elif isinstance(self.innerException, ssl.SSLError):
                 # https://docs.python.org/2.7/library/ssl.html#functions-constants-and-exceptions
                 self.message = self.innerException.message
                 self.retryable = True
