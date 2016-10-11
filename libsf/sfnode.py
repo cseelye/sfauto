@@ -206,7 +206,7 @@ class SFNode(object):
 
     def Reboot(self, waitForUp=True):
         """
-        Gracefully reboot this node
+        Gracefully reboot this node (kexec on Element 8+)
 
         Args:
             waitForUp:  wait for the node to reboot and come back up
