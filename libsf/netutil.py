@@ -166,6 +166,20 @@ def CalculateNetmask(startIP, endIP):
     mask_int = 0xFFFFFFFF ^ start_ip_int ^ end_ip_int
     return IntegerToIP(mask_int)
 
+def IPInNetwork(ipAddress, network):
+    """Determine if an IP address is on a given network
+
+    Args:
+        ipAddress:  the address to test (str)
+        network:    the network (str)
+
+    Returns:
+        True if the address is in the network, False if it is not (bool)
+    """
+    ip_int = IPToInteger(ipAddress)
+    net_int = IPToInteger(network)
+    return ((ip_int & net_int) == net_int)
+
 def ffs(num):
     """Find the lowest order bit that is set
 
