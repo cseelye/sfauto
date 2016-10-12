@@ -128,6 +128,8 @@ def RtfiNodes(node_ips,
         raise InvalidArgumentError("If mac_addresses is specified, it must have the same number of elements as node_ips")
     if vm_names and len(node_ips) != len(vm_names):
         raise InvalidArgumentError("If vm_names is specified, it must have the same number of elements as node_ips")
+    if node_names and len(node_ips) != len(node_names):
+        raise InvalidArgumentError("If node_names is specified, it must have the same number of elements as node_ips")
 
     #
     # Find the build to RTFI to
