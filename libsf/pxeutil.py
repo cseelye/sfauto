@@ -48,6 +48,7 @@ def CreatePXEFile(macAddress,
     options = options.replace(",", " ")
 
     transformed_mac = macAddress.lower().replace(":", "-")
+    remote_filename = PXE_CONFIG_PATH.format(transformed_mac)
 
     # IP configuration params documented here:
     # https://www.kernel.org/doc/Documentation/filesystems/nfs/nfsroot.txt
@@ -80,20 +81,21 @@ LABEL BootLocal
            gateway=gateway,
            hostname=hostname)
 
-    log.debug("Sending PXE config file {} to server {} with contents:\n{}".format(transformed_mac, pxeServer, pxe_file_contents))
+    log.debug("Sending PXE config file {} to server {} with contents:\n{}".format(remote_filename, pxeServer, pxe_file_contents))
     with tempfile.NamedTemporaryFile() as temp:
         temp.write(pxe_file_contents)
         temp.flush()
 
         with SSHConnection(pxeServer, pxeUser, pxePassword) as ssh:
-            ssh.PutFile(temp.name, PXE_CONFIG_PATH.format(transformed_mac))
+            ssh.PutFile(temp.name, remote_filename)
 
 def DeletePXEFile(macAddress, pxeServer=sfdefaults.pxe_server, pxeUser=sfdefaults.pxe_username, pxePassword=sfdefaults.pxe_password):
     """
     Remove a PXE config file from the PXE server
     """
     transformed_mac = macAddress.lower().replace(":", "-")
-    log.debug("Removing PXE config file {} from server {}".format(transformed_mac, pxeServer))
+    remote_filename = PXE_CONFIG_PATH.format(transformed_mac)
+    log.debug("Removing PXE config file {} from server {}".format(remote_filename, pxeServer))
     with SSHConnection(pxeServer, pxeUser, pxePassword) as ssh:
-        ssh.RunCommand("rm -f " + PXE_CONFIG_PATH.format(transformed_mac))
+        ssh.RunCommand("rm -f " + remote_filename)
 
