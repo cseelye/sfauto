@@ -37,6 +37,7 @@ xenapi_parallel_calls_max = 5       # Run at most this many parallel operations 
 mvip = None                         # Cluster MVIP
 svip = None                         # Cluster SVIP
 node_ips = None                     # List of node IP addresses
+ipmi_ips = None                     # List of node IPMI IP addresses
 min_iops = 100                      # QoS nin IOPS
 max_iops = 100000                   # QoS max IOPS
 burst_iops = 100000                 # QoS burst IOPS
@@ -89,10 +90,16 @@ hipchat_color = "gray"
 pxe_server = "192.168.100.4"        # PXE server to use to RTFI
 pxe_username = "root"               # PXE server username
 pxe_password = "password"           # PXE server password
+dns_servers = {                     # List of DNS servers for each site
+    "ZDC" : "172.30.254.1",
+    "VWC" : "172.26.254.1",
+    "BDR" : "172.24.254.1",
+    "DEN" : "10.117.30.11",
+}
 
 # Virtualization
 vmhost_user = "root"                # Hypervisor host username
-vmhost_pass = "solidfire"           # Hypervisor host password
+vmhost_pass = "password"            # Hypervisor host password
 vmhost_kvm = None                   # KVM hypervisor host
 kvm_qcow2_name = "kvm-ubuntu-gold.qcow2"    # KVM template name
 kvm_qcow2_path = nfs_mount_point + "/" + kvm_qcow2_name     # KVM qcow2 path
@@ -118,6 +125,7 @@ fill_timeout = 43200                # Cluster fill timeout, sec
 gc_timeout = 90                     # How long to wait (min) for GC to finish
 vlan_healthy_timeout = 300          # Seconds to wait for VLANs to be present and healthy on all cluster nodes
 available_drives_timeout = 600      # Seconds to wait for available drives to show up
+node_boot_timeout = 360             # Seconds for a node to boot up and be responding on the network
 
 # =============================================================================
 # Default Choices
@@ -187,6 +195,11 @@ all_numbering_types = [
 all_client_connection_types = [
     'fc',
     'iscsi'
+]
+all_network_config_options = [
+    "keep",
+    "clear",
+    "reconfigure",
 ]
 blacklisted_vm_names = [            # Names of VMs we are not allowed to operate on
     'jenkins',
