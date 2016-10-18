@@ -4,6 +4,7 @@ Helpers for network related
 """
 
 import ctypes
+from dns import resolver
 import email.encoders
 from email.mime.multipart import MIMEMultipart, MIMEBase
 from email.mime.text import MIMEText
@@ -13,9 +14,14 @@ import platform
 import smtplib
 import socket
 import struct
+from . import SolidFireError
 from . import shellutil
 
 LOCAL_SYS = platform.system()
+
+class HostNotFoundError(SolidFireError):
+    """Exception for NXDOMAIN errors that is rooted in the SolidFire exception hierarchy"""
+    pass
 
 def Ping(address):
     """
@@ -96,6 +102,25 @@ def SendEmail(emailTo,
         smtp.login(serverUsername,serverPassword)
     smtp.sendmail(emailFrom, send_to, msg.as_string())
     smtp.close()
+
+def ResolveHostname(hostname, nameserver):
+    """
+    Attempt to lookup a hostname to IP mapping
+
+    Args:
+        hostname:       the hostname to resolve
+        nameserver:     the DNS server to query
+
+    Returns:
+        A list of IP addresses the hostname resolves to (list of str)
+    """
+    res = resolver.Resolver()
+    res.nameservers = [nameserver]
+    try:
+        ans = res.query(hostname)
+        return [record.address for record in ans]
+    except resolver.NXDOMAIN as ex:
+        raise HostNotFoundError("Host {} not found".format(hostname), innerException=ex)
 
 def IPToInteger(ip):
     """Convert a string dotted quad IP address to an integer
