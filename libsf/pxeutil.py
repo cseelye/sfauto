@@ -18,8 +18,8 @@ def CreatePXEFile(macAddress,
                   baseOptions=sfdefaults.rtfi_options,
                   imageType="rtfi",
                   pxeServer=sfdefaults.pxe_server,
-                  pxeUser=sfdefaults.pxe_username,
-                  pxePassword=sfdefaults.pxe_password,
+                  pxeUser=sfdefaults.pxe_user,
+                  pxePassword=sfdefaults.pxe_pass,
                   bootNic="eth2",
                   ip=None,
                   netmask=None,
@@ -89,7 +89,7 @@ LABEL BootLocal
         with SSHConnection(pxeServer, pxeUser, pxePassword) as ssh:
             ssh.PutFile(temp.name, remote_filename)
 
-def DeletePXEFile(macAddress, pxeServer=sfdefaults.pxe_server, pxeUser=sfdefaults.pxe_username, pxePassword=sfdefaults.pxe_password):
+def DeletePXEFile(macAddress, pxeServer=sfdefaults.pxe_server, pxeUser=sfdefaults.pxe_user, pxePassword=sfdefaults.pxe_pass):
     """
     Remove a PXE config file from the PXE server
     """

@@ -58,19 +58,19 @@ RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 51, 54, 60, 61, 110]
     "password" : (StrType, sfdefaults.password),
     "ipmi_user" : (StrType, sfdefaults.ipmi_user),
     "ipmi_pass" : (StrType, sfdefaults.ipmi_pass),
-    "netmask" : (OptionalValueType(IPv4AddressType), None),
-    "gateway" : (OptionalValueType(IPv4AddressType), None),
-    "nameserver" : (OptionalValueType(IPv4AddressType), None),
-    "domain" : (OptionalValueType(StrType), None),
-    "cip_ips" : (OptionalValueType(ItemList(IPv4AddressType)), None),
-    "cip_netmask" : (OptionalValueType(IPv4AddressType), None),
-    "cip_gateway" : (OptionalValueType(IPv4AddressType), None),
-    "pxe_server" : (OptionalValueType(IPv4AddressType), None),
-    "pxe_user" : (OptionalValueType(StrType), None),
-    "pxe_pass" : (OptionalValueType(StrType), None),
+    "mip_netmask" : (OptionalValueType(IPv4AddressType), sfdefaults.mip_netmask),
+    "mip_gateway" : (OptionalValueType(IPv4AddressType), sfdefaults.mip_gateway),
+    "nameserver" : (OptionalValueType(IPv4AddressType), sfdefaults.nameserver),
+    "domain" : (OptionalValueType(StrType), sfdefaults.domain),
+    "cip_ips" : (OptionalValueType(ItemList(IPv4AddressType)), sfdefaults.cip_ips),
+    "cip_netmask" : (OptionalValueType(IPv4AddressType), sfdefaults.cip_netmask),
+    "cip_gateway" : (OptionalValueType(IPv4AddressType), sfdefaults.cip_gateway),
+    "pxe_server" : (OptionalValueType(IPv4AddressType), sfdefaults.pxe_server),
+    "pxe_user" : (OptionalValueType(StrType), sfdefaults.pxe_user),
+    "pxe_pass" : (OptionalValueType(StrType), sfdefaults.pxe_pass),
     "mac_addresses" : (OptionalValueType(ItemList(StrType)), None),
-    "node_names" : (OptionalValueType(ItemList(StrType)), None),
-    "vm_names" : (OptionalValueType(ItemList(StrType)), None),
+    "node_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.node_names),
+    "vm_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.vm_names),
     "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vmware_mgmt_server),
     "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
     "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
@@ -87,8 +87,8 @@ def RtfiNodes(node_ips,
               password,
               ipmi_user,
               ipmi_pass,
-              netmask,
-              gateway,
+              mip_netmask,
+              mip_gateway,
               nameserver,
               domain,
               cip_ips,
@@ -228,8 +228,8 @@ def RtfiNodes(node_ips,
         net_info[node_ip]["vm_mgmt_server"] = vm_mgmt_server
         net_info[node_ip]["vm_mgmt_user"] = vm_mgmt_user
         net_info[node_ip]["vm_mgmt_pass"] = vm_mgmt_pass
-        net_info[node_ip]["netmask"] = netmask
-        net_info[node_ip]["gateway"] = gateway
+        net_info[node_ip]["netmask"] = mip_netmask
+        net_info[node_ip]["gateway"] = mip_gateway
         net_info[node_ip]["pxe"] = pxe_server
         net_info[node_ip]["domain"] = domain
         net_info[node_ip]["nameserver"] = nameserver
@@ -602,28 +602,28 @@ if __name__ == '__main__':
     parser.add_argument("--rtfi-type", required=True, choices=["pxe", "irtfi"],  default="irtfi", help="the RTFI process to use")
     parser.add_argument("--net-config", dest="configure_network", required=True, choices=sfdefaults.all_network_config_options, default="keep", help="how to configure the network on the node")
 
-    net_override_group = parser.add_argument_group("Network Overrides", description="These settings can be used to override the network settings from AT2, or provide them if the node does not exist in AT2")
+    net_override_group = parser.add_argument_group("Network Overrides", description="These settings can be used to override the network settings from AT2, or provide them if the node does not exist in the AT2 resource database")
     net_override_group.add_argument("-I", "--ipmi-ips", type=ItemList(IPv4AddressType), default=sfdefaults.ipmi_ips, metavar="IP1,IP2...", help="the IPMI IP addresses for the nodes")
     net_override_group.add_argument("--ipmi-user", type=StrType, default=sfdefaults.ipmi_user, metavar="USERNAME", help="the IPMI username for all nodes")
     net_override_group.add_argument("--ipmi-pass", type=StrType, default=sfdefaults.ipmi_pass, metavar="PASSWORD", help="the IPMI password for all nodes")
     net_override_group.add_argument("--mac-addresses", type=ItemList(StrType), metavar="MAC1,MAC2...", help="the MAC addresses for the nodes")
-    net_override_group.add_argument("--node-names", type=ItemList(StrType), metavar="HOSTNAME1,HOSTNAME2...", help="the hostnames for the nodes")
-    net_override_group.add_argument("--pxe-server", type=IPv4AddressType, metavar="IP", required=False, help="use this PXE server for all nodes during RTFI")
-    net_override_group.add_argument("--pxe-user", type=StrType, metavar="USERNAME", help="the PXE server username for all nodes")
-    net_override_group.add_argument("--pxe-pass", type=StrType, metavar="PASSWORD", help="the PXE server password for all nodes")
-    net_override_group.add_argument("--netmask", type=IPv4AddressType, required=False, help="use this netmask for all nodes during RTFI")
-    net_override_group.add_argument("--gateway", type=IPv4AddressType, required=False, help="use this gateway for all nodes during RTFI")
+    net_override_group.add_argument("--node-names", type=ItemList(StrType), default=sfdefaults.node_names, metavar="HOSTNAME1,HOSTNAME2...", help="the hostnames for the nodes")
+    net_override_group.add_argument("--pxe-server", type=IPv4AddressType, default=sfdefaults.pxe_server, metavar="IP", required=False, help="use this PXE server for all nodes during RTFI")
+    net_override_group.add_argument("--pxe-user", type=StrType, default=sfdefaults.pxe_user, metavar="USERNAME", help="the PXE server username for all nodes")
+    net_override_group.add_argument("--pxe-pass", type=StrType, default=sfdefaults.pxe_pass, metavar="PASSWORD", help="the PXE server password for all nodes")
+    net_override_group.add_argument("--mip-netmask", type=IPv4AddressType, default=sfdefaults.mip_netmask, required=False, help="use this netmask for all nodes during RTFI")
+    net_override_group.add_argument("--mip-gateway", type=IPv4AddressType, default=sfdefaults.mip_gateway, required=False, help="use this gateway for all nodes during RTFI")
     net_override_group.add_argument("--nameserver", type=IPv4AddressType, required=False, help="use this DNS server for all nodes to find them in DNS after RTFI")
     net_override_group.add_argument("--domain", type=StrType, required=False, help="use this DNS search domain for all nodes to find them in DNS after RTFI")
-    net_override_group.add_argument("--cip-ips", type=ItemList(IPv4AddressType), default=None, metavar="CIP1,CIP2...", help="the 10G IP addresses for the nodes")
-    net_override_group.add_argument("--cip-netmask", type=IPv4AddressType, default=None, required=False, help="the 10G netmask for all nodes")
-    net_override_group.add_argument("--cip-gateway", type=IPv4AddressType, default=None, required=False, help="the 10G gateway for all nodes")
+    net_override_group.add_argument("--cip-ips", type=ItemList(IPv4AddressType), default=sfdefaults.cip_ips, metavar="CIP1,CIP2...", help="the 10G IP addresses for the nodes")
+    net_override_group.add_argument("--cip-netmask", type=IPv4AddressType, default=sfdefaults.cip_netmask, required=False, help="the 10G netmask for all nodes")
+    net_override_group.add_argument("--cip-gateway", type=IPv4AddressType, default=sfdefaults.cip_gateway, required=False, help="the 10G gateway for all nodes")
 
     vm_group = parser.add_argument_group("Virtual Node Options", description="These settings are required for virt nodes, along with the network override settings.")
     vm_group.add_argument("--vm-names", type=StrType, metavar="NAME", help="the name of the VMs to RTFI")
-    vm_group.add_argument("-s", "--vm-mgmt-server", type=IPv4AddressType, default=sfdefaults.vmware_mgmt_server, metavar="IP", help="the management server for the VMs (vSphere for VMware, hypervisor for KVM)")
-    vm_group.add_argument("-e", "--vm-mgmt-user", type=StrType, default=sfdefaults.vmware_mgmt_user, help="the VM management server username")
-    vm_group.add_argument("-a", "--vm-mgmt-pass", type=StrType, default=sfdefaults.vmware_mgmt_pass, help="the VM management server password")
+    vm_group.add_argument("-s", "--vm-mgmt-server", type=IPv4AddressType, default=sfdefaults.vm_mgmt_server, metavar="IP", help="the management server for the VMs (vSphere for VMware, hypervisor for KVM)")
+    vm_group.add_argument("-e", "--vm-mgmt-user", type=StrType, default=sfdefaults.vm_mgmt_user, help="the VM management server username")
+    vm_group.add_argument("-a", "--vm-mgmt-pass", type=StrType, default=sfdefaults.vm_mgmt_pass, help="the VM management server password")
 
     special_group = parser.add_argument_group("Special Options")
     special_group.add_argument("--fail", type=StrType, required=False, help="inject an error during this RTFI state")

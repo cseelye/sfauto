@@ -36,8 +36,17 @@ xenapi_parallel_calls_max = 5       # Run at most this many parallel operations 
 # CLuster/node
 mvip = None                         # Cluster MVIP
 svip = None                         # Cluster SVIP
+node_names = None                   # List of node hostnames
 node_ips = None                     # List of node IP addresses
+cip_ips = None                      # List of node 10G addresses
 ipmi_ips = None                     # List of node IPMI IP addresses
+mip_netmask = None                  # Node 1G subnet mask
+mip_gateway = None                  # Node 1G gateway
+cip_netmask = None                  # Node 10G netmask
+cip_gateway = None                  # Node 10G gateway
+nameserver = None                   # DNS server
+domain = None                       # DNS domain
+vm_names = None                     # Virtual node VM names
 min_iops = 100                      # QoS nin IOPS
 max_iops = 100000                   # QoS max IOPS
 burst_iops = 100000                 # QoS burst IOPS
@@ -54,7 +63,7 @@ ssh_pass = "password"               # Cluster node ssh password
 ipmi_user = "root"                  # IPMI username
 ipmi_pass = "calvin"                # IPMI password
 
-# CLients
+# Clients
 client_ips = None                   # List of client IP addresses
 client_user = "root"                # Client SSH username
 client_pass = "password"            # Client SSH password
@@ -87,16 +96,39 @@ email_from = "testscript@example.com"     # Email address to send notifications 
 smtp_server = "aspmx.l.google.com"        # SMTP server for sending email
 hipchat_user = "testscript"
 hipchat_color = "gray"
-pxe_server = "192.168.100.4"        # PXE server to use to RTFI
-pxe_username = "root"               # PXE server username
-pxe_password = "password"           # PXE server password
+pxe_server = None                   # PXE server to use to RTFI
+pxe_user = None                     # PXE server username
+pxe_pass = None                     # PXE server password
 dns_servers = {                     # List of DNS servers for each site
-    "ZDC" : "172.30.254.1",
-    "VWC" : "172.26.254.1",
-    "BDR" : "172.24.254.1",
-    "DEN" : "10.117.30.11",
+    "ZDC" : {
+        "nameserver" : "172.30.254.1",
+        "domain" : "zdc.solidfire.net",
+    },
+    "VWC" : {
+        "nameserver" : "172.26.254.1",
+        "domain" : "eng.solidfire.net",
+    },
+    "BDR" : {
+        "nameserver" : "172.24.254.1",
+        "domain" : "eng.solidfire.net",
+    },
+    "DEN" : {
+        "nameserver" : "10.117.30.11",
+        "domain" : "one.den.solidfire.net",
+    },
 }
-
+pxe_servers = {
+    "BDR" : {
+        "address" : "192.168.100.4",
+        "username" : "root",
+        "password" : "SolidF1r3",
+    },
+    "DEN" : {
+        "address" : "10.117.30.30",
+        "username" : "hciat2pxe",
+        "password" : "6#&Pr#DuR?-uVX?1",
+    }
+}
 # Virtualization
 vmhost_user = "root"                # Hypervisor host username
 vmhost_pass = "password"            # Hypervisor host password
@@ -111,6 +143,10 @@ kvm_clone_name = "KVM-clone"        # KVM Clone name
 kvm_network = "PrivateNet"          # KVM network bridge
 kvm_connection = "tcp"              # KVM connection type
 vmhost_xen = None                   # XenServer hypervisor host
+
+vm_mgmt_server = None                   # Virtualization management server (vSphere for VMware, hypervisor for KVM)
+vm_mgmt_user = None                     # VM management server username
+vm_mgmt_pass = None                     # VM management server password
 vmware_mgmt_server = "192.168.100.10"   # VMware vSphere management server
 vmware_mgmt_user = "script"             # VMware username
 vmware_mgmt_pass = "password"           # VMware password
