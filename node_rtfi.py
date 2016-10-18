@@ -8,11 +8,12 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs, SetThreadLogPrefix
 from libsf.sfnode import SFNode
-from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SelectionType, BoolType, StrType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SelectionType, StrType
 from libsf.util import GetFilename, SolidFireVersion, ParseTimestamp, PrettyJSON, EnsureKeys
 from libsf.netutil import CalculateNetwork, IPInNetwork
-from libsf import sfdefaults, threadutil, pxeutil, labutil
+from libsf import sfdefaults, threadutil, pxeutil, labutil, netutil
 from libsf import SSHConnection, SolidFireError, ConnectionError, InvalidArgumentError, TimeoutError
+import json
 import random
 import re
 import time
@@ -45,35 +46,40 @@ RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 51, 54, 60, 61, 110]
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
-    "node_ips" : (ItemList(IPv4AddressType), None),
+    "node_ips" : (ItemList(IPv4AddressType), sfdefaults.node_ips),
     "repo" : (StrType, None),
     "version" : (StrType, None),
     "rtfi_type" : (SelectionType(["pxe", "irtfi"]), "irtfi"),
-    "preserve_networking" : (BoolType, True),
+    "configure_network" : (SelectionType(sfdefaults.all_network_config_options), "keep"),
     "image_type" : (SelectionType(["rtfi", "fdva"]), "rtfi"),
     "fail" : (OptionalValueType(StrType), None),
-    "ipmi_ips" : (OptionalValueType(ItemList(IPv4AddressType)), None),
+    "ipmi_ips" : (OptionalValueType(ItemList(IPv4AddressType)), sfdefaults.ipmi_ips),
     "username" : (StrType, sfdefaults.username),
     "password" : (StrType, sfdefaults.password),
     "ipmi_user" : (StrType, sfdefaults.ipmi_user),
     "ipmi_pass" : (StrType, sfdefaults.ipmi_pass),
     "netmask" : (OptionalValueType(IPv4AddressType), None),
     "gateway" : (OptionalValueType(IPv4AddressType), None),
-    "pxe_server" : (OptionalValueType(IPv4AddressType), sfdefaults.pxe_server),
-    "pxe_user" : (OptionalValueType(str), sfdefaults.pxe_username),
-    "pxe_pass" : (OptionalValueType(str), sfdefaults.pxe_password),
-    "mac_addresses" : (OptionalValueType(ItemList(str)), None),
-    "node_names" : (OptionalValueType(ItemList(str)), None),
-    "vm_names" : (OptionalValueType(ItemList(str)), None),
+    "nameserver" : (OptionalValueType(IPv4AddressType), None),
+    "domain" : (OptionalValueType(StrType), None),
+    "cip_ips" : (OptionalValueType(ItemList(IPv4AddressType)), None),
+    "cip_netmask" : (OptionalValueType(IPv4AddressType), None),
+    "cip_gateway" : (OptionalValueType(IPv4AddressType), None),
+    "pxe_server" : (OptionalValueType(IPv4AddressType), None),
+    "pxe_user" : (OptionalValueType(StrType), None),
+    "pxe_pass" : (OptionalValueType(StrType), None),
+    "mac_addresses" : (OptionalValueType(ItemList(StrType)), None),
+    "node_names" : (OptionalValueType(ItemList(StrType)), None),
+    "vm_names" : (OptionalValueType(ItemList(StrType)), None),
     "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vmware_mgmt_server),
-    "vm_mgmt_user" : (OptionalValueType(str), sfdefaults.vmware_mgmt_user),
-    "vm_mgmt_pass" : (OptionalValueType(str), sfdefaults.vmware_mgmt_pass),
+    "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
+    "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
 })
 def RtfiNodes(node_ips,
               repo,
               version,
               rtfi_type,
-              preserve_networking,
+              configure_network,
               image_type,
               fail,
               ipmi_ips,
@@ -83,6 +89,11 @@ def RtfiNodes(node_ips,
               ipmi_pass,
               netmask,
               gateway,
+              nameserver,
+              domain,
+              cip_ips,
+              cip_netmask,
+              cip_gateway,
               pxe_server,
               pxe_user,
               pxe_pass,
@@ -101,7 +112,7 @@ def RtfiNodes(node_ips,
         password:               the node admin password (string)
         repo:                   the repo/branch to RTFI to
         version:                the version number to RTFI to
-        preserve_networking:    keep the current hostname/network config of the nodes
+        configure_network:      how to configure the hostname/network of the nodes (keep, clear, reconfigure)
         rtfi_type:              type of RTFI (pxe, irtfi)
         image_type:             type of image (rtfi, fdva)
         fail:                   inject a failure during this RTFI state
@@ -110,6 +121,11 @@ def RtfiNodes(node_ips,
         ipmi_pass:              the IPMI password
         netmask:                the netmask for the nodes (only for PXE, override auto discovery)
         gateway:                the gateway for the nodes (only for PXE, override auto discovery)
+        nameserver:             the DNS server to discover the nodes after RTFI (only for PXE when clearing the network config, override auto discovery)
+        domain:                 the DNS search domain to discover the nodes after RTFI (only for PXE when clearing the network config, override auto discovery)
+        cip_ips:                the 10G IP addresses for the nodes (overrides auto discovery)
+        cip_netmask:            the 10G netmask for the nodes (overrides auto discovery)
+        cip_gateway:            the 10G gateway for the nodes (overrides auto discovery)
         pxe_server:             the PXE server for the nodes (only for PXE, override auto discovery)
         pxe_user:               the PXE server username for the nodes (only for PXE, override auto discovery)
         pxe_pass:               the PXE server password for the nodes (only for PXE, override auto discovery)
@@ -130,6 +146,8 @@ def RtfiNodes(node_ips,
         raise InvalidArgumentError("If vm_names is specified, it must have the same number of elements as node_ips")
     if node_names and len(node_ips) != len(node_names):
         raise InvalidArgumentError("If node_names is specified, it must have the same number of elements as node_ips")
+    if cip_ips and len(node_ips) != len(cip_ips):
+        raise InvalidArgumentError("If cip_ips is specified, it must have the same number of elements as node_ips")
 
     #
     # Find the build to RTFI to
@@ -192,6 +210,12 @@ def RtfiNodes(node_ips,
     elif rtfi_type == "pxe":
         required_keys = ["ip", "hostname", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "ipmi", "ipmi_user", "ipmi_pass"]
 
+    if configure_network == "clear" or configure_network == "reconfigure":
+        required_keys += ["nameserver", "domain"]
+
+    if configure_network == "reconfigure":
+        required_keys += ["cip", "cip_netmask"]
+
     for idx, node_ip in enumerate(node_ips):
         # Set defaults and any user supplied info
         net_info[node_ip] = {}
@@ -207,6 +231,8 @@ def RtfiNodes(node_ips,
         net_info[node_ip]["netmask"] = netmask
         net_info[node_ip]["gateway"] = gateway
         net_info[node_ip]["pxe"] = pxe_server
+        net_info[node_ip]["domain"] = domain
+        net_info[node_ip]["nameserver"] = nameserver
 
         if ipmi_ips:
             net_info[node_ip]["ipmi"] = ipmi_ips[idx]
@@ -217,6 +243,11 @@ def RtfiNodes(node_ips,
         if vm_names:
             net_info[node_ip]["vm_name"] = vm_names[idx]
             net_info[node_ip]["hostname"] = vm_names[idx]
+        if cip_ips:
+            net_info[node_ip]["cip"] = cip_ips[idx]
+            net_info[node_ip]["cip_netmask"] = cip_netmask
+            net_info[node_ip]["cip_gateway"] = cip_gateway
+
 
         # Look in AT2 for any missing information
         if not all([net_info[node_ip][key] for key in required_keys]):
@@ -233,17 +264,18 @@ def RtfiNodes(node_ips,
                 net_info[node_ip][key] = net_info[node_ip][key] or at2_net_info[node_ip].get(key, None)
 
         # Make sure we have all of the info we need
-        missing = set(required_keys) - set(net_info[node_ip].keys())
+        missing = set(required_keys) - set([key for key in net_info[node_ip].keys() if net_info[node_ip][key]])
         if missing:
             raise InvalidArgumentError("Could not find required info for {}: {}".format(node_ip, ", ".join(missing)))
         node_network = CalculateNetwork(net_info[node_ip]["ip"], net_info[node_ip]["netmask"])
         if not IPInNetwork(net_info[node_ip]["gateway"], node_network):
             raise InvalidArgumentError("The gateway ({}) must be on the same network as the node IP ({})".format(net_info[node_ip]["gateway"], net_info[node_ip]["ip"]))
+    log.debug2("net_info={}".format(json.dumps(net_info, sort_keys=True, indent=2)))
 
     #
     # Start a thread to RTFI and monitor each node
     #
-    log.info("RTFI {} nodes to {}-{}".format(len(node_ips), repo, version))
+    log.info("RTFI {} node{} to {}-{}".format(len(node_ips), "s" if len(node_ips) >1 else "", repo, version))
     pool = threadutil.GlobalPool()
     results = []
     for node_ip in node_ips:
@@ -251,7 +283,7 @@ def RtfiNodes(node_ips,
                                               image_type,
                                               repo,
                                               version,
-                                              preserve_networking,
+                                              configure_network,
                                               fail,
                                               net_info[node_ip],
                                               username,
@@ -280,7 +312,7 @@ def RtfiNodes(node_ips,
 
 
 @threadutil.threadwrapper
-def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, fail, net_info, username, password):
+def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, net_info, username, password):
     """RTFI a node"""
     log = GetLogger()
     SetThreadLogPrefix(net_info["ip"])
@@ -302,7 +334,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, fail,
         "sf_hostname={}-rtfi".format(net_info["hostname"]),
         "sf_agent={}".format(agent),
     ]
-    if preserve_networking:
+    if configure_network == "keep":
         rtfi_opts.extend(["sf_keep_hostname=1",
                           "sf_keep_network_config=1",
                           ])
@@ -350,7 +382,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, fail,
             elif SolidFireVersion(version) < SolidFireVersion("9.0.0.0"):
                 log.warning("This RTFI version supports incomplete status monitoring")
             elif SolidFireVersion(version) < SolidFireVersion("10.0.0.0"):
-                _monitor_v90(rtfi_type, node, net_info, startTimeout=360, preserveNetworking=preserve_networking)
+                _monitor_v90(rtfi_type, node, net_info, startTimeout=sfdefaults.node_boot_timeout, configureNetworking=configure_network)
             else:
                 log.warning("RTFI status monitoring not implemented for this Element version")
                 return False
@@ -386,14 +418,53 @@ def _NodeThread(rtfi_type, image_type, repo, version, preserve_networking, fail,
             log.warning("RTFI status monitoring not implemented for this Element version")
             return False
 
-    # Wait for the node to be fully up
-    if preserve_networking:
-        node.WaitForUp(initialWait=0, timeout=300)
+    # RTFI is done, now wait for the node to come back up
+    if configure_network == "keep":
+        node.WaitForUp(initialWait=0, timeout=sfdefaults.node_boot_timeout)
         log.info("Node is back up")
+    else:
+        # Try to resolve the node with DDNS
+        log.info("Waiting for node DDNS registration")
+        start_time = time.time()
+        while True:
+            if time.time() - start_time > sfdefaults.node_boot_timeout:
+                raise TimeoutError("Timeout waiting for node DDNS. The node may have failed to boot up")
+
+            # Original sites like BDR and ZDC resolve directly to the domain, like eng.solidfire.net
+            # New PearlWest resolves to one.domain or ten.domain for 1G and 10G DHCP addresses
+            # So we try both versions just in case
+            for node_ddns_hostname in ["{}-rtfi.{}".format(net_info["hostname"], net_info["domain"]),
+                                       "{}-rtfi.one.{}".format(net_info["hostname"], net_info["domain"])]:
+                temp_node_ip = None
+                try:
+                    ans = netutil.ResolveHostname(node_ddns_hostname, net_info["nameserver"])
+                    temp_node_ip = ans[0]
+                    node._SetInternalManagementIP(temp_node_ip)
+                    log.info("Node is up on IP {}".format(temp_node_ip))
+                    break
+                except SolidFireError:
+                    continue
+            if temp_node_ip:
+                break
+            time.sleep(2)
+
+    # Configure the network
+    if configure_network == "reconfigure":
+        log.info("Setting hostname to {}".format(net_info["hostname"]))
+        node.SetHostname(net_info["hostname"])
+        log.info("Configuring network")
+        node.SetNetworkInfo(onegIP=net_info["ip"],
+                            onegNetmask=net_info["netmask"],
+                            onegGateway=net_info["gateway"],
+                            dnsIP=net_info["nameserver"],
+                            dnsSearch=net_info["domain"],
+                            tengIP=net_info["cip"],
+                            tengNetmask=net_info["cip_netmask"],
+                            tengGateway=net_info["cip_gateway"])
 
     return True
 
-def _monitor_v90(rtfiType, node, netInfo, startTimeout=360, timeout=3600, agentID=None, preserveNetworking=True):
+def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
     """
     Monitor Fluorine RTFI status and return when RTFI is complete
     """
@@ -411,6 +482,7 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=360, timeout=3600, agentI
         try:
             status = node.GetAllRTFIStatus()
         except ConnectionError as ex:
+            log.debug2(str(ex))
             if not ex.IsRetryable() and ex.code not in RETRYABLE_RTFI_STATUS_ERRORS:
                 log.warning(str(ex))
             status = None
@@ -459,8 +531,8 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=360, timeout=3600, agentI
 
         # If the status is Coldboot, wait for the node to power off and come back
         if status and status[-1]["state"] == "Coldboot":
-            _handle_coldboot(node, preserveNetworking)
-            if not preserveNetworking:
+            _handle_coldboot(node)
+            if configureNetworking != "keep":
                 break
 
         # If the status indicates we are finished with RTFI, break
@@ -479,8 +551,7 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=360, timeout=3600, agentI
         if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
             raise TimeoutError("Timeout waiting for RTFI to complete")
 
-
-def _handle_coldboot(node, preserveNetworking):
+def _handle_coldboot(node):
     log = GetLogger()
 
     # Wait for the node to power down
@@ -497,10 +568,6 @@ def _handle_coldboot(node, preserveNetworking):
         log.info("Waiting for node to power on")
         time.sleep(50)
         node.WaitForOn(timeout=330)
-
-    # Wait for the node to be up on the network again
-    if preserveNetworking:
-        node.WaitForPing()
 
 def _check_and_log_new_status(status, startTime, agentID):
     log = GetLogger()
@@ -529,30 +596,37 @@ def _check_and_log_new_status(status, startTime, agentID):
 if __name__ == '__main__':
     parser = SFArgumentParser(description=GetFirstLine(__doc__), formatter_class=SFArgFormatter)
     parser.add_node_list_args()
-    parser.add_argument("--repo", type=str, required=True, default="fluorine", help="the repo/branch to RTFI to, e.g. fluorine or fluorine-branchname")
-    parser.add_argument("--version", type=str, required=True, default="latest", help="the version number to RTFI to, e.g. 9.0.0.999")
+    parser.add_argument("--repo", type=StrType, required=True, default="fluorine", help="the repo/branch to RTFI to, e.g. fluorine or fluorine-branchname")
+    parser.add_argument("--version", type=StrType, required=True, default="latest", help="the version number to RTFI to, e.g. 9.0.0.999, or 'latest' to pick the latest published version")
     parser.add_argument("--image-type", required=True, choices=["rtfi", "fdva"],  default="rtfi", help="the type of RTFI image")
-    parser.add_argument("--rtfi-type", required=True, choices=["pxe", "irtfi"],  default="irtfi", help="the type of RTFI to attempt")
-    parser.add_argument("--nonet", action="store_false", dest="preserve_networking", default=True, help="do not preserve the current hostname/network config of the node")
-    parser.add_argument("--fail", type=str, required=False, help="inject an error during this RTFI state")
+    parser.add_argument("--rtfi-type", required=True, choices=["pxe", "irtfi"],  default="irtfi", help="the RTFI process to use")
+    parser.add_argument("--net-config", dest="configure_network", required=True, choices=sfdefaults.all_network_config_options, default="keep", help="how to configure the network on the node")
 
-    net_override_group = parser.add_argument_group("Network Overrides", description="These settings can be used to override the network settings from AT2")
-    net_override_group.add_argument("--pxe-server", type=IPv4AddressType, default=sfdefaults.pxe_server, required=False, help="use this PXE server for all nodes during RTFI")
-    net_override_group.add_argument("--pxe-user", type=str, default=sfdefaults.pxe_username, metavar="USERNAME", help="the PXE server username for all nodes")
-    net_override_group.add_argument("--pxe-pass", type=str, default=sfdefaults.pxe_password, metavar="PASSWORD", help="the PXE server password for all nodes")
+    net_override_group = parser.add_argument_group("Network Overrides", description="These settings can be used to override the network settings from AT2, or provide them if the node does not exist in AT2")
+    net_override_group.add_argument("-I", "--ipmi-ips", type=ItemList(IPv4AddressType), default=sfdefaults.ipmi_ips, metavar="IP1,IP2...", help="the IPMI IP addresses for the nodes")
+    net_override_group.add_argument("--ipmi-user", type=StrType, default=sfdefaults.ipmi_user, metavar="USERNAME", help="the IPMI username for all nodes")
+    net_override_group.add_argument("--ipmi-pass", type=StrType, default=sfdefaults.ipmi_pass, metavar="PASSWORD", help="the IPMI password for all nodes")
+    net_override_group.add_argument("--mac-addresses", type=ItemList(StrType), metavar="MAC1,MAC2...", help="the MAC addresses for the nodes")
+    net_override_group.add_argument("--node-names", type=ItemList(StrType), metavar="HOSTNAME1,HOSTNAME2...", help="the hostnames for the nodes")
+    net_override_group.add_argument("--pxe-server", type=IPv4AddressType, metavar="IP", required=False, help="use this PXE server for all nodes during RTFI")
+    net_override_group.add_argument("--pxe-user", type=StrType, metavar="USERNAME", help="the PXE server username for all nodes")
+    net_override_group.add_argument("--pxe-pass", type=StrType, metavar="PASSWORD", help="the PXE server password for all nodes")
     net_override_group.add_argument("--netmask", type=IPv4AddressType, required=False, help="use this netmask for all nodes during RTFI")
     net_override_group.add_argument("--gateway", type=IPv4AddressType, required=False, help="use this gateway for all nodes during RTFI")
-    net_override_group.add_argument("-I", "--ipmi-ips", type=ItemList(IPv4AddressType), metavar="IP1,IP2...", help="the IPMI IP addresses for the nodes")
-    net_override_group.add_argument("--ipmi-user", type=str, default=sfdefaults.ipmi_user, metavar="USERNAME", help="the IPMI username for all nodes")
-    net_override_group.add_argument("--ipmi-pass", type=str, default=sfdefaults.ipmi_pass, metavar="PASSWORD", help="the IPMI password for all nodes")
-    net_override_group.add_argument("--mac-addresses", type=ItemList(str), metavar="MAC1,MAC2...", help="the MAC addresses for the nodes")
-    net_override_group.add_argument("--node-names", type=ItemList(str), metavar="HOSTNAME1,HOSTNAME2...", help="the hostnames for the nodes")
+    net_override_group.add_argument("--nameserver", type=IPv4AddressType, required=False, help="use this DNS server for all nodes to find them in DNS after RTFI")
+    net_override_group.add_argument("--domain", type=StrType, required=False, help="use this DNS search domain for all nodes to find them in DNS after RTFI")
+    net_override_group.add_argument("--cip-ips", type=ItemList(IPv4AddressType), default=None, metavar="CIP1,CIP2...", help="the 10G IP addresses for the nodes")
+    net_override_group.add_argument("--cip-netmask", type=IPv4AddressType, default=None, required=False, help="the 10G netmask for all nodes")
+    net_override_group.add_argument("--cip-gateway", type=IPv4AddressType, default=None, required=False, help="the 10G gateway for all nodes")
 
     vm_group = parser.add_argument_group("Virtual Node Options", description="These settings are required for virt nodes, along with the network override settings.")
-    vm_group.add_argument("--vm-names", type=str, metavar="NAME", help="the name of the VMs to RTFI")
-    vm_group.add_argument("-s", "--vm-mgmt-server", type=IPv4AddressType, default=sfdefaults.vmware_mgmt_server, metavar="IP", help="the IP address of the hypervisor/management server")
-    vm_group.add_argument("-e", "--vm-mgmt-user", type=str, default=sfdefaults.vmware_mgmt_user, help="the hypervisor admin username")
-    vm_group.add_argument("-a", "--vm-mgmt-pass", type=str, default=sfdefaults.vmware_mgmt_pass, help="the hypervisor admin password")
+    vm_group.add_argument("--vm-names", type=StrType, metavar="NAME", help="the name of the VMs to RTFI")
+    vm_group.add_argument("-s", "--vm-mgmt-server", type=IPv4AddressType, default=sfdefaults.vmware_mgmt_server, metavar="IP", help="the management server for the VMs (vSphere for VMware, hypervisor for KVM)")
+    vm_group.add_argument("-e", "--vm-mgmt-user", type=StrType, default=sfdefaults.vmware_mgmt_user, help="the VM management server username")
+    vm_group.add_argument("-a", "--vm-mgmt-pass", type=StrType, default=sfdefaults.vmware_mgmt_pass, help="the VM management server password")
+
+    special_group = parser.add_argument_group("Special Options")
+    special_group.add_argument("--fail", type=StrType, required=False, help="inject an error during this RTFI state")
 
     args = parser.parse_args_to_dict()
 
