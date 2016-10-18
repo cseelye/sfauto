@@ -440,7 +440,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
                     ans = netutil.ResolveHostname(node_ddns_hostname, net_info["nameserver"])
                     temp_node_ip = ans[0]
                     node._SetInternalManagementIP(temp_node_ip)
-                    log.info("Node is up on IP {}".format(temp_node_ip))
+                    log.info("Node is up on DHCP IP {}".format(temp_node_ip))
                     break
                 except SolidFireError:
                     continue
@@ -461,7 +461,9 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
                             tengIP=net_info["cip"],
                             tengNetmask=net_info["cip_netmask"],
                             tengGateway=net_info["cip_gateway"])
+        log.info("Node is configured to static IP {}".format(net_info["ip"]))
 
+    log.passed("Successful RTFI")
     return True
 
 def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
