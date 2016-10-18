@@ -23,6 +23,9 @@ try:
 except AttributeError:
     pass
 
+class VMwareError(SolidFireError):
+    """Parent exception for VMware errors"""
+    pass
 
 def VMwareConnect(server, username, password):
     try:
@@ -71,7 +74,7 @@ def VMwareFindObjectGetProperties(connection, obj_name, obj_type, properties=Non
 
     log.debug2('Searching for a {} named "{}"'.format(obj_type.__name__, obj_name))
     if obj_type == vim.VirtualMachine and obj_name in sfdefaults.blacklisted_vm_names:
-        raise VmwareError('{} is a reserved name and cannot be used here'.format(obj_name))
+        raise VMwareError('{} is a reserved name and cannot be used here'.format(obj_name))
 
     parent = parent or connection.content.rootFolder
     if not properties:
@@ -110,7 +113,7 @@ def VMwareFindObjectGetProperties(connection, obj_name, obj_type, properties=Non
             break
         result = connection.content.propertyCollector.ContinueRetrievePropertiesEx(token=result.token)
     if not result_list:
-        raise VmwareError('Could not find {}'.format(obj_name))
+        raise VMwareError('Could not find {}'.format(obj_name))
     return result_list[0]
 
 def VMwareWaitForTasks(connection, tasks):
