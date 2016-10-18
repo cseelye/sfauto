@@ -24,9 +24,10 @@ from . import sfdefaults
 class SolidFireError(Exception):
     """Base class for SolidFire exceptions"""
     
-    def __init__(self, message, originalTraceback=None):
+    def __init__(self, message, originalTraceback=None, innerException=None):
         super(SolidFireError, self).__init__(message)
         self.originalTraceback = originalTraceback
+        self.innerException = innerException
 
     def __str__(self):
         return self.message
@@ -120,14 +121,13 @@ class ConnectionError(SolidFireError):
                                 code automatically based on innerException
         """
 
-        super(ConnectionError, self).__init__(message)
+        super(ConnectionError, self).__init__(message, innerException=innerException)
         self.args = (ip, endpoint, innerException, method, params, message, code)
         self.method = method
         self.params = params
         self.ip = ip
         self.endpoint = endpoint
         self.message = message
-        self.innerException = innerException
         self.code = code
         self.retryable = False
 
