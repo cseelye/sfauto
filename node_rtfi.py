@@ -331,7 +331,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
                   vmManagementUsername=net_info.get("vm_mgmt_user", None),
                   vmManagementPassword=net_info.get("vm_mgmt_pass", None))
     rtfi_opts = [
-        "sf_hostname={}-rtfi".format(net_info["hostname"]),
+        "sf_hostname={}{}".format(net_info["hostname"], sfdefaults.rtfi_hostname_suffix),
         "sf_agent={}".format(agent),
     ]
     if configure_network == "keep":
@@ -433,8 +433,8 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
             # Original sites like BDR and ZDC resolve directly to the domain, like eng.solidfire.net
             # New PearlWest resolves to one.domain or ten.domain for 1G and 10G DHCP addresses
             # So we try both versions just in case
-            for node_ddns_hostname in ["{}-rtfi.{}".format(net_info["hostname"], net_info["domain"]),
-                                       "{}-rtfi.one.{}".format(net_info["hostname"], net_info["domain"])]:
+            for node_ddns_hostname in ["{}{}.{}".format(net_info["hostname"], sfdefaults.rtfi_hostname_suffix, net_info["domain"]),
+                                       "{}{}.one.{}".format(net_info["hostname"], sfdefaults.rtfi_hostname_suffix, net_info["domain"])]:
                 temp_node_ip = None
                 try:
                     ans = netutil.ResolveHostname(node_ddns_hostname, net_info["nameserver"])

@@ -56,6 +56,7 @@ fault_whitelist = [                 # Ignore these faults if they are present on
     "nodeHardwareFault"
 ]
 rtfi_options = "sf_auto=1,sf_secure_erase=0"
+rtfi_hostname_suffix = "-rtfi"      # Suffix to add to the hostname during RTFI, and for DDNS discovery after node boot up
 username = "admin"                  # Cluster admin username
 password = "admin"                  # Cluster admin password
 ssh_user = "root"                   # Cluster node SSH username
