@@ -412,7 +412,17 @@ class SFNode(object):
             _, stdout, _ = ssh.RunCommand("date +%s")
             return int(stdout.strip())
 
-    def SetNetworkInfo(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP=None, tengNetmask=None, onegNic="Bond1G", tengNic="Bond10G"):
+    def _SetInternalManagementIP(self, ipAddress):
+        """
+        Update the internal model for this node object
+
+        Args:
+            ipAddress:      the management IP of this node (str)
+        """
+        self.ipAddress = ipAddress
+        self.api.server = ipAddress
+
+    def SetNetworkInfo(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP=None, tengNetmask=None, tengGateway=None, onegNic="Bond1G", tengNic="Bond10G"):
         """
         Set the network info on this node
 
@@ -424,6 +434,7 @@ class SFNode(object):
             dnsSearch:      the search string for DNS lookups
             tengIP:         the IP address for the 10G NIC
             tengNetmask:    the netmask for the 10G NIC
+            tengGateway:    the gateway for the 10G NIC
             onegNic:        the name of the 1G NIC ("Bond1G")
             tengNic:        the name of the 10G NIC ("Bond10G")
         """
@@ -436,7 +447,7 @@ class SFNode(object):
         #pylint: enable=no-member
         status["success"] = False
         status["message"] = None
-        th = multiprocessing.Process(target=self._SetNetworkInfoThread, args=(onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, onegNic, tengNic, status))
+        th = multiprocessing.Process(target=self._SetNetworkInfoThread, args=(onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, tengGateway, onegNic, tengNic, status))
         th.daemon = True
         th.start()
         while True:
@@ -464,9 +475,9 @@ class SFNode(object):
             raise SolidFireError("Could not ping node at new address")
 
         # Update my internal data
-        self.ipAddress = onegIP
+        self._SetInternalManagementIP(onegIP)
 
-    def _SetNetworkInfoThread(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, onegNic, tengNic, status):
+    def _SetNetworkInfoThread(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, tengGateway, onegNic, tengNic, status):
         """Internal method to set the network info using a separate thread"""
         params = {}
         params["network"] = {}
@@ -481,6 +492,8 @@ class SFNode(object):
             params["network"][tengNic]["address"] = tengIP
             params["network"][tengNic]["netmask"] = tengNetmask
             params["network"][tengNic]["mtu"] = 9000
+            if tengGateway:
+                params["network"][tengNic]["gateway"] = tengGateway
         try:
             self.api.Call("SetConfig", params)
             status["success"] = True
@@ -697,12 +710,12 @@ class SFNode(object):
         """
         Set the boot order of the node so that it will PXE boot before local disk
         """
+        self.log.debug("Setting boot override to PXE boot")
         if self.vm:
             self.vm.SetPXEBoot()
 
         else:
-            # TODO - implement set PXE boot order for physical nodes
-            pass
+            self.IPMICommand("chassis bootdev pxe")
 
     def Ping(self):
         """
