@@ -92,8 +92,15 @@ def GetNetworkProfile(managementIPs):
             found[res["oneGigIP"]]["netmask"] = res["networkProfile"]["netmask1G"]
             found[res["oneGigIP"]]["gateway"] = res["networkProfile"]["gateway1G"]
             found[res["oneGigIP"]]["pxe"] = res["networkProfile"]["pxeServerAddress"]
+            found[res["oneGigIP"]]["pxe_user"] = res["networkProfile"]["pxeServerUsername"]
+            found[res["oneGigIP"]]["pxe_pass"] = res["networkProfile"]["pxeServerPassword"]
+            found[res["oneGigIP"]]["nameserver"] = res["networkProfile"]["nameServer1G"]
+            found[res["oneGigIP"]]["domain"] = res["networkProfile"]["nameSearch1G"]
             found[res["oneGigIP"]]["ipmi"] = res["iDRACIP"]
             found[res["oneGigIP"]]["hostname"] = res.get("nodeName", None) or res.get("clientName", None)
+            found[res["oneGigIP"]]["cip"] = res["tenGigIP"]
+            found[res["oneGigIP"]]["cip_netmask"] = res["networkProfile"]["netmask10G"]
+            found[res["oneGigIP"]]["cip_gateway"] = res["networkProfile"]["gateway10G"]
 
     if not all(v != None for k,v in found.iteritems()):
         raise SolidFireError("Could not find network info for all IPs")
