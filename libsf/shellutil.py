@@ -124,7 +124,7 @@ class ShellCommand(object):
             self.stdout, self.stderr = self.process.communicate()
 
         # Start the thread
-        self.log.debug2("Running local command=[{}]".format(self.cmd))
+        self.log.debug2("Executing local command=[{}]".format(self.cmd))
         thread = threading.Thread(target=process_thread)
         thread.daemon = True
         thread.start()
@@ -153,6 +153,7 @@ class ShellCommand(object):
             thread.join()
 
         # Return the result of the command
+        self.log.debug2("retcode=[{}] stdout=[{}] stderr=[{}]".format(self.process.returncode, self.stdout.rstrip("\n"), self.stderr.rstrip("\n")))
         return self.process.returncode, self.stdout, self.stderr
 
 def Shell(command, timeout=1800):

@@ -1037,7 +1037,7 @@ class SSHConnection(object):
         if not self.client:
             raise SolidFireError("SSH session is not connected")
 
-        self.log.debug2("Executing command=[{}] on host={}".format(command, self.ipAddress))
+        self.log.debug2("Executing remote command=[{}] on host={}".format(command, self.ipAddress))
         if pipeFail:
             cmd = "set -o pipefail; {}".format(command)
         else:
@@ -1047,7 +1047,7 @@ class SSHConnection(object):
         stdout_data = "".join(stdout.readlines())
         stderr_data = "".join(stderr.readlines())
 
-        self.log.debug2("retcode=[{}] stdout=[{}] stderr=[{}] host=[{}]".format(retcode, stdout_data, stderr_data, self.ipAddress))
+        self.log.debug2("retcode=[{}] stdout=[{}] stderr=[{}] host=[{}]".format(retcode, stdout_data.rstrip("\n"), stderr_data.rstrip("\n"), self.ipAddress))
 
         if retcode != 0 and exceptOnError:
             raise SolidFireError("SSH command failed: command=[{}] stderr=[{}]".format(command, stderr_data))
