@@ -459,6 +459,16 @@ class HTTPDownloader(object):
                 except IOError as ex:
                     raise LocalEnvironmentError(ex)
 
+    @staticmethod
+    def DownloadURL(url, timeout=300):
+        pieces = urlparse.urlparse(url)
+        downloader = HTTPDownloader(pieces.netloc, pieces.username, pieces.password)
+        return downloader.Download(pieces.path,
+                                   useAuth=pieces.username != None,
+                                   useSSL=pieces.scheme == "https",
+                                   port=443 if pieces.scheme == "https" else 80,
+                                   timeout=timeout)
+
 class SolidFireAPI(object):
     """
     Base class for making SolidFire API calls - do not instantiate directly
