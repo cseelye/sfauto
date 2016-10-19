@@ -101,6 +101,7 @@ def GetNetworkProfile(managementIPs):
             found[res["oneGigIP"]]["cip"] = res["tenGigIP"]
             found[res["oneGigIP"]]["cip_netmask"] = res["networkProfile"]["netmask10G"]
             found[res["oneGigIP"]]["cip_gateway"] = res["networkProfile"]["gateway10G"]
+            found[res["oneGigIP"]]["image_list"] = res["networkProfile"]["imageListing1G"]
 
     if not all(v != None for k,v in found.iteritems()):
         raise SolidFireError("Could not find network info for all IPs")
