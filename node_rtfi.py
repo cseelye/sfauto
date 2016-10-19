@@ -12,7 +12,7 @@ from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, I
 from libsf.util import GetFilename, SolidFireVersion, ParseTimestamp, PrettyJSON, EnsureKeys
 from libsf.netutil import CalculateNetwork, IPInNetwork
 from libsf import sfdefaults, threadutil, pxeutil, labutil, netutil
-from libsf import SSHConnection, SolidFireError, ConnectionError, InvalidArgumentError, TimeoutError
+from libsf import SolidFireError, ConnectionError, InvalidArgumentError, TimeoutError, HTTPDownloader
 import json
 import random
 import re
@@ -68,6 +68,7 @@ RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 51, 54, 60, 61, 110]
     "pxe_server" : (OptionalValueType(IPv4AddressType), sfdefaults.pxe_server),
     "pxe_user" : (OptionalValueType(StrType), sfdefaults.pxe_user),
     "pxe_pass" : (OptionalValueType(StrType), sfdefaults.pxe_pass),
+    "jenkins_server" : (OptionalValueType(IPv4AddressType), sfdefaults.jenkins_server),
     "mac_addresses" : (OptionalValueType(ItemList(StrType)), None),
     "node_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.node_names),
     "vm_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.vm_names),
@@ -97,6 +98,7 @@ def RtfiNodes(node_ips,
               pxe_server,
               pxe_user,
               pxe_pass,
+              jenkins_server,
               mac_addresses,
               node_names,
               vm_names,
@@ -150,47 +152,6 @@ def RtfiNodes(node_ips,
         raise InvalidArgumentError("If cip_ips is specified, it must have the same number of elements as node_ips")
 
     #
-    # Find the build to RTFI to
-    #
-    if version == "latest":
-        log.info("Looking for the latest {} version".format(repo))
-        with SSHConnection("192.168.137.1", "root", "solidfire") as ssh:
-            try:
-                retcode, stdout, stderr = ssh.RunCommand(r"find /builds/iso/{} -type f -name 'solidfire-{}-{}*.iso' -exec basename {{}} \;".format(image_type, image_type, repo), exceptOnError=False)
-            except SolidFireError as ex:
-                log.error(str(ex))
-                return False
-        if retcode != 0:
-            log.error("Cannot list builds on jenkins: {}".format(stderr))
-            return False
-
-        version = "0.0.0.0"
-        for line in stdout.split("\n"):
-            m = re.search(r"solidfire-{}-{}-([0-9]\.[0-9]\.[0-9]\.[0-9]+).iso".format(image_type, repo), line)
-            if not m:
-                continue
-            found_version = m.group(1)
-            if int(found_version.split(".")[3]) > int(version.split(".")[3]):
-                version = found_version
-        if version == "0.0.0.0":
-            log.error("Could not find any {} builds".format(repo))
-            return False
-        log.info("Found {}-{}".format(repo, version))
-    else:
-        # Make sure the build exists
-        iso_name = "solidfire-{}-{}-{}.iso".format(image_type, repo, version)
-        log.info("Checking that {} exists".format(iso_name))
-        with SSHConnection("192.168.137.1", "root", "solidfire") as ssh:
-            try:
-                retcode, _, _ = ssh.RunCommand(r"find /builds/iso/{} -type f -name '*.iso' -exec basename {{}} \; | grep -q {}".format(image_type, iso_name), exceptOnError=False)
-            except SolidFireError as ex:
-                log.error(str(ex))
-                return False
-        if retcode != 0:
-            log.error("Cannot find build on jenkins. Check http://192.168.137.1/rtfi/ to see if the build is actually there")
-            return False
-
-    #
     # Find all of the network and infrastructure info for the nodes
     #
     log.info("Determining network and infrastructure info for the nodes")
@@ -199,16 +160,16 @@ def RtfiNodes(node_ips,
 
     # iRTFI of virtual nodes
     if rtfi_type == "irtfi" and vm_names:
-        required_keys = ["ip", "hostname", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
+        required_keys = ["ip", "hostname", "image_list", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
     # iRTFI of physical nodes
     elif rtfi_type == "irtfi":
-        required_keys = ["ip", "hostname"]
+        required_keys = ["ip", "hostname", "image_list"]
     # PXE RTFI of virtual nodes
     elif rtfi_type == "pxe" and vm_names:
-        required_keys = ["ip", "hostname", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
+        required_keys = ["ip", "hostname", "image_list", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
     # PXE RTFI of physical nodes
     elif rtfi_type == "pxe":
-        required_keys = ["ip", "hostname", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "ipmi", "ipmi_user", "ipmi_pass"]
+        required_keys = ["ip", "hostname", "image_list", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "ipmi", "ipmi_user", "ipmi_pass"]
 
     if configure_network == "clear" or configure_network == "reconfigure":
         required_keys += ["nameserver", "domain"]
@@ -247,6 +208,8 @@ def RtfiNodes(node_ips,
             net_info[node_ip]["cip"] = cip_ips[idx]
             net_info[node_ip]["cip_netmask"] = cip_netmask
             net_info[node_ip]["cip_gateway"] = cip_gateway
+        if jenkins_server:
+            net_info[node_ip]["image_list"] = "http://{}/rtfi".format(jenkins_server)
 
 
         # Look in AT2 for any missing information
@@ -271,6 +234,43 @@ def RtfiNodes(node_ips,
         if not IPInNetwork(net_info[node_ip]["gateway"], node_network):
             raise InvalidArgumentError("The gateway ({}) must be on the same network as the node IP ({})".format(net_info[node_ip]["gateway"], net_info[node_ip]["ip"]))
     log.debug2("net_info={}".format(json.dumps(net_info, sort_keys=True, indent=2)))
+
+    #
+    # Find the build to RTFI to
+    #
+    log.info("Searching for available {} builds".format(repo))
+    image_list_url = None
+    for node_info in net_info.values():
+        image_list_url = image_list_url or node_info["image_list"]
+        if node_info["image_list"] != image_list_url:
+            log.error("Nodes must all be at the same site")
+            return False
+
+    # Make a list of available builds for the given repo
+    image_html = HTTPDownloader.DownloadURL(image_list_url)
+    iso_regex = re.compile(r'href="(solidfire-{}-{}-[1-9].+\.iso)"'.format(image_type, repo))
+    version_regex = re.compile(r'([0-9]\.[0-9]\.[0-9]\.[0-9]+)')
+    found_isos = iso_regex.findall(image_html)
+    log.debug2("found_isos = [{}]".format(", ".join([str(iso) for iso in found_isos])))
+    available_builds = []
+    for iso_name in found_isos:
+        match = version_regex.search(iso_name)
+        if match:
+            available_builds.append(SolidFireVersion(match.group(1)))
+    log.debug2("available_builds = [{}]".format(", ".join([str(build) for build in available_builds])))
+    if not available_builds:
+        log.error("Could not find any builds for {}".format(repo))
+        return False
+
+    if version == "latest":
+        # Get the latest version available
+        version = str(max(available_builds))
+    else:
+        # Make sure the specified build exists
+        if SolidFireVersion(version) not in available_builds:
+            log.error("Could not find {} {}".format(repo, version))
+            return False
+    log.info("Found {} {}".format(repo, version))
 
     #
     # Start a thread to RTFI and monitor each node
@@ -613,6 +613,7 @@ if __name__ == '__main__':
     net_override_group.add_argument("--pxe-server", type=IPv4AddressType, default=sfdefaults.pxe_server, metavar="IP", required=False, help="use this PXE server for all nodes during RTFI")
     net_override_group.add_argument("--pxe-user", type=StrType, default=sfdefaults.pxe_user, metavar="USERNAME", help="the PXE server username for all nodes")
     net_override_group.add_argument("--pxe-pass", type=StrType, default=sfdefaults.pxe_pass, metavar="PASSWORD", help="the PXE server password for all nodes")
+    net_override_group.add_argument("--jenkins-server", type=IPv4AddressType, default=sfdefaults.jenkins_server, metavar="IP", required=False, help="use this jenkins server for all nodes to find available builds")
     net_override_group.add_argument("--mip-netmask", type=IPv4AddressType, default=sfdefaults.mip_netmask, required=False, help="use this netmask for all nodes during RTFI")
     net_override_group.add_argument("--mip-gateway", type=IPv4AddressType, default=sfdefaults.mip_gateway, required=False, help="use this gateway for all nodes during RTFI")
     net_override_group.add_argument("--nameserver", type=IPv4AddressType, required=False, help="use this DNS server for all nodes to find them in DNS after RTFI")

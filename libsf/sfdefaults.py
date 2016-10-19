@@ -100,6 +100,7 @@ hipchat_color = "gray"
 pxe_server = None                   # PXE server to use to RTFI
 pxe_user = None                     # PXE server username
 pxe_pass = None                     # PXE server password
+jenkins_server = None               # Jenkins build server
 dns_servers = {                     # List of DNS servers for each site
     "ZDC" : {
         "nameserver" : "172.30.254.1",
