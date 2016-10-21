@@ -7,15 +7,16 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateAndDefault, IPv4AddressType, PositiveNonZeroIntegerType, OptionalValueType, PositiveIntegerType, BoolType, StrType
+from libsf.util import ValidateAndDefault, ItemList, IPv4AddressType, PositiveNonZeroIntegerType, OptionalValueType, PositiveIntegerType, BoolType, StrType
 from libsf import sfdefaults
-from libsf import SolidFireError, SolidFireBootstrapAPI
+from libsf import SolidFireError, InvalidArgumentError, SolidFireBootstrapAPI
+from libsf.sfnode import SFNode
 import time
 
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
-    "node_ip" : (IPv4AddressType, None),
+    "node_ip" : (OptionalValueType(IPv4AddressType), None),
     "svip" : (IPv4AddressType, sfdefaults.svip),
     "mvip" : (IPv4AddressType, sfdefaults.mvip),
     "username" : (StrType, sfdefaults.username),
@@ -25,6 +26,8 @@ import time
     "drive_count" : (OptionalValueType(PositiveNonZeroIntegerType), None),
     "drive_timeout" : (PositiveIntegerType, 180),
     "add_drives" : (BoolType, True),
+    "cluster_name" : (OptionalValueType(StrType), sfdefaults.cluster_name),
+    "node_ips" : (OptionalValueType(ItemList(IPv4AddressType)), sfdefaults.node_ips),
 })
 def ClusterCreate(node_ip,
                   svip,
@@ -35,7 +38,9 @@ def ClusterCreate(node_ip,
                   node_timeout,
                   drive_count,
                   drive_timeout,
-                  add_drives):
+                  add_drives,
+                  cluster_name,
+                  node_ips):
     """
     Create a cluster
 
@@ -50,8 +55,30 @@ def ClusterCreate(node_ip,
         drive_count:        after creating the cluster, wait for this many drives to be available
         drive_timeout:      how long to wait for available drives, in seconds
         add_drives:         After creating the cluster, add the available drives
+        cluster_name:       set this cluster name on the nodes before creating the cluster
+        node_ips:           the management IPs of the nodes to set
     """
     log = GetLogger()
+    if not node_ip and not node_ips:
+        raise InvalidArgumentError("Either node_ip or node_ips must be specified")
+    if cluster_name and not node_ips:
+        raise InvalidArgumentError("node_ips must be specified with cluster_name")
+
+    # Set the cluster name on the nodes
+    if cluster_name:
+        for mip in node_ips:
+            log.info("{}: Setting cluster name to {}".format(mip, cluster_name))
+            node = SFNode(mip)
+            try:
+                node.SetClusterName(cluster_name)
+            except SolidFireError as ex:
+                log.error("Failed to set cluster name: {}".format(str(ex)))
+                return False
+
+        if not node_count:
+            node_count = len(node_ips)
+        if not node_ip:
+            node_ip = node_ips[0]
 
     bootstrap = SolidFireBootstrapAPI(node_ip)
 
@@ -146,7 +173,7 @@ def ClusterCreate(node_ip,
 
 if __name__ == '__main__':
     parser = SFArgumentParser(description=GetFirstLine(__doc__), formatter_class=SFArgFormatter)
-    parser.add_argument("-n", "--node-ip", type=IPv4AddressType, required=True, metavar="IP", help="the management IP of the node to create the cluster with")
+    parser.add_argument("-n", "--node-ip", type=IPv4AddressType, metavar="IP", help="the management IP of the node to create the cluster with")
     parser.add_argument("-m", "--mvip", type=IPv4AddressType, required=True, default=sfdefaults.mvip, help="the management IP of the cluster")
     parser.add_argument("--svip", type=IPv4AddressType, required=True, default=sfdefaults.svip, help="the storage IP of the cluster")
     parser.add_argument("-u", "--username", type=str, required=True, default=sfdefaults.username, help="the admin user for the cluster")
@@ -156,6 +183,11 @@ if __name__ == '__main__':
     parser.add_argument("--drive-count", type=PositiveIntegerType, default=None, metavar="COUNT", help="how many available drives to wait for")
     parser.add_argument("--drive-timeout", type=PositiveNonZeroIntegerType, default=180, metavar="SECONDS", help="how long to wait for available drives, in seconds")
     parser.add_argument("--no-add-drives", dest="add_drives", action="store_false", default=True, help="do not add the drives to the cluster")
+
+    config_group = parser.add_argument_group("Preconfig options", description="These options will configure the nodes ahead of creating the cluster")
+    config_group.add_argument("--cluster-name", type=StrType, required=False, default=sfdefaults.cluster_name, help="set this cluster name on the nodes")
+    config_group.add_argument("-N", "--node-ips", type=ItemList(IPv4AddressType), default=sfdefaults.node_ips, metavar="IP1,IP2...", help="the management IP of the nodes")
+
     args = parser.parse_args_to_dict()
 
     app = PythonApp(ClusterCreate, args)

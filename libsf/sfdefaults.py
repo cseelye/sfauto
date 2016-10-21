@@ -47,6 +47,7 @@ cip_gateway = None                  # Node 10G gateway
 nameserver = None                   # DNS server
 domain = None                       # DNS domain
 vm_names = None                     # Virtual node VM names
+cluster_name = None                 # Cluster name
 min_iops = 100                      # QoS nin IOPS
 max_iops = 100000                   # QoS max IOPS
 burst_iops = 100000                 # QoS burst IOPS
