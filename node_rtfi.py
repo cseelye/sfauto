@@ -28,7 +28,7 @@ KNOWN_STATE_TIMEOUTS = {
     "UpgradeFirmware" : 900,
     "Firmware": 900,
     "DriveErase" : 600,
-    "Partition" : 30,
+    "Partition" : 180,
     "Image" : 600,
     "Configure" : 90,
     "Restore" : 60,
@@ -226,7 +226,8 @@ def RtfiNodes(node_ips,
             for key in required_keys:
                 net_info[node_ip][key] = net_info[node_ip][key] or at2_net_info[node_ip].get(key, None)
 
-        # Make sure we have all of the info we need
+    # Make sure we have all of the info we need
+    for node_ip in node_ips:
         missing = set(required_keys) - set([key for key in net_info[node_ip].keys() if net_info[node_ip][key]])
         if missing:
             raise InvalidArgumentError("Could not find required info for {}: {}".format(node_ip, ", ".join(missing)))
@@ -393,7 +394,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
             logfile = GetFilename("{}-rtfi.log".format(net_info["ip"]))
             try:
                 node.SaveRTFILog(logfile)
-                log.info("Saved RTFI log to {}".format(logfile))
+                log.info("Saved RTFI log locally to {}".format(logfile))
             except SolidFireError:
                 pass
 
@@ -447,6 +448,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
             if temp_node_ip:
                 break
             time.sleep(2)
+        node.WaitForUp()
 
     # Configure the network
     if configure_network == "reconfigure":
