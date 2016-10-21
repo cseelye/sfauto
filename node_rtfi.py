@@ -441,7 +441,6 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
                     ans = netutil.ResolveHostname(node_ddns_hostname, net_info["nameserver"])
                     temp_node_ip = ans[0]
                     node._SetInternalManagementIP(temp_node_ip)
-                    log.info("Node is up on DHCP IP {}".format(temp_node_ip))
                     break
                 except SolidFireError:
                     continue
@@ -449,6 +448,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
                 break
             time.sleep(2)
         node.WaitForUp()
+        log.info("Node is up on DHCP IP {}".format(temp_node_ip))
 
     # Configure the network
     if configure_network == "reconfigure":
