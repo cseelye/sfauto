@@ -5,10 +5,10 @@ This action will RTFI a list of nodes
 """
 
 from libsf.apputil import PythonApp
-from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
+from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter, SUPPRESS
 from libsf.logutil import GetLogger, logargs, SetThreadLogPrefix
 from libsf.sfnode import SFNode
-from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SelectionType, StrType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SelectionType, StrType, BoolType
 from libsf.util import GetFilename, SolidFireVersion, ParseTimestamp, PrettyJSON, EnsureKeys
 from libsf.netutil import CalculateNetwork, IPInNetwork
 from libsf import sfdefaults, threadutil, pxeutil, labutil, netutil
@@ -53,6 +53,7 @@ RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 51, 54, 60, 61, 110]
     "configure_network" : (SelectionType(sfdefaults.all_network_config_options), "keep"),
     "image_type" : (SelectionType(["rtfi", "fdva"]), "rtfi"),
     "fail" : (OptionalValueType(StrType), None),
+    "test" : (BoolType, False),
     "ipmi_ips" : (OptionalValueType(ItemList(IPv4AddressType)), sfdefaults.ipmi_ips),
     "username" : (StrType, sfdefaults.username),
     "password" : (StrType, sfdefaults.password),
@@ -83,6 +84,7 @@ def RtfiNodes(node_ips,
               configure_network,
               image_type,
               fail,
+              test,
               ipmi_ips,
               username,
               password,
@@ -118,6 +120,7 @@ def RtfiNodes(node_ips,
         rtfi_type:              type of RTFI (pxe, irtfi)
         image_type:             type of image (rtfi, fdva)
         fail:                   inject a failure during this RTFI state
+        test:                   test the config options and nodes but do not RTFI
         ipmi_ips:               the IPMI IPs of the nodes
         ipmi_user:              the IPMI username
         ipmi_pass:              the IPMI password
@@ -286,6 +289,7 @@ def RtfiNodes(node_ips,
                                               version,
                                               configure_network,
                                               fail,
+                                              test,
                                               net_info[node_ip],
                                               username,
                                               password))
@@ -313,7 +317,7 @@ def RtfiNodes(node_ips,
 
 
 @threadutil.threadwrapper
-def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, net_info, username, password):
+def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, test, net_info, username, password):
     """RTFI a node"""
     log = GetLogger()
     SetThreadLogPrefix(net_info["ip"])
@@ -351,6 +355,10 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
         if not net_info.get("mac", None):
             log.info("Getting MAC address from {}".format("hypervisor" if net_info.get("vm_name", None) else "BMC"))
             net_info["mac"] = node.GetPXEMacAddress()
+
+        if test:
+            log.info("Test mode set; skipping RTFI node")
+            return True
 
         log.info("Creating PXE config file")
         pxeutil.DeletePXEFile(net_info["mac"],
@@ -409,6 +417,13 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, n
 
     # in place RTFI
     elif rtfi_type == "irtfi":
+        if not node.IsUp():
+            raise SolidFireError("Node must be up for iRTFI")
+
+        if test:
+            log.info("Test mode set; skipping RTFI node")
+            return True
+
         log.info("Calling StartRtfi")
         node.StartRTFI(repo, version, rtfi_options)
 
@@ -631,7 +646,8 @@ if __name__ == '__main__':
     vm_group.add_argument("-a", "--vm-mgmt-pass", type=StrType, default=sfdefaults.vm_mgmt_pass, help="the VM management server password")
 
     special_group = parser.add_argument_group("Special Options")
-    special_group.add_argument("--fail", type=StrType, required=False, help="inject an error during this RTFI state")
+    special_group.add_argument("--test", action="store_true", default=False, help=SUPPRESS) # test the supplied options and nodes
+    special_group.add_argument("--fail", type=StrType, help="inject an error during this RTFI state")
 
     args = parser.parse_args_to_dict()
 
