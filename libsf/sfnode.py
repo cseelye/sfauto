@@ -13,7 +13,7 @@ from . import util
 from . import SSHConnection, SolidFireClusterAPI, SolidFireNodeAPI, SolidFireError, UnknownObjectError, TimeoutError
 from .shellutil import Shell
 from .logutil import GetLogger
-from .virtutil import VMwareVM
+from .virtutil import VirtualMachine
 
 class NetworkInterfaceType(object):
     """Type of network interfaces in nodes"""
@@ -67,7 +67,8 @@ class SFNode(object):
         self.vmName = vmName
         self.vm = None
         if self.vmName:
-            self.vm = VMwareVM(vmName, vmManagementServer, vmManagementUsername, vmManagementPassword)
+            self.vm = VirtualMachine.Create(vmName, vmManagementServer, vmManagementUsername, vmManagementPassword)
+            self.log.debug("Node {} is VM {}".format(self.ipAddress, str(self.vm)))
 
         self._unpicklable = ["log", "api", "clusterAPI"]
 
