@@ -13,6 +13,7 @@ from pyVmomi import vim, vmodl
 import Queue
 import requests
 import sys
+import time
 from xml.etree import ElementTree
 
 # Fix late-model python not working with self signed certs out of the box
@@ -73,6 +74,8 @@ class VirtualMachine(object):
     def GetPXEMacAddress(self):
         raise NotImplementedError()
     def SetPXEBoot(self):
+        raise NotImplementedError()
+    def WaitForUp(self, timeout=300):
         raise NotImplementedError()
 
     def __str__(self):
@@ -357,6 +360,48 @@ class VirtualMachineVMware(VirtualMachine):
             task = vm.ReconfigVM_Task(config)
             VMwareWaitForTasks(vsphere, [task])
 
+    def WaitForUp(self, timeout=300):
+        """
+        Wait for this VM to be powered on and the guest OS booted up
+        """
+        start_time = time.time()
+        with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
+            # Wait for VM to be powered on
+            while True:
+                vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "runtime.powerState"])
+                if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
+                    self.log.info("VM is powered on")
+                    break
+                if timeout > 0 and time.time() - start_time > timeout:
+                    raise TimeoutError("Timeout waiting for VM to power on")
+                time.sleep(2)
+
+            # Wait for VMwware tools to be running
+            while True:
+                vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "guest.toolsRunningStatus", "guest.toolsStatus"])
+                if vm.guest.toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
+                    self.log.warning("VMware tools are not installed in this VM; cannot detect VM boot/health")
+                    return
+                if vm.guest.toolsStatus == vim.VirtualMachineToolsStatus.toolsOk:
+                    self.log.info("VMware tools are running")
+                    break
+                if timeout > 0 and time.time() - start_time > timeout:
+                    raise TimeoutError("Timeout waiting for VMware tools to start")
+                time.sleep(2)
+
+            # Wait for VM heartbeat to be green
+            while True:
+                vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "guestHeartbeatStatus"])
+                if vm.guestHeartbeatStatus == vim.ManagedEntityStatus.green:
+                    self.log.info("VM guest heartbeat is green")
+                    break
+                if timeout > 0 and time.time() - start_time > timeout:
+                    raise TimeoutError("Timeout waiting for guest heartbeat")
+                time.sleep(2)
+
+
+
+
 # ================================================================================================================================
 
 # ================================================================================================================================
@@ -619,6 +664,12 @@ class VirtualMachineKVM(VirtualMachine):
                 conn.defineXML(ElementTree.tostring(vm_xml))
             except libvirt.libvirtError as ex:
                 raise VirtualizationError("Could not update VM {}: {}".format(self.vmName, str(ex)))
+
+    def WaitForUp(self, timeout=300):
+        """
+        Wait for this VM to be powered on and the guest OS booted up
+        """
+        self.log.warning("WaitFrorUp not implemented for KVM virtual machines")
 
 # ================================================================================================================================
 
