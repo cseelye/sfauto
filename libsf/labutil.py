@@ -84,6 +84,8 @@ def GetNetworkProfile(managementIPs):
         A dictionary of mip => network info dict (dict)
     """
     at2_resources = _AT2_RESOURCES.ListResources()
+    if not at2_resources:
+        return {}
     found = dict.fromkeys(managementIPs, None)
     for res in at2_resources["nodes"] + at2_resources["clients"]:
         if "oneGigIP" in res and res["oneGigIP"] in managementIPs:
