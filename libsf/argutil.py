@@ -100,7 +100,7 @@ from gettext import gettext as _
 
 from . import sfdefaults as _sfdefaults
 from .shellutil import GetConsoleSize
-from .util import ItemList, IPv4AddressType, PositiveIntegerType, PositiveNonZeroIntegerType, SolidFireIDType, VLANTagType, MACAddressType, RegexType, SolidFireBurstIOPSType, SolidFireMinIOPSType, SolidFireMaxIOPSType
+from .util import ItemList, IPv4AddressType, PositiveIntegerType, PositiveNonZeroIntegerType, SolidFireIDType, VLANTagType, MACAddressType, RegexType, SolidFireBurstIOPSType, SolidFireMinIOPSType, SolidFireMaxIOPSType, StrType
 from . import InvalidArgumentError
 
 def _callable(obj):
@@ -2544,6 +2544,11 @@ class SFArgumentParser(_AttributeHolder, _ActionsContainer):
         self.add_argument("--min-iops", type=SolidFireMinIOPSType, default=50, required=required, metavar="IOPS", help="the min IOPS guarantee for the volumes")
         self.add_argument("--max-iops", type=SolidFireMaxIOPSType, default=100000, required=True, metavar="IOPS", help="the max sustained IOPS for the volumes")
         self.add_argument("--burst-iops", type=PositiveNonZeroIntegerType, default=100000, required=True, metavar="IOPS", help="the max burst IOPS for the volumes")
+
+    def add_vm_mgmt_args(self):
+        self.add_argument("-s", "--vm-mgmt-server", type=IPv4AddressType, default=_sfdefaults.vm_mgmt_server, metavar="IP", help="the management server for the VMs (vSphere for VMware, hypervisor for KVM)")
+        self.add_argument("-e", "--vm-mgmt-user", type=StrType, default=_sfdefaults.vm_mgmt_user, help="the VM management server username")
+        self.add_argument("-a", "--vm-mgmt-pass", type=StrType, default=_sfdefaults.vm_mgmt_pass, help="the VM management server password")
 
 def GetFirstLine(text):
     """
