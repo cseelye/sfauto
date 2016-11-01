@@ -5,6 +5,7 @@ from . import sfdefaults
 from . import SolidFireError, UnauthorizedError, TimeoutError
 from .logutil import GetLogger
 import libvirt
+import libvirt_qemu
 import multiprocessing
 from pyVim import connect as connectVSphere
 # pylint: disable=no-name-in-module
@@ -127,6 +128,8 @@ def VMwareConnect(server, username, password):
     except requests.exceptions.ConnectionError as e:
         raise VirtualizationError("Could not connect: " + str(e), e)
     except vmodl.MethodFault as e:
+        raise VirtualizationError("Could not connect: " + str(e), e)
+    except (socket.timeout, socket.error, socket.gaierror, socket.herror) as e:
         raise VirtualizationError("Could not connect: " + str(e), e)
     return service
 
@@ -290,7 +293,7 @@ class VirtualMachineVMware(VirtualMachine):
             
             self.log.info("Waiting for {} to turn on".format(self.vmName))
             if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
-                return True
+                return
 
             task = vm.PowerOn()
             VMwareWaitForTasks(vsphere, [task])
@@ -376,6 +379,7 @@ class VirtualMachineVMware(VirtualMachine):
                     raise TimeoutError("Timeout waiting for VM to power on")
                 time.sleep(2)
 
+            self.log.info("Waiting for VMware tools")
             # Wait for VMwware tools to be running
             while True:
                 vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "guest.toolsRunningStatus", "guest.toolsStatus"])
@@ -569,6 +573,10 @@ class VirtualMachineKVM(VirtualMachine):
         """
         with LibvirtConnection(self.hostServer, self.hostUsername, self.hostPassword) as conn:
             vm = LibvirtFindVM(conn, self.vmName)
+            state = vm.state()
+            if state[0] == libvirt.VIR_DOMAIN_RUNNING:
+                return
+
             try:
                 vm.create()
             except libvirt.libvirtError as ex:
@@ -603,7 +611,7 @@ class VirtualMachineKVM(VirtualMachine):
             # VIR_DOMAIN_SHUTOFF        =   5   the domain is shut off
             # VIR_DOMAIN_CRASHED        =   6   the domain is crashed
             # VIR_DOMAIN_PMSUSPENDED    =   7   the domain is suspended by guest power management
-            if state == libvirt.VIR_DOMAIN_RUNNING:
+            if state[0] == libvirt.VIR_DOMAIN_RUNNING:
                 return "on"
             else:
                 return "off"
@@ -669,7 +677,38 @@ class VirtualMachineKVM(VirtualMachine):
         """
         Wait for this VM to be powered on and the guest OS booted up
         """
-        self.log.warning("WaitFrorUp not implemented for KVM virtual machines")
+        start_time = time.time()
+        with LibvirtConnection(self.hostServer, self.hostUsername, self.hostPassword) as conn:
+            # Wait for VM to be powered on
+            while True:
+                vm = LibvirtFindVM(conn, self.vmName)
+                state = vm.state()
+                if state[0] == libvirt.VIR_DOMAIN_RUNNING:
+                    self.log.info("VM is powered on")
+                    break
+                if timeout > 0 and time.time() - start_time > timeout:
+                    raise TimeoutError("Timeout waiting for VM to power on")
+                time.sleep(2)
+
+            # Wait for qemu agent
+            self.log.info("Waiting for guest agent")
+            while True:
+                if timeout > 0 and time.time() - start_time > timeout:
+                    raise TimeoutError("Timeout waiting for VM guest agent to start")
+                time.sleep(1)
+                try:
+                    libvirt_qemu.qemuAgentCommand(vm, '{"execute":"guest-ping"}', 10, 0)
+                    self.log.info("VM guest agent is running")
+                    break
+                except libvirt.libvirtError as ex:
+                    if ex.get_error_code() == 74: # Guest agent not configured in domain XML
+                        self.log.warning("Guest agent is not configured for VM; cannot detect VM boot/health")
+                        return
+                    elif ex.get_error_code() == 86: # Guest agent not responding
+                        continue
+                    else:
+                        raise VirtualizationError("Failed to wait for guest agent: {}".format(str(ex)), ex)
+
 
 # ================================================================================================================================
 

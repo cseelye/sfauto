@@ -8,19 +8,23 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs, SetThreadLogPrefix
 from libsf.virtutil import VirtualMachine
-from libsf.util import ValidateAndDefault, ItemList, IPv4AddressType, OptionalValueType, StrType
-from libsf import sfdefaults, threadutil, labutil
-from libsf import SolidFireError, InvalidArgumentError
+from libsf.util import ValidateAndDefault, ItemList, IPv4AddressType, OptionalValueType, StrType, PositiveNonZeroIntegerType, BoolType
+from libsf import sfdefaults, threadutil
+from libsf import SolidFireError
 
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
     "vm_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.vm_names),
+    "timeout" : (PositiveNonZeroIntegerType, sfdefaults.client_boot_timeout),
+    "wait" : (BoolType, True),
     "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vmware_mgmt_server),
     "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
     "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
 })
 def NodePowerOn(vm_names,
+                wait,
+                timeout,
                 vm_mgmt_server,
                 vm_mgmt_user,
                 vm_mgmt_pass):
@@ -29,6 +33,8 @@ def NodePowerOn(vm_names,
 
     Args:
         vm_names:               the VM names
+        wait:                   whether or not to wait for the guest OS
+        timeout:                how long to wait for the guest OS
         vm_mgmt_server:         the management server for the VMs (vSphere for VMware, hypervisor for KVM)
         vm_mgmt_user:           the management user for the VMs
         vm_mgmt_pass:           the management password for the VMs
@@ -39,7 +45,7 @@ def NodePowerOn(vm_names,
     pool = threadutil.GlobalPool()
     results = []
     for vm_name in vm_names:
-        results.append(pool.Post(_VMThread, vm_name, vm_mgmt_server, vm_mgmt_user, vm_mgmt_pass))
+        results.append(pool.Post(_VMThread, vm_name, wait, timeout, vm_mgmt_server, vm_mgmt_user, vm_mgmt_pass))
 
     allgood = True
     for idx, vm_name in enumerate(vm_names):
@@ -58,19 +64,22 @@ def NodePowerOn(vm_names,
         return False
 
 @threadutil.threadwrapper
-def _VMThread(vm_name, vm_mgmt_server, vm_mgmt_username, vm_mgmt_password):
+def _VMThread(vm_name, wait, timeout, vm_mgmt_server, vm_mgmt_username, vm_mgmt_password):
     log = GetLogger()
     SetThreadLogPrefix(vm_name)
 
     vm = VirtualMachine.Create(vm_name, vm_mgmt_server, vm_mgmt_username, vm_mgmt_password)
     log.info("Powering on")
     vm.PowerOn()
-    log.passed("VM is on")
+    if wait:
+        vm.WaitForUp(timeout)
 
 
 if __name__ == '__main__':
     parser = SFArgumentParser(description=GetFirstLine(__doc__), formatter_class=SFArgFormatter)
-    parser.add_argument("--vm-names", type=StrType, metavar="NAME", help="the name of the VMs")
+    parser.add_argument("--vm-names", type=StrType, required=True, metavar="NAME1,NAME2,...", help="the name of the VMs")
+    parser.add_argument("--timeout", type=PositiveNonZeroIntegerType, default=sfdefaults.client_boot_timeout, metavar="SECONDS", help="how long to wait for the guest OS to boot up")
+    parser.add_argument("--nowait", dest="wait", action="store_false", help="do not wait for the VM guest OS to be up")
     parser.add_vm_mgmt_args()
     args = parser.parse_args_to_dict()
 

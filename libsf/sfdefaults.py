@@ -70,7 +70,7 @@ client_ips = None                   # List of client IP addresses
 client_user = "root"                # Client SSH username
 client_pass = "password"            # Client SSH password
 client_volume_sort = "iqn"          # Sort order for displaying client volumes
-
+client_boot_timeout = 300           # Time for a client to boot up, in seconds
 # Volumes
 login_order = "serial"              # Order to log in to volumes on the client (serial or parallel)
 auth_type = "chap"                  # iSCSI auth type - chap or none
