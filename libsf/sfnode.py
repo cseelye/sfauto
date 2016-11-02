@@ -10,7 +10,7 @@ import time
 from . import netutil
 from . import sfdefaults
 from . import util
-from . import SSHConnection, SolidFireClusterAPI, SolidFireNodeAPI, SolidFireError, UnknownObjectError, TimeoutError
+from . import SSHConnection, SolidFireClusterAPI, SolidFireBootstrapAPI, SolidFireNodeAPI, SolidFireError, UnknownObjectError, TimeoutError
 from .shellutil import Shell
 from .logutil import GetLogger
 from .virtutil import VirtualMachine
@@ -372,6 +372,19 @@ class SFNode(object):
         self.log.info("Waiting for {}:442 API to be up".format(self.ipAddress))
         self.api.CallWithRetry("GetAPI")
 
+    def WaitForNodeAPI(self):
+        """
+        Wait for the node API to be up and ready
+        """
+        self.api.WaitForUp()
+
+    def WaitForBootstrapAPI(self):
+        """
+        Wait for the bootstrap API to be up and ready
+        """
+        bootstrap = SolidFireBootstrapAPI(self.ipAddress)
+        bootstrap.WaitForUp()
+
     def IsUp(self):
         """
         Check if this node is up and running
@@ -400,6 +413,8 @@ class SFNode(object):
         params["cluster"] = {}
         params["cluster"]["cluster"] = clusterName
         self.api.CallWithRetry("SetConfig", params)
+        # Make sure the bootstrap API is back before returning
+        self.WaitForBootstrapAPI()
 
     def SetHostname(self, hostname):
         """
