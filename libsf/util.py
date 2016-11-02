@@ -227,7 +227,6 @@ class ItemList(object):
     def __repr__(self):
         return "list({})".format(GetPrettiestTypeName(self.itemType))
 
-
 class OptionalValueType(object):
     """Type for validating an optional"""
 
@@ -248,7 +247,6 @@ class OptionalValueType(object):
 
     def __repr__(self):
         return "OptionalValueType({})".format(GetPrettiestTypeName(self.itemType))
-
 
 def AtLeastOneOf(**kwargs):
     """Validate that one or more of the list of items has a value"""
@@ -272,20 +270,23 @@ def BoolType(string, name=None):
         raise InvalidArgumentError("Invalid boolean value")
 
 
-def IPv4AddressType(addressString):
+def IPv4AddressType(addressString, allowHostname=True):
     """Type for validating IP v4 addresses"""
 
-    errormsg = "{} is not a resolvable hostname or IP address".format(addressString)
-    
+    if allowHostname:
+        errormsg = "{} is not a resolvable hostname or valid IP address".format(addressString)
+    else:
+        errormsg = "{} is not a valid IP address".format(addressString)
+
     if not addressString:
         raise InvalidArgumentError("missing value")
 
     # Check for resolvable hostname
     if any (c.isalpha() for c in addressString):
-        try:
-            addressString = _socket.gethostbyname(addressString)
-        except _socket.gaierror: #Unable to resolve host name
-            raise InvalidArgumentError(errormsg)
+        if allowHostname:
+            return ResolvableHostname(addressString)
+        else:
+            raise InvalidArgumentError("{} is not a valid IP address".format(addressString))
 
     try:
         _socket.inet_pton(_socket.AF_INET, addressString)
@@ -310,8 +311,55 @@ def IPv4AddressType(addressString):
 
     if not all([i >= 0 and i <= 255 for i in pieces]):
         raise InvalidArgumentError(errormsg)
-    
+
     return addressString
+
+def IPv4AddressOnlyType(addressString):
+    """Type for validating IPv4 addresses"""
+    return IPv4AddressType(addressString, allowHostname=False)
+
+def ResolvableHostname(hostnameString):
+    """Type for validating a string is a resolvable hostname"""
+
+    hostnameString = StrType(hostnameString)
+
+    if not hostnameString:
+        raise InvalidArgumentError("missing value")
+
+    try:
+        _socket.gethostbyname(hostnameString)
+    except _socket.gaierror: #Unable to resolve host name
+        raise InvalidArgumentError("{} is not a resolvable hostname".format(hostnameString))
+
+    return hostnameString
+
+def IPv4SubnetType(subnetString):
+    """Type for validating subnets, either CIDR or network/netmask"""
+    if not subnetString:
+        raise InvalidArgumentError("missing value")
+
+    if "/" not in subnetString:
+        raise InvalidArgumentError("missing CIDR bits or netmask")
+
+    network, mask = subnetString.split("/")
+
+    # Validate the network is a valid IP address
+    IPv4AddressType(network, allowHostname=False)
+
+    # Validate the mask is either a valid IP, or an integer between 0 and 32
+    try:
+        IPv4AddressType(mask, allowHostname=False)
+        return subnetString
+    except InvalidArgumentError:
+        pass
+
+    try:
+        IntegerRangeType(0, 32)(mask)
+        return subnetString
+    except InvalidArgumentError:
+        pass
+
+    raise InvalidArgumentError("invalid CIDR bits or netmask")
 
 def SolidFireIDType(string):
     """Type for validating SolidFire IDs"""

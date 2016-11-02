@@ -253,6 +253,139 @@ def CIDRToNetmask(cidrMask):
         bits |= (1 << i)
     return socket.inet_ntoa(struct.pack('>I', bits))
 
+def FirstIPInNetwork(network):
+    """
+    Get the first IP address in a subnet
+
+    Args:
+        network:    the network address of the subnet
+        subnetMask: the netmask of the subnet
+
+    Returns:
+        The first IP in the subnet (str)
+    """
+    return IPAddress(network) + 1
+
+def LastIPInNetwork(network, subnetMask):
+    """
+    Get the last IP address in a subnet
+
+    Args:
+        network:    the network address of the subnet
+        subnetMask: the netmask of the subnet
+
+    Returns:
+        The last IP in the subnet (str)
+    """
+    broadcast = CalculateBroadcast(network, subnetMask)
+    return IPAddress(broadcast) - 1
+
+class IPSubnet(object):
+    """
+    A subnet of IP addresses
+    """
+    def __init__(self, subnet):
+        """
+        Constructor
+
+        Args:
+            subnet: the CIDR or hybrid CIDR description of the subnet, ex 1.1.1.0/24 or 1.1.1.0/255.255.255.0
+        """
+        network, mask = subnet.split("/")
+        self.network = network
+        try:
+            mask = int(mask)
+            self.netmask = CIDRToNetmask(mask)
+        except ValueError:
+            self.netmask = mask
+
+    def AllHosts(self):
+        """
+        Get all of the host IP addresses in this subnet
+
+        Returns:
+            A list of IP addresses (list of str)
+        """
+        first = FirstIPInNetwork(self.network)
+        last = LastIPInNetwork(self.network, self.netmask)
+        return IPRange(first, last)
+
+class IPAddress(object):
+    """
+    Common IP address operations
+    """
+
+    def __init__(self, ipString):
+        self.raw = ipString
+
+    def __add__(self, other):
+        pieces = map(int, self.raw.split("."))
+        for i in (3, 2, 1, 0):
+            if pieces[i] + other > 255:
+                pieces[i] = 0 + other - 1
+                other = 1
+            else:
+                pieces[i] += other
+                break
+        return IPAddress(".".join(map(str, pieces)))
+
+    def __sub__(self, other):
+        pieces = map(int, self.raw.split("."))
+        for i in (3, 2, 1, 0):
+            if pieces[i] - other < 0:
+                pieces[i] = 255 - other + 1
+                other = 1
+            else:
+                pieces[i] -= other
+                break
+        return IPAddress(".".join(map(str, pieces)))
+
+    def __eq__(self, other):
+        pieces = map(int, self.raw.split("."))
+        other_pieces = map(int, other.raw.split("."))
+        return all([pieces[idx] == other_pieces[idx] for idx in (0, 1, 2, 3)])
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __lt__(self, other):
+        pieces = map(int, self.raw.split("."))
+        other_pieces = map(int, other.raw.split("."))
+        for idx in (0, 1, 2, 3):
+            if pieces[idx] < other_pieces[idx]:
+                return True
+        return False
+
+    def __gt__(self, other):
+        return not (self < other)
+
+    def __le__(self, other):
+        return (self < other) or (self == other)
+
+    def __ge__(self, other):
+        return (self > other) or (self == other)
+
+    def __str__(self):
+        return self.raw
+
+def IPRange(first, last):
+    """
+    Generate a list of IP addresses
+
+    Args:
+        first:  the first IP in the range
+        last:   the last IP in the range
+
+    Returns:
+        A list of IPs from first to last, inclusive (list of str)
+    """
+    all_ips = []
+    ip = first
+    while ip <= last:
+        all_ips.append(str(ip))
+        ip += 1
+    return all_ips
+
 # Implement inet_pton and inet_ntop for Windows
 # From https://gist.github.com/nnemkin/4966028 with minor modifications
 if LOCAL_SYS == "Windows":

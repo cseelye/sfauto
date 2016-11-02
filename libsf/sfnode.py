@@ -103,6 +103,9 @@ class SFNode(object):
         for key in self._unpicklable:
             assert hasattr(self, key)
 
+    def __str__(self):
+        return "SFNode {} version {}".format(self.ipAddress, self.GetNodeVersion())
+
     def IsVirtual(self):
         """
         Check if this is a virtual node
@@ -124,6 +127,18 @@ class SFNode(object):
         """
         result = self.api.CallWithRetry("GetAPI", {}, apiVersion=0.0)
         return float(result["supportedVersions"][-1])
+
+    def GetNodeVersion(self):
+        """
+        Get the version of SF software on this node
+
+        Returns:
+            SolidFire version (str)
+        """
+        version = self.api.CallWithRetry("GetVersionInfo")
+        for key in ["sfapp", "sfconfig"]:
+            if key in version["versionInfo"]:
+                return version["versionInfo"][key]["Version"]
 
     def GetNodeID(self):
         """
