@@ -749,6 +749,13 @@ class SolidFireClusterAPI(SolidFireAPI):
             return True
         except (socket.timeout, socket.error, socket.herror, socket.gaierror):
             return False
+
+    def WaitForUp(self):
+        """
+        Wait for the per-node API to be up and responding
+        """
+        self.CallWithRetry("GetAPI")
+
 #pylint: enable=method-hidden
 
 class SolidFireBootstrapAPI(SolidFireAPI):
@@ -770,6 +777,12 @@ class SolidFireBootstrapAPI(SolidFireAPI):
             timeout:        the timeout for the call
         """
         return super(SolidFireBootstrapAPI, self)._Call(methodName, methodParams, apiVersion=apiVersion, port=443, timeout=timeout)
+
+    def WaitForUp(self):
+        """
+        Wait until the bootstrap API is up and responding to requests
+        """
+        super(SolidFireBootstrapAPI, self)._CallWithRetry("GetAPI", {}, apiVersion=1.0, port=443, timeout=30)
 
     def GetBootstrapConfig(self):
         """
@@ -827,6 +840,7 @@ class SolidFireBootstrapAPI(SolidFireAPI):
         params["svip"] = svip
         params["username"] = username
         params["password"] = password
+        params["acceptEula"] = True
         params["nodes"] = self.GetBootstrapNodes()
         self.Call("CreateStandaloneCluster", params, apiVersion=6.0)
 
