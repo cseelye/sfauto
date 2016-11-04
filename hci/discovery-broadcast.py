@@ -27,7 +27,7 @@ while True:
     if node["ip"] in found_nodes and found_nodes[node["ip"]] == node:
         continue
     found_nodes[node["ip"]] = node
-    print "Found available node {}".format(node["ip"], node["version"])
+    print "Found available node {}".format(node["mip"], node["version"])
 
 # Sample broadcast packet:
 # {
