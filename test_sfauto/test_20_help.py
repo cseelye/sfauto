@@ -6,6 +6,7 @@ import pytest
 import subprocess
 
 
+@pytest.mark.help
 class TestHelp:
 
     def test_ShortHelp(self, scriptfiles_parametrize):
@@ -38,7 +39,7 @@ class TestHelp:
         assert "-d, --debug" in stdout
 
         # Run the script with the short help arg, expect the help to be the same as the long help
-        process = subprocess.Popen("'{}' --help".format(scriptfiles_parametrize), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        process = subprocess.Popen("'{}' -h".format(scriptfiles_parametrize), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
         stdout2, stderr2 = process.communicate()
         retcode2 = process.returncode
 

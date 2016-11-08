@@ -107,7 +107,7 @@ def _NodeThread(node_ip):
 
 if __name__ == '__main__':
     parser = SFArgumentParser(description=GetFirstLine(__doc__), formatter_class=SFArgFormatter)
-    parser.add_argument("--subnet", type=IPv4SubnetType, help="The subnet to search, in either CIDR or network/netmask format")
+    parser.add_argument("--subnet", type=IPv4SubnetType, required=True, help="The subnet to search, in either CIDR or network/netmask format")
     args = parser.parse_args_to_dict()
 
     app = PythonApp(NodeDiscoverSubnet, args)
