@@ -73,9 +73,9 @@ RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 51, 54, 60, 61, 110]
     "mac_addresses" : (OptionalValueType(ItemList(StrType)), None),
     "node_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.node_names),
     "vm_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.vm_names),
-    "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vmware_mgmt_server),
-    "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
-    "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
+    "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vm_mgmt_server),
+    "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vm_mgmt_user),
+    "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vm_mgmt_pass),
 })
 def RtfiNodes(node_ips,
               repo,
