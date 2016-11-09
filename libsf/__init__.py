@@ -308,19 +308,21 @@ class ClientConnectionError(ClientError):
 
 
 class HTTPDownloader(object):
-    def __init__(self, server, username=None, password=None):
+    def __init__(self, server, port=443, username=None, password=None):
         """
         Args:
             server:             the IP address or resolvable hostname of the server to download from
+            port:               the port to use
             username:           the name of an authorized user
             password:           the password of the user
         """
         self.server = server
+        self.port = port
         self.username = username
         self.password = password
         self.log = GetLogger()
 
-    def Download(self, remotePath, useAuth=True, useSSL=True, port=443, timeout=300):
+    def Download(self, remotePath, useAuth=True, useSSL=True, timeout=300):
         """
         Download a URL (GET) and return the content. For large binary files, see StreamingDownload
 
@@ -328,10 +330,9 @@ class HTTPDownloader(object):
             remotePath:     the path component of the URL
             useAuth:        use Basic Auth when connecting
             useSSL:         Use SSL when connecting
-            port:           the port to use
             timeout:        how long to stay connected before abandoning the transfer
 
-            The download URL will be constructed like https://self.server:port/remotePath
+            The download URL will be constructed like http[s]://self.server:port/remotePath
 
         Returns:
             The content retrieved from the URL
@@ -339,7 +340,7 @@ class HTTPDownloader(object):
 
         context = None
         if useSSL:
-            endpoint = urlparse.urljoin('https://{}:{}/'.format(self.server, port), remotePath)
+            endpoint = urlparse.urljoin('https://{}:{}/'.format(self.server, self.port), remotePath)
 
             try:
                 # pylint: disable=no-member
@@ -351,7 +352,7 @@ class HTTPDownloader(object):
                 pass
 
         else:
-            endpoint = urlparse.urljoin('http://{}:{}/'.format(self.server, port), remotePath)
+            endpoint = urlparse.urljoin('http://{}:{}/'.format(self.server, self.port), remotePath)
 
         request = urllib2.Request(endpoint)
         if useAuth and self.username:
@@ -385,7 +386,7 @@ class HTTPDownloader(object):
         response.close()
         return dl
 
-    def StreamingDownload(self, remotePath, localFile, useAuth=True, useSSL=True, port=443, timeout=300):
+    def StreamingDownload(self, remotePath, localFile, useAuth=True, useSSL=True, timeout=300):
         """
         Download a URL (GET) to a file.  Suitable for large/binary files
 
@@ -395,7 +396,6 @@ class HTTPDownloader(object):
                             component of the path must already exist
             useAuth:        use Basic Auth when connecting
             useSSL:         Use SSL when connecting
-            port:           the port to use
             timeout:        how long to stay connected before abandoning the transfer
 
             The download URL will be constructed like https://self.server:port/remotePath
@@ -403,7 +403,7 @@ class HTTPDownloader(object):
 
         context = None
         if useSSL:
-            endpoint = 'https://{}:{}/{}'.format(self.server, port, remotePath)
+            endpoint = 'https://{}:{}/{}'.format(self.server, self.port, remotePath)
 
             try:
                 # pylint: disable=no-member
@@ -415,7 +415,7 @@ class HTTPDownloader(object):
                 pass
 
         else:
-            endpoint = 'http://{}:{}/{}'.format(self.server, port, remotePath)
+            endpoint = 'http://{}:{}/{}'.format(self.server, self.port, remotePath)
 
         request = urllib2.Request(endpoint)
         if useAuth and self.username:
@@ -462,11 +462,13 @@ class HTTPDownloader(object):
     @staticmethod
     def DownloadURL(url, timeout=300):
         pieces = urlparse.urlparse(url)
-        downloader = HTTPDownloader(pieces.netloc, pieces.username, pieces.password)
+        downloader = HTTPDownloader(pieces.netloc,
+                                    443 if pieces.scheme == "https" else 80,
+                                    pieces.username,
+                                    pieces.password)
         return downloader.Download(pieces.path,
                                    useAuth=pieces.username != None,
                                    useSSL=pieces.scheme == "https",
-                                   port=443 if pieces.scheme == "https" else 80,
                                    timeout=timeout)
 
 class SolidFireAPI(object):
@@ -479,6 +481,7 @@ class SolidFireAPI(object):
                  server,
                  username,
                  password,
+                 port=443,
                  *args,
                  **kwargs):
         """
@@ -489,7 +492,7 @@ class SolidFireAPI(object):
             logger:             a logging object to use. If None, no logging will be done
             maxRetryCount:      max number of times to retry an API call
             retrySleep:         how long to wait between each retry
-            errorLogThreshold:  do not log any errors until at least this many have occured
+            errorLogThreshold:  do not log any errors until at least this many have occurred
             errorLogRepeat:     after hitting errorLogThreshold, log every this many errors
         """
 
@@ -497,6 +500,7 @@ class SolidFireAPI(object):
         self.server = server
         self.username = username
         self.password = password
+        self.port = port
         self.log = kwargs.pop('logger', None)
         self.maxRetryCount = kwargs.pop('maxRetryCount', 16)
         self.retrySleep = kwargs.pop('retrySleep', 30)
@@ -513,11 +517,11 @@ class SolidFireAPI(object):
 
         if self.log == None:
             self.log = GetLogger()
-        
-        self.downloader = HTTPDownloader(self.server, self.username, self.password)
+
+        self.downloader = HTTPDownloader(self.server, self.port, self.username, self.password)
     #pylint: enable=unused-argument
 
-    def _CallWithRetry(self, methodName, methodParams=None, apiVersion=1.0, port=443, timeout=180):
+    def _CallWithRetry(self, methodName, methodParams=None, apiVersion=1.0, timeout=180):
         """Call a SolidFire API method, retrying on transient errors
         Arguments:
             methodName:     The method to call
@@ -537,7 +541,7 @@ class SolidFireAPI(object):
                 self.log.error(lastErrorMessage)
 
             try:
-                return self._Call(methodName, methodParams, apiVersion, port, timeout)
+                return self._Call(methodName, methodParams, apiVersion, timeout)
             except SolidFireError as ex:
                 if retryCount < self.maxRetryCount and ex.IsRetryable():
                     retryCount += 1
@@ -550,7 +554,7 @@ class SolidFireAPI(object):
                 self.log.error("_CallWithRetry general Exception: ex:{}".format(str(ex)))
                 raise
 
-    def _Call(self, methodName, methodParams=None, apiVersion=1.0, port=443, timeout=180):
+    def _Call(self, methodName, methodParams=None, apiVersion=1.0, timeout=180):
         """Call a SolidFire API method
         Arguments:
             methodName:     The method to call
@@ -563,7 +567,7 @@ class SolidFireAPI(object):
         """
         methodParams = methodParams or {}
 
-        endpoint = 'https://{}:{}/json-rpc/{:.1f}'.format(self.server, port, apiVersion)
+        endpoint = 'https://{}:{}/json-rpc/{:.1f}'.format(self.server, self.port, apiVersion)
         context = None
         try:
             # pylint: disable=no-member
@@ -626,22 +630,21 @@ class SolidFireAPI(object):
 
         return responseJson['result']
 
-    def _HttpDownload(self, remotePath, useAuth=True, useSSL=True, port=443, timeout=300):
+    def _HttpDownload(self, remotePath, timeout=300):
         """Download a URL (GET) and return the content. For large binary files, see _HttpStreamingDownload
         Arguments:
             remotePath:     the path component of the URL
-            useAuth:        use Basic Auth when connecting
-            useSSL:         Use SSL when connecting
             port:           the port to use
             timeout:        how long to stay connected before abandoning the transfer
-        
+
             The download URL will be constructed like https://self.server:port/remotePath
+
         Returns:
             The content retrieved from the URL
         """
-        return self.downloader.Download(remotePath, useAuth, useSSL, port, timeout)
+        return self.downloader.Download(remotePath, useAuth=True, useSSL=True, timeout=timeout)
 
-    def _HttpStreamingDownload(self, remotePath, localFile, useAuth=True, useSSL=True, port=443, timeout=300):
+    def _HttpStreamingDownload(self, remotePath, localFile, timeout=300):
         """
         Download a URL (GET) to a file.  Suitable for large/binary files
 
@@ -649,14 +652,18 @@ class SolidFireAPI(object):
             remotePath:     the path component of the URL
             localPath:      fully qualified path to the local file to save the content in. The directory
                             component of the path must already exist
-            useAuth:        use Basic Auth when connecting
-            useSSL:         Use SSL when connecting
             port:           the port to use
             timeout:        how long to stay connected before abandoning the transfer
 
             The download URL will be constructed like https://self.server:port/remotePath
         """
-        return self.downloader.StreamingDownload(remotePath, localFile, useAuth, useSSL, port, timeout)
+        return self.downloader.StreamingDownload(remotePath, localFile, useAuth=True, useSSL=True, timeout=timeout)
+
+    def WaitForUp(self):
+        """
+        Wait for the API to be up and responding
+        """
+        self._CallWithRetry("GetAPI")
 
     def _GetReqid(self):
         """Get next request ID"""
@@ -674,19 +681,19 @@ class SolidFireClusterAPI(SolidFireAPI):
         self._nodeIdToMipCache = {}
         self._nodeMap = {}
 
-    def HttpDownload(self, url, useAuth=True, useSSL=True, port=443, timeout=300):
-        return super(SolidFireClusterAPI, self)._HttpDownload(url, useAuth, useSSL, port, timeout)
+    def HttpDownload(self, url, timeout=300):
+        return self._HttpDownload(url, timeout=timeout)
 
-    def Call(self, methodName, methodParams=None, apiVersion=1.0, port=443, timeout=180):
+    def Call(self, methodName, methodParams=None, apiVersion=1.0, timeout=180):
         """Call a SolidFire Cluster API method"""
-        result = super(SolidFireClusterAPI, self)._Call(methodName, methodParams, apiVersion, port, timeout)
+        result = self._Call(methodName, methodParams, apiVersion, timeout)
         if methodName == 'ListActiveNodes' or methodName == 'ListAllNodes':
             self._RefreshNodeIdToMipCache(result['nodes'])
         return result
 
-    def CallWithRetry(self, methodName, methodParams=None, apiVersion=1.0, port=443, timeout=180):
+    def CallWithRetry(self, methodName, methodParams=None, apiVersion=1.0, timeout=180):
         """Call a SolidFire Cluster API method"""
-        result = super(SolidFireClusterAPI, self)._CallWithRetry(methodName, methodParams, apiVersion, port, timeout)
+        result = self._CallWithRetry(methodName, methodParams, apiVersion, timeout)
         if methodName == 'ListActiveNodes' or methodName == 'ListAllNodes':
             self._RefreshNodeIdToMipCache(result['nodes'])
         return result
@@ -710,22 +717,22 @@ class SolidFireClusterAPI(SolidFireAPI):
         for node in nodes:
             self._nodeIdToMipCache[node['nodeID']] = node['mip']
 
-    def NodeCall(self, nodeID, methodName, methodParams=None, apiVersion=5.0, port=442, timeout=60):
+    def NodeCall(self, nodeID, methodName, methodParams=None, apiVersion=5.0, timeout=60):
         """Call a SolidFire Node API method on a node in this cluster"""
         nodeIP = self.NodeIdToMip(nodeID)
-        nodeApi = SolidFireNodeAPI(nodeIP, self.username, self.password, logger=self.log, maxRetryCount=self.maxRetryCount, retrySleep=self.retrySleep, errorLogThreshold=self.errorLogThreshold, errorLogRepeat=self.errorLogRepeat)
-        return nodeApi.Call(methodName, methodParams, apiVersion, port, timeout)
+        nodeApi = SolidFireNodeAPI(nodeIP, self.username, self.password, port=442, logger=self.log, maxRetryCount=self.maxRetryCount, retrySleep=self.retrySleep, errorLogThreshold=self.errorLogThreshold, errorLogRepeat=self.errorLogRepeat)
+        return nodeApi.Call(methodName, methodParams, apiVersion, timeout)
 
-    def NodeCallWithRetry(self, nodeID, methodName, methodParams=None, apiVersion=5.0, port=442, timeout=60):
+    def NodeCallWithRetry(self, nodeID, methodName, methodParams=None, apiVersion=5.0, timeout=60):
         """Call a SolidFire Node API method on a node in this cluster"""
         nodeIP = self.NodeIdToMip(nodeID)
-        nodeApi = SolidFireNodeAPI(nodeIP, self.username, self.password, logger=self.log, maxRetryCount=self.maxRetryCount, retrySleep=self.retrySleep, errorLogThreshold=self.errorLogThreshold, errorLogRepeat=self.errorLogRepeat)
-        return nodeApi.CallWithRetry(methodName, methodParams, apiVersion, port, timeout)
+        nodeApi = SolidFireNodeAPI(nodeIP, self.username, self.password, port=442, logger=self.log, maxRetryCount=self.maxRetryCount, retrySleep=self.retrySleep, errorLogThreshold=self.errorLogThreshold, errorLogRepeat=self.errorLogRepeat)
+        return nodeApi.CallWithRetry(methodName, methodParams, apiVersion, timeout)
 
     def GetNodeApi(self, nodeID):
         """Returns an instance of a per-node API interface for nodeID"""
         nodeIP = self.NodeIdToMip(nodeID)
-        return SolidFireNodeAPI(nodeIP, self.username, self.password, logger=self.log, maxRetryCount=self.maxRetryCount, retrySleep=self.retrySleep, errorLogThreshold=self.errorLogThreshold, errorLogRepeat=self.errorLogRepeat)
+        return SolidFireNodeAPI(nodeIP, self.username, self.password, port=442, logger=self.log, maxRetryCount=self.maxRetryCount, retrySleep=self.retrySleep, errorLogThreshold=self.errorLogThreshold, errorLogRepeat=self.errorLogRepeat)
 
     def GetServer(self):
         """Return the hostname or IP address of the server used for cluster API calls"""
@@ -749,13 +756,6 @@ class SolidFireClusterAPI(SolidFireAPI):
             return True
         except (socket.timeout, socket.error, socket.herror, socket.gaierror):
             return False
-
-    def WaitForUp(self):
-        """
-        Wait for the per-node API to be up and responding
-        """
-        self.CallWithRetry("GetAPI")
-
 #pylint: enable=method-hidden
 
 class SolidFireBootstrapAPI(SolidFireAPI):
@@ -764,8 +764,9 @@ class SolidFireBootstrapAPI(SolidFireAPI):
 
     def __init__(self, nodeIP):
         super(SolidFireBootstrapAPI, self).__init__(server=nodeIP,
-                                                    username="",
-                                                    password="")
+                                                    username=None,
+                                                    password=None,
+                                                    port=443)
 
     def Call(self, methodName, methodParams=None, timeout=120, apiVersion=1.0):
         """
@@ -776,13 +777,7 @@ class SolidFireBootstrapAPI(SolidFireAPI):
             methodParams:   the parameters to use
             timeout:        the timeout for the call
         """
-        return super(SolidFireBootstrapAPI, self)._Call(methodName, methodParams, apiVersion=apiVersion, port=443, timeout=timeout)
-
-    def WaitForUp(self):
-        """
-        Wait until the bootstrap API is up and responding to requests
-        """
-        super(SolidFireBootstrapAPI, self)._CallWithRetry("GetAPI", {}, apiVersion=1.0, port=443, timeout=30)
+        return self._Call(methodName, methodParams, apiVersion=apiVersion, timeout=timeout)
 
     def GetBootstrapConfig(self):
         """
@@ -852,6 +847,7 @@ class AutotestAPI(SolidFireAPI):
                  server="autotest2.solidfire.net",
                  username="automation",
                  password="password",
+                 port=443,
                  *args,
                  **kwargs):
         super(AutotestAPI, self).__init__(server, username, password, *args, **kwargs)
@@ -876,16 +872,16 @@ class SolidFireNodeAPI(SolidFireAPI):
     """Make SolidFire node API calls
     NOT thread safe - each thread should use its own instance"""
 
-    def __init__(self, *args, **kwargs):
-        super(SolidFireNodeAPI, self).__init__(*args, **kwargs)
+    def __init__(self, nodeIP, username=None, password=None, port=442, *args, **kwargs):
+        super(SolidFireNodeAPI, self).__init__(nodeIP, username, password, port, *args, **kwargs)
 
-    def Call(self, methodName, methodParams=None, apiVersion=5.0, port=442, timeout=60):
+    def Call(self, methodName, methodParams=None, apiVersion=5.0, timeout=60):
         """Call a SolidFire Node API method"""
-        return super(SolidFireNodeAPI, self)._Call(methodName, methodParams, apiVersion, port, timeout)
+        return self._Call(methodName, methodParams, apiVersion, timeout)
 
-    def CallWithRetry(self, methodName, methodParams=None, apiVersion=5.0, port=442, timeout=60):
+    def CallWithRetry(self, methodName, methodParams=None, apiVersion=5.0, timeout=60):
         """Call a SolidFire Node API method"""
-        return super(SolidFireNodeAPI, self)._CallWithRetry(methodName, methodParams, apiVersion, port, timeout)
+        return self._CallWithRetry(methodName, methodParams, apiVersion, timeout)
 
     def GetAllRtfiStatus(self):
         """
@@ -894,7 +890,7 @@ class SolidFireNodeAPI(SolidFireAPI):
         Returns:
             A list of dictionaries of status (list of dict) or None
         """
-        text = super(SolidFireNodeAPI, self)._HttpDownload("/config/rtfi/status/all.json", port=442, timeout=10)
+        text = self._HttpDownload("/config/rtfi/status/all.json", timeout=10)
         try:
             return json.loads(text)
         except ValueError:
@@ -907,7 +903,7 @@ class SolidFireNodeAPI(SolidFireAPI):
         Returns:
             A dictionary containing the latest RTFI status (dict) or None
         """
-        text = super(SolidFireNodeAPI, self)._HttpDownload("/config/rtfi/status/current.json", port=442, timeout=10)
+        text = self._HttpDownload("/config/rtfi/status/current.json", timeout=10)
         try:
             return json.loads(text)
         except ValueError:
@@ -920,7 +916,7 @@ class SolidFireNodeAPI(SolidFireAPI):
         Args:
             localFile:      path to save the log file
         """
-        super(SolidFireNodeAPI, self)._HttpStreamingDownload("/config/rtfi/status/rtfi.log", localFile, port=442, timeout=60)
+        self._HttpStreamingDownload("/config/rtfi/status/rtfi.log", localFile, timeout=60)
 
     def CreateSupportBundle(self, bundleName, localPath=None, extraArgs=None):
         """Create a support bundle on this node, and optionally download it locally
@@ -961,7 +957,7 @@ class SolidFireNodeAPI(SolidFireAPI):
             localFileName = os.path.join(localPath, remoteFileName)
 
             # Download the bundle
-            super(SolidFireNodeAPI, self)._HttpStreamingDownload(remotePath, localFileName, port=442, timeout=900)
+            self._HttpStreamingDownload(remotePath, localFileName, timeout=900)
             return localFileName
 
         # Caller did not pass in localPath
