@@ -233,7 +233,7 @@ class SFNode(object):
         self.WaitForDown()
 
         if waitForUp:
-            self.WaitForUp()
+            self.WaitForUp(initialWait=10)
 
     def HardReboot(self, waitForUp=True):
         """
@@ -248,7 +248,8 @@ class SFNode(object):
         self.WaitForDown()
 
         if waitForUp:
-            self.WaitForUp()
+            wait = 20 if self.vm else 180
+            self.WaitForUp(initialWait=wait)
 
     def PowerOn(self, waitForUp=True):
         """
@@ -270,7 +271,8 @@ class SFNode(object):
                 time.sleep(sfdefaults.TIME_SECOND)
 
         if waitForUp:
-            self.WaitForUp()
+            wait = 20 if self.vm else 180
+            self.WaitForUp(initialWait=wait)
 
     def PowerOff(self):
         """
@@ -352,7 +354,7 @@ class SFNode(object):
             if current_time - start_time >= timeout:
                 raise TimeoutError("Timeout waiting for node {} to come up".format(self.ipAddress))
 
-    def WaitForUp(self, timeout=600, initialWait=20):
+    def WaitForUp(self, timeout=600, initialWait=0):
         """
         Wait for this node to be up on the network
 
@@ -369,13 +371,13 @@ class SFNode(object):
             if current_time - start_time >= timeout:
                 raise TimeoutError("Timeout waiting for node {} to come up".format(self.ipAddress))
 
-        self.log.info("Waiting for {}:442 API to be up".format(self.ipAddress))
-        self.api.CallWithRetry("GetAPI")
+        self.WaitForNodeAPI()
 
     def WaitForNodeAPI(self):
         """
         Wait for the node API to be up and ready
         """
+        self.log.info("Waiting for {}:442 API to be up".format(self.ipAddress))
         self.api.WaitForUp()
 
     def WaitForBootstrapAPI(self):
@@ -507,6 +509,9 @@ class SFNode(object):
 
         # Update my internal data
         self._SetInternalManagementIP(onegIP)
+
+        # Wait for the API to be ready on the new IP
+        self.WaitForNodeAPI()
 
     def _SetNetworkInfoThread(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, tengGateway, onegNic, tengNic, status):
         """Internal method to set the network info using a separate thread"""
