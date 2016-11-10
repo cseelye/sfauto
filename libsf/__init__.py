@@ -167,7 +167,7 @@ class ConnectionError(SolidFireError):
                 #  110 - connection timed out
                 #  111 - connection refused (transient on restarts)
                 #  113 - no route to host (transient when node is rebooted)
-                if self.code in (54, 61, 104, 110, 111, 113):
+                if self.code in (54, 60, 61, 104, 110, 111, 113):
                     self.retryable = True
             elif type(self.innerException) == OSError:
                 self.message = 'OSError {}: {}'.format(self.innerException.errno, self.innerException.strerror)
@@ -506,7 +506,8 @@ class SolidFireAPI(object):
         self.retrySleep = kwargs.pop('retrySleep', 30)
         self.errorLogThreshold = kwargs.pop('errorLogThreshold', 3)
         self.errorLogRepeat = kwargs.pop('errorLogRepeat', 3)
-        
+        self.minApiVersion = kwargs.pop("minApiVersion", 1.0)
+
         for key, value in kwargs.iteritems():
             setattr(self, key, value)
 
@@ -521,7 +522,7 @@ class SolidFireAPI(object):
         self.downloader = HTTPDownloader(self.server, self.port, self.username, self.password)
     #pylint: enable=unused-argument
 
-    def _CallWithRetry(self, methodName, methodParams=None, apiVersion=1.0, timeout=180):
+    def _CallWithRetry(self, methodName, methodParams=None, apiVersion=None, timeout=180):
         """Call a SolidFire API method, retrying on transient errors
         Arguments:
             methodName:     The method to call
@@ -533,6 +534,7 @@ class SolidFireAPI(object):
             The API response dictionary
         """
 
+        apiVersion = apiVersion or self.minApiVersion
         retryCount = 0
         errorCount = 0
         lastErrorMessage = ''
@@ -554,7 +556,7 @@ class SolidFireAPI(object):
                 self.log.error("_CallWithRetry general Exception: ex:{}".format(str(ex)))
                 raise
 
-    def _Call(self, methodName, methodParams=None, apiVersion=1.0, timeout=180):
+    def _Call(self, methodName, methodParams=None, apiVersion=None, timeout=180):
         """Call a SolidFire API method
         Arguments:
             methodName:     The method to call
@@ -566,6 +568,7 @@ class SolidFireAPI(object):
             The API response dictionary
         """
         methodParams = methodParams or {}
+        apiVersion = apiVersion or self.minApiVersion
 
         endpoint = 'https://{}:{}/json-rpc/{:.1f}'.format(self.server, self.port, apiVersion)
         context = None
@@ -663,7 +666,12 @@ class SolidFireAPI(object):
         """
         Wait for the API to be up and responding
         """
-        self._CallWithRetry("GetAPI")
+        old_threshold = self.errorLogThreshold
+        self.errorLogThreshold = 1000000
+        try:
+            self._CallWithRetry("GetAPI")
+        finally:
+            self.errorLogThreshold = old_threshold
 
     def _GetReqid(self):
         """Get next request ID"""
@@ -684,15 +692,17 @@ class SolidFireClusterAPI(SolidFireAPI):
     def HttpDownload(self, url, timeout=300):
         return self._HttpDownload(url, timeout=timeout)
 
-    def Call(self, methodName, methodParams=None, apiVersion=1.0, timeout=180):
+    def Call(self, methodName, methodParams=None, apiVersion=None, timeout=180):
         """Call a SolidFire Cluster API method"""
+        apiVersion = apiVersion or self.minApiVersion
         result = self._Call(methodName, methodParams, apiVersion, timeout)
         if methodName == 'ListActiveNodes' or methodName == 'ListAllNodes':
             self._RefreshNodeIdToMipCache(result['nodes'])
         return result
 
-    def CallWithRetry(self, methodName, methodParams=None, apiVersion=1.0, timeout=180):
+    def CallWithRetry(self, methodName, methodParams=None, apiVersion=None, timeout=180):
         """Call a SolidFire Cluster API method"""
+        apiVersion = apiVersion or self.minApiVersion
         result = self._CallWithRetry(methodName, methodParams, apiVersion, timeout)
         if methodName == 'ListActiveNodes' or methodName == 'ListAllNodes':
             self._RefreshNodeIdToMipCache(result['nodes'])
@@ -874,13 +884,16 @@ class SolidFireNodeAPI(SolidFireAPI):
 
     def __init__(self, nodeIP, username=None, password=None, port=442, *args, **kwargs):
         super(SolidFireNodeAPI, self).__init__(nodeIP, username, password, port, *args, **kwargs)
+        self.minApiVersion = 5.0
 
-    def Call(self, methodName, methodParams=None, apiVersion=5.0, timeout=60):
+    def Call(self, methodName, methodParams=None, apiVersion=None, timeout=60):
         """Call a SolidFire Node API method"""
+        apiVersion = apiVersion or self.minApiVersion
         return self._Call(methodName, methodParams, apiVersion, timeout)
 
-    def CallWithRetry(self, methodName, methodParams=None, apiVersion=5.0, timeout=60):
+    def CallWithRetry(self, methodName, methodParams=None, apiVersion=None, timeout=60):
         """Call a SolidFire Node API method"""
+        apiVersion = apiVersion or self.minApiVersion
         return self._CallWithRetry(methodName, methodParams, apiVersion, timeout)
 
     def GetAllRtfiStatus(self):
