@@ -4,6 +4,7 @@
 from . import sfdefaults
 from . import SolidFireError, UnauthorizedError, TimeoutError
 from .logutil import GetLogger
+import inspect
 import libvirt
 import libvirt_qemu
 import multiprocessing
@@ -96,7 +97,7 @@ class VirtualMachine(object):
         log = GetLogger()
 
         # Try each type of VirtualMachine class until one works
-        GetLogger().info("Connecting to hypervisor")
+        log.info("Connecting to hypervisor")
         for classname in ["VirtualMachineVMware", "VirtualMachineKVM"]:
             classdef = getattr(sys.modules[__name__], classname)
             log.debug2("Trying {} for VM {}".format(classname, vmName))
@@ -106,6 +107,60 @@ class VirtualMachine(object):
                 log.debug2(str(ex))
 
         raise VirtualizationError("Could not create VM object; check connection to management server and VM exists on server")
+
+class VMHost(object):
+
+    def __init__(self, vmhostName, mgmtServer, mgmtUsername, mgmtPassword):
+        self.vmhostName = vmhostName
+        self.mgmtServer = mgmtServer
+        self.mgmtUsername = mgmtUsername
+        self.mgmtPassword = mgmtPassword
+        self.hostType = "Unknown"
+        self.log = GetLogger()
+
+        self._unpicklable = ["log"]
+
+    def __getstate__(self):
+        attrs = {}
+        for key, value in self.__dict__.iteritems():
+            if key not in self._unpicklable:
+                attrs[key] = value
+        return attrs
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.log = GetLogger()
+
+    def __str__(self):
+        return "{{{} host {}}}".format(self.hostType, self.vmhostName)
+
+    def CreateDatastores(self, includeInternalDrives=False, includeSlotDrives=False):
+        raise NotImplementedError()
+
+    @staticmethod
+    def Create(vmhostName, mgmtServer, mgmtUsername, mgmtPassword):
+        """
+        Factory method to create a VMHost of the correct sub-type
+
+        Args:
+            vmhostName:     the IP/name of the hypervisor (str)
+            mgmtServer:     the server used to manage the hypervisor, or the hypervisor itself (str)
+            mgmtUsername:   the username for the management server (str)
+            mgmtPassword:   the password for the management server (str)
+        """
+        log = GetLogger()
+
+        # Try each type of VMHost class until one works
+        for classname, classdef in inspect.getmembers(sys.modules[__name__], lambda member: inspect.isclass(member) and \
+                                                                                 issubclass(member, VMHost) and \
+                                                                                 member != VMHost):
+            log.debug2("Trying {} for VMHost {}".format(classname, vmhostName))
+            try:
+                return classdef(vmhostName, mgmtServer, mgmtUsername, mgmtPassword)
+            except (VirtualizationError, TimeoutError) as ex:
+                log.debug2(str(ex))
+
+        raise VirtualizationError("Could not create VMhost object; check connection to management server and host exists on server")
 
 # ================================================================================================================================
 # VMware support
@@ -264,7 +319,8 @@ def VMwareWaitForTasks(connection, tasks):
                             # Remove task from taskList
                             taskList.remove(str(task))
                         elif state == vim.TaskInfo.State.error:
-                            raise task.info.error
+                            GetLogger().debug2(task.info.error)
+                            raise VirtualizationError(task.info.error.msg)
             # Move to next version
             version = update.version
     finally:
@@ -290,8 +346,9 @@ class VirtualMachineVMware(VirtualMachine):
         """
         with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
             vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
-            
+
             self.log.info("Waiting for {} to turn on".format(self.vmName))
+            self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
             if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
                 return
 
@@ -306,6 +363,7 @@ class VirtualMachineVMware(VirtualMachine):
             vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
             
             self.log.info("Waiting for {} to turn off".format(self.vmName))
+            self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
             if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOff:
                 return True
 
@@ -321,6 +379,7 @@ class VirtualMachineVMware(VirtualMachine):
         """
         with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
             vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
+            self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
 
             if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
                 return "on"
@@ -403,8 +462,82 @@ class VirtualMachineVMware(VirtualMachine):
                     raise TimeoutError("Timeout waiting for guest heartbeat")
                 time.sleep(2)
 
+class VMHostVMware(VMHost):
+    """
+    VMware implementation of VMHost class
+    """
 
+    def __init__(self, vmhostName, mgmtServer, mgmtUsername, mgmtPassword):
+        super(VMHostVMware, self).__init__(vmhostName, mgmtServer, mgmtUsername, mgmtPassword)
+        self.hostType = "VMware"
 
+        # Test the connection and make sure the host exists
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name"])
+
+    def CreateDatastores(self, includeInternalDrives=False, includeSlotDrives=False):
+        """
+        Create/attach datastores on any volumes currently connected to this host
+
+        Args:
+            includeInternalDrives:      include disks attached to internal SATA/AHCI bus
+            includeSlotDrives:          include external disks in slots
+        """
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
+            storage_manager = host.configManager.storageSystem
+            datastore_manager = host.configManager.datastoreSystem
+
+            # Go through each HBA and make a reference from LUN => datastore name
+            lun2name = {}
+            for adapter in storage_manager.storageDeviceInfo.hostBusAdapter:
+                if adapter.driver == "nvme":
+                    self.log.debug("Skipping NVRAM device")
+                    continue
+
+                elif type(adapter) == vim.host.InternetScsiHba:
+                    # iSCSI, either software or HBA
+                    # volumeName.volumeID naming
+                    for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
+                        for lun in target.lun:
+                            name = ".".join(target.transport.iScsiName.split(".")[-2:])
+                            if lun.lun != 0:
+                                name += "-lun{}".format(lun.lun)
+                            lun2name[lun.scsiLun] = name
+
+                elif type(adapter) == vim.host.BlockHba:
+                    if adapter.driver == "ahci" and includeInternalDrives:
+                        # Internal SATA adapter
+                        # "sdimmX" naming
+                        for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
+                            for lun in target.lun:
+                                lun2name[lun.scsiLun] = "sdimm{}".format(target.target)
+
+                    if (adapter.driver == "mpt2sas" or adapter.driver == "mpt3sas") and includeSlotDrives:
+                        # SAS adapter for nodes
+                        # "slotX" naming
+                        for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
+                            for lun in target.lun:
+                                lun2name[lun.scsiLun] = "slot{}".format(target.target)
+
+                else:
+                    self.log.warning("Skipping unknown HBA {}".format(adapter.device))
+
+            # Go through the list of connected LUNs and make a reference from device => datastore name
+            device2name = {}
+            for disk in storage_manager.storageDeviceInfo.scsiLun:
+                if disk.key in lun2name:
+                    device2name[disk.deviceName] = lun2name[disk.key]
+                    print "{} => {}".format(disk.deviceName, lun2name[disk.key])
+
+            # Get a list of available disks and create datastores on them
+            for disk in datastore_manager.QueryAvailableDisksForVmfs():
+                if disk.devicePath in device2name:
+                    option_list = datastore_manager.QueryVmfsDatastoreCreateOptions(devicePath=disk.devicePath)
+                    create_spec = option_list[0].spec
+                    create_spec.vmfs.volumeName = device2name[disk.devicePath]
+                    self.log.info("Creating datastore {}".format(device2name[disk.devicePath]))
+                    datastore_manager.CreateVmfsDatastore(spec=create_spec)
 
 # ================================================================================================================================
 
