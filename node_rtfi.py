@@ -501,7 +501,6 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
         try:
             status = node.GetAllRTFIStatus()
         except ConnectionError as ex:
-            log.debug2(str(ex))
             if not ex.IsRetryable() and ex.code not in RETRYABLE_RTFI_STATUS_ERRORS:
                 log.warning(str(ex))
             status = None
