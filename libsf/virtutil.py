@@ -222,16 +222,16 @@ def VMwareFindObjectGetProperties(connection, obj_name, obj_type, properties=Non
     Arguments:
         connection:     the vsphere connection to use (vim.ServiceInstance)
         obj_name:       the name of the object to find (str)
-        obj_type:       the type of the object, ex vim.VirtualMachine (str)
+        obj_type:       the type of the object, ex vim.VirtualMachine (vim.Something)
         properties:     the properties of the object to retrieve.  Set to None to return all properties, but this is very slow! (list of str)
         parent:         the parent object to start the search, such as a datacenter or host.  Set to None to search the entire vCenter (vim.Something)
 
     Returns:
         The requested vim object with only the requested properties
     """
-    log = GetLogger()
+#    log = GetLogger()
 
-    log.debug2('Searching for a {} named "{}"'.format(obj_type.__name__, obj_name))
+#    log.debug2('Searching for a {} named "{}"'.format(obj_type.__name__, obj_name))
     if obj_type == vim.VirtualMachine and obj_name in sfdefaults.blacklisted_vm_names:
         raise VirtualizationError('{} is a reserved name and cannot be used here'.format(obj_name))
 
@@ -283,6 +283,7 @@ def VMwareWaitForTasks(connection, tasks):
         connection:     the vsphere connection to use (vim.ServiceInstance)
         tasks:          the list of tasks to wait for (list of vim.Task)
     """
+    log = GetLogger()
 
     pc = connection.content.propertyCollector
     taskList = [str(task) for task in tasks]
@@ -300,26 +301,40 @@ def VMwareWaitForTasks(connection, tasks):
 
         # Loop looking for updates till the state moves to a completed state.
         while len(taskList):
-            update = pc.WaitForUpdates(version)
+            update = pc.CheckForUpdates(version)
+            if not update:
+                time.sleep(1)
+                continue
             for filterSet in update.filterSet:
                 for objSet in filterSet.objectSet:
                     task = objSet.obj
+                    if not str(task) in taskList:
+                        continue
+#                    log.debug2("Got an update for the task")
                     for change in objSet.changeSet:
+#                        log.debug2("{}".format(change))
+
+                        # Initial change when the task starts
                         if change.name == 'info':
+                            log.debug("progress={}%".format(change.val.progress or 0))
                             state = change.val.state
+
+                        # Final change when the task finishes or fails
                         elif change.name == 'info.state':
                             state = change.val
-                        else:
-                            continue
 
-                        if not str(task) in taskList:
+                        # Progress update change
+                        elif change.name == "info.progress":
+                            log.debug("progress={}%".format(change.val or 0))
+
+                        else:
                             continue
 
                         if state == vim.TaskInfo.State.success:
                             # Remove task from taskList
                             taskList.remove(str(task))
                         elif state == vim.TaskInfo.State.error:
-                            GetLogger().debug2(task.info.error)
+                            log.debug(task.info.error)
                             raise VirtualizationError(task.info.error.msg)
             # Move to next version
             version = update.version
@@ -347,11 +362,11 @@ class VirtualMachineVMware(VirtualMachine):
         with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
             vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
 
-            self.log.info("Waiting for {} to turn on".format(self.vmName))
             self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
             if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
                 return
 
+            self.log.info("Waiting for {} to turn on".format(self.vmName))
             task = vm.PowerOn()
             VMwareWaitForTasks(vsphere, [task])
 
@@ -362,11 +377,11 @@ class VirtualMachineVMware(VirtualMachine):
         with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
             vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
             
-            self.log.info("Waiting for {} to turn off".format(self.vmName))
             self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
             if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOff:
                 return True
 
+            self.log.info("Waiting for {} to turn off".format(self.vmName))
             task = vm.PowerOff()
             VMwareWaitForTasks(vsphere, [task])
 
@@ -431,6 +446,7 @@ class VirtualMachineVMware(VirtualMachine):
             # Wait for VM to be powered on
             while True:
                 vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "runtime.powerState"])
+                self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
                 if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
                     self.log.info("VM is powered on")
                     break
@@ -442,6 +458,7 @@ class VirtualMachineVMware(VirtualMachine):
             # Wait for VMwware tools to be running
             while True:
                 vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "guest.toolsRunningStatus", "guest.toolsStatus"])
+                self.log.debug2("{} guest.toolsRunningStatus={}".format(self.vmName, vm.guest.toolsRunningStatus))
                 if vm.guest.toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
                     self.log.warning("VMware tools are not installed in this VM; cannot detect VM boot/health")
                     return
@@ -455,6 +472,7 @@ class VirtualMachineVMware(VirtualMachine):
             # Wait for VM heartbeat to be green
             while True:
                 vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "guestHeartbeatStatus"])
+                self.log.debug2("{} guestHeartbeatStatus={}".format(self.vmName, vm.guestHeartbeatStatus))
                 if vm.guestHeartbeatStatus == vim.ManagedEntityStatus.green:
                     self.log.info("VM guest heartbeat is green")
                     break
