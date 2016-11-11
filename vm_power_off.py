@@ -8,17 +8,17 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs, SetThreadLogPrefix
 from libsf.virtutil import VirtualMachine
-from libsf.util import ValidateAndDefault, ItemList, IPv4AddressType, OptionalValueType, StrType
+from libsf.util import ValidateAndDefault, ItemList, IPv4AddressType, StrType
 from libsf import sfdefaults, threadutil
 from libsf import SolidFireError
 
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
-    "vm_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.vm_names),
-    "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vmware_mgmt_server),
-    "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
-    "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
+    "vm_names" : (ItemList(StrType), sfdefaults.vm_names),
+    "vm_mgmt_server" : (IPv4AddressType, sfdefaults.vm_mgmt_server),
+    "vm_mgmt_user" : (StrType, sfdefaults.vm_mgmt_user),
+    "vm_mgmt_pass" : (StrType, sfdefaults.vm_mgmt_pass),
 })
 def NodePowerOff(vm_names,
                  vm_mgmt_server,
