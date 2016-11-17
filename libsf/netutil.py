@@ -23,6 +23,10 @@ class HostNotFoundError(SolidFireError):
     """Exception for NXDOMAIN errors that is rooted in the SolidFire exception hierarchy"""
     pass
 
+class ServfailError(SolidFireError):
+    """Exception for SERVFAIL errors"""
+    pass
+
 def Ping(address):
     """
     Ping a host
@@ -121,6 +125,8 @@ def ResolveHostname(hostname, nameserver):
         return [record.address for record in ans]
     except resolver.NXDOMAIN as ex:
         raise HostNotFoundError("Host {} not found".format(hostname), innerException=ex)
+    except resolver.SERVFAIL as ex:
+        raise ServfailError("Error querying DNS: {}".format(ex), innerException=ex)
 
 def IPToInteger(ip):
     """Convert a string dotted quad IP address to an integer
