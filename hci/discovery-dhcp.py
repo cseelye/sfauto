@@ -28,8 +28,12 @@ def discoverNode(node_ip):
             api_result = callAPI(node_ip, "GetVersionInfo", {})
             node_info["version"] = api_result["result"]["versionInfo"]["sfconfig"]["Version"]
         return node_info
-    except (urllib2.HTTPError, urllib2.URLError) as ex:
-        return {"state" : "Active"}
+    except urllib2.HTTPError as ex:
+        if ex.code == 401:
+            return {"state" : "Active"}
+        return None
+    except urllib2.URLError as ex:
+        return None
 
 def callAPI(node_ip, method, params):
     endpoint = "https://{}:{}/json-rpc/5.0".format(node_ip, NODE_API_PORT)
