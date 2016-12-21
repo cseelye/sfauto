@@ -4,6 +4,7 @@
 from . import sfdefaults
 from . import SolidFireError, UnauthorizedError, TimeoutError
 from .logutil import GetLogger
+from .sfclient import SFClient
 import inspect
 import libvirt
 import libvirt_qemu
@@ -45,6 +46,9 @@ class VirtualizationError(SolidFireError):
     pass
 
 class VirtualMachine(object):
+    """
+    Base class for virtual machines.  Do not instantiate this class directly, use the Create static method
+    """
 
     def __init__(self, vmName, hostServer, hostUsername, hostPassword):
         self.vmName = vmName
@@ -67,6 +71,10 @@ class VirtualMachine(object):
         self.__dict__.update(state)
         self.log = GetLogger()
 
+    def __str__(self):
+        return "{{{} on {} ({})}}".format(self.vmName, self.vmType, self.hostServer)
+
+    # VM operations
     def PowerOn(self):
         raise NotImplementedError()
     def PowerOff(self):
@@ -80,8 +88,6 @@ class VirtualMachine(object):
     def WaitForUp(self, timeout=300):
         raise NotImplementedError()
 
-    def __str__(self):
-        return "{{{} on {} ({})}}".format(self.vmName, self.vmType, self.hostServer)
 
     @staticmethod
     def Create(vmName, mgmtServer, mgmtUsername, mgmtPassword):
@@ -109,6 +115,9 @@ class VirtualMachine(object):
         raise VirtualizationError("Could not create VM object; check connection to management server and VM exists on server")
 
 class VMHost(object):
+    """
+    Base class for virtualization hosts (hypervisors).  Do not instantiate this class directly, use the Create static method
+    """
 
     def __init__(self, vmhostName, mgmtServer, mgmtUsername, mgmtPassword):
         self.vmhostName = vmhostName
@@ -134,8 +143,10 @@ class VMHost(object):
     def __str__(self):
         return "{{{} host {}}}".format(self.hostType, self.vmhostName)
 
+    # Hypervisor operations
     def CreateDatastores(self, includeInternalDrives=False, includeSlotDrives=False):
         raise NotImplementedError()
+
 
     @staticmethod
     def Create(vmhostName, mgmtServer, mgmtUsername, mgmtPassword):
@@ -859,6 +870,23 @@ class VirtualMachineKVM(VirtualMachine):
                         continue
                     else:
                         raise VirtualizationError("Failed to wait for guest agent: {}".format(str(ex)), ex)
+
+class VMHostKVM(VMHost):
+    """
+    KVM implementation of VMHost class
+    """
+
+    def __init__(self, vmhostName, mgmtServer, mgmtUsername, mgmtPassword):
+        super(VMHostKVM, self).__init__(vmhostName, mgmtServer, mgmtUsername, mgmtPassword)
+        self.hostType = "KVM"
+
+        self.client = SFClient(self.mgmtServer, self.mgmtUsername, self.mgmtPassword)
+
+    def CreateDatastores(self):
+        """
+        Create filesystem on any volumes currently connected to this host
+        """
+        self.client.SetupVolumes()
 
 
 # ================================================================================================================================

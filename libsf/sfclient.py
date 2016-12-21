@@ -1537,7 +1537,13 @@ class SFClient:
             return sorted(devices)
 
         elif self.remoteOS == OSType.Linux:
-            # First look for multipath devices
+            # Find the root device
+            _, stdout, _ = self.ExecuteCommand("cat /proc/mounts | egrep '\s/\s' | cut -d' ' -f1 | egrep -o '[a-z/]+'")
+            if retcode != 0:
+                raise ClientError("Could not determine root drive")
+            root_drive = stdout.strip()
+
+            # First look for multipath devices (FC or multipath iSCSI)
             retcode, stdout, _ = self.ExecuteCommand("multipath -l | grep SolidFir | awk '{print $3}' | sort", throwOnError=False)
             if retcode == 0:
                 dev_list = []
@@ -1549,6 +1555,7 @@ class SFClient:
                 if len(dev_list) > 0:
                     return sorted(dev_list, key=lambda x: int(re.findall(r'\d+$', x)[0]))
 
+            # Look for regular iSCSI volumes
             _, stdout, _ = self.ExecuteCommand("iscsiadm -m session -P 3 | egrep 'Target:|State:|disk'")
             new_volume = None
             volumes = {}
@@ -1580,6 +1587,12 @@ class SFClient:
             for length in sorted(devs_by_length.keys(), key=int):
                 devs_by_length[length].sort()
                 sorted_devs += devs_by_length[length]
+
+            # Make sure the root device is not in the list
+            try:
+                sorted_devs.remove(root_drive)
+            except ValueError:
+                pass
             return sorted_devs
 
         elif self.remoteOS == OSType.SunOS:
@@ -1761,6 +1774,12 @@ class SFClient:
             else:
                 self._debug(stdout)
                 raise ClientError(self._parse_diskapp_error(stdout))
+        elif self.remoteOS == OSType.Linux:
+            volumes = self.GetVolumeSummary()
+            for dev, vol_info in volumes.iteritems():
+                vol_info["iqn"] 
+                _, stdout, _ = self.ExecuteCommand("mkdir -p /mnt/")
+
         else:
             raise ClientError("Sorry, not implemented yet for " + self.remoteOS)
 

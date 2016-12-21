@@ -40,7 +40,7 @@ def Ping(address):
     if LOCAL_SYS == "Windows":
         command = "ping -n 2 {}".format(address)
     elif LOCAL_SYS == "Darwin":
-        command = "ping -n -i 1 -c 3 -W 2 {}".format(address)
+        command = "ping -n -i 1 -c 3 -W 2000 {}".format(address)
     else:
         command = "ping -n -i 0.2 -c 5 -W 2 {}".format(address)
 
