@@ -40,6 +40,7 @@ node_names = None                   # List of node hostnames
 node_ips = None                     # List of node IP addresses
 cip_ips = None                      # List of node 10G addresses
 ipmi_ips = None                     # List of node IPMI IP addresses
+mac_addresses = None                # List of node MAC addresses
 mip_netmask = None                  # Node 1G subnet mask
 mip_gateway = None                  # Node 1G gateway
 cip_netmask = None                  # Node 10G netmask

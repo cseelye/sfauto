@@ -70,7 +70,7 @@ RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 51, 54, 60, 61, 110]
     "pxe_user" : (OptionalValueType(StrType), sfdefaults.pxe_user),
     "pxe_pass" : (OptionalValueType(StrType), sfdefaults.pxe_pass),
     "jenkins_server" : (OptionalValueType(IPv4AddressType), sfdefaults.jenkins_server),
-    "mac_addresses" : (OptionalValueType(ItemList(StrType)), None),
+    "mac_addresses" : (OptionalValueType(ItemList(StrType)), sfdefaults.mac_addresses),
     "node_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.node_names),
     "vm_names" : (OptionalValueType(ItemList(StrType)), sfdefaults.vm_names),
     "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vm_mgmt_server),
@@ -624,7 +624,7 @@ if __name__ == '__main__':
     net_override_group.add_argument("-I", "--ipmi-ips", type=ItemList(IPv4AddressType), default=sfdefaults.ipmi_ips, metavar="IP1,IP2...", help="the IPMI IP addresses for the nodes")
     net_override_group.add_argument("--ipmi-user", type=StrType, default=sfdefaults.ipmi_user, metavar="USERNAME", help="the IPMI username for all nodes")
     net_override_group.add_argument("--ipmi-pass", type=StrType, default=sfdefaults.ipmi_pass, metavar="PASSWORD", help="the IPMI password for all nodes")
-    net_override_group.add_argument("--mac-addresses", type=ItemList(StrType), metavar="MAC1,MAC2...", help="the MAC addresses for the nodes")
+    net_override_group.add_argument("--mac-addresses", type=ItemList(StrType), default=sfdefaults.mac_addresses, metavar="MAC1,MAC2...", help="the MAC addresses for the nodes")
     net_override_group.add_argument("--node-names", type=ItemList(StrType), default=sfdefaults.node_names, metavar="HOSTNAME1,HOSTNAME2...", help="the hostnames for the nodes")
     net_override_group.add_argument("--pxe-server", type=IPv4AddressType, default=sfdefaults.pxe_server, metavar="IP", required=False, help="use this PXE server for all nodes during RTFI")
     net_override_group.add_argument("--pxe-user", type=StrType, default=sfdefaults.pxe_user, metavar="USERNAME", help="the PXE server username for all nodes")
