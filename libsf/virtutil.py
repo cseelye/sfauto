@@ -882,7 +882,7 @@ class VMHostKVM(VMHost):
 
         self.client = SFClient(self.mgmtServer, self.mgmtUsername, self.mgmtPassword)
 
-    def CreateDatastores(self):
+    def CreateDatastores(self, includeInternalDrives=False, includeSlotDrives=False):
         """
         Create filesystem on any volumes currently connected to this host
         """

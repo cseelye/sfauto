@@ -4,7 +4,7 @@ Helpers for network related
 """
 
 import ctypes
-from dns import resolver
+import dns
 import email.encoders
 from email.mime.multipart import MIMEMultipart, MIMEBase
 from email.mime.text import MIMEText
@@ -118,14 +118,14 @@ def ResolveHostname(hostname, nameserver):
     Returns:
         A list of IP addresses the hostname resolves to (list of str)
     """
-    res = resolver.Resolver()
+    res = dns.resolver.Resolver()
     res.nameservers = [nameserver]
     try:
         ans = res.query(hostname)
         return [record.address for record in ans]
-    except resolver.NXDOMAIN as ex:
+    except dns.resolver.NXDOMAIN as ex:
         raise HostNotFoundError("Host {} not found".format(hostname), innerException=ex)
-    except resolver.SERVFAIL as ex:
+    except dns.exception.DNSException as ex:
         raise ServfailError("Error querying DNS: {}".format(ex), innerException=ex)
 
 def IPToInteger(ip):

@@ -1538,7 +1538,7 @@ class SFClient:
 
         elif self.remoteOS == OSType.Linux:
             # Find the root device
-            _, stdout, _ = self.ExecuteCommand("cat /proc/mounts | egrep '\s/\s' | cut -d' ' -f1 | egrep -o '[a-z/]+'")
+            retcode, stdout, _ = self.ExecuteCommand(r"cat /proc/mounts | egrep '\s/\s' | cut -d' ' -f1 | egrep -o '[a-z/]+'")
             if retcode != 0:
                 raise ClientError("Could not determine root drive")
             root_drive = stdout.strip()
@@ -1774,11 +1774,12 @@ class SFClient:
             else:
                 self._debug(stdout)
                 raise ClientError(self._parse_diskapp_error(stdout))
+
         elif self.remoteOS == OSType.Linux:
             volumes = self.GetVolumeSummary()
-            for dev, vol_info in volumes.iteritems():
-                vol_info["iqn"] 
-                _, stdout, _ = self.ExecuteCommand("mkdir -p /mnt/")
+            for vol_info in volumes.values():
+                vname = vol_info["iqn"].split(".")[-2]
+                self.ExecuteCommand("mkdir -p /mnt/{}".format(vname))
 
         else:
             raise ClientError("Sorry, not implemented yet for " + self.remoteOS)
