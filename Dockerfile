@@ -1,14 +1,16 @@
 FROM ubuntu:16.04
 
+ENV TERM=xterm-256color
 RUN apt-get update && \
     apt-get --assume-yes dist-upgrade && \
     DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes \
-        pkg-config \
-        curl \
         build-essential \
+        curl \
         ipmitool \
         libvirt-bin \
         libvirt-dev \
+        net-tools \
+        pkg-config \
         python2.7 \
         python2.7-dev && \
     curl https://bootstrap.pypa.io/get-pip.py | python2.7 && \
