@@ -338,6 +338,14 @@ class FakeClient(object):
             "iscsiadm -m node -P 1 | grep 'Target:'": self.iscsiadm_list_targets,
             "iscsiadm -m session -P3 | egrep 'Target:|scsi disk' | wc -l": self.get_session_count,
             "iscsiadm -m node -L all" : self.iscsiadm_login_all,
+            "mkdir -p /mnt/" :
+                (0, "", ""),
+            "parted":
+                (0, "", ""),
+            "mkfs":
+                (0, "", ""),
+            "mount":
+                (0, "", ""),
         }
 
         if self.distro == "ubuntu":
@@ -400,8 +408,6 @@ class FakeClient(object):
                 iqn = "iqn.2010-01.com.solidfire:{}.v-{:0>5d}.{}".format(cluster_id, volume_ids[idx-1], volume_ids[idx-1])
                 self.fakeDiscovery.append(iqn)
         globalconfig.clients.UpdateClient(self.ip, self)
-
-
 
     def ExecuteCommand(self, command):
         """

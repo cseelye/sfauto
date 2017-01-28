@@ -216,40 +216,40 @@ class TestAccountDelete(object):
 @pytest.mark.account_move_volumes
 class TestAccountMoveVolumes(object):
 
-    def test_negative_AccountMoveVolumesNoAccount(self, state):
+    def test_negative_AccountMoveVolumesNoAccount(self):
         print
         from account_move_volumes import AccountMoveVolumes
         assert not AccountMoveVolumes(account_id=9999)
 
-    def test_negative_AccountMoveVolumesSearchFailure(self, state):
+    def test_negative_AccountMoveVolumesSearchFailure(self):
         print
         from account_move_volumes import AccountMoveVolumes
         with APIFailure("ListAccounts"):
             assert not AccountMoveVolumes(account_id=9999)
 
-    def test_negative_AccountMoveVolumesVolumeSearchFailure(self, state):
+    def test_negative_AccountMoveVolumesVolumeSearchFailure(self):
         print
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         from account_move_volumes import AccountMoveVolumes
         with APIFailure("ListActiveVolumes"):
             assert not AccountMoveVolumes(account_id=existing_id,
-                                            volume_names="asdf")
+                                          volume_names="asdf")
 
-    def test_AccountMoveVolumesTest(self, state):
+    def test_AccountMoveVolumesTest(self):
         print
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         for account in accounts:
             if len(account["volumes"]) > 0:
                 empty_account = account["accountID"]
-        state.volume_count = random.randint(1, 10)
+        volume_count = random.randint(1, 10)
         from account_move_volumes import AccountMoveVolumes
         assert AccountMoveVolumes(account_id=empty_account,
-                                    volume_regex=".+",
-                                    volume_count=state.volume_count,
-                                    test=True)
+                                  volume_regex=".+",
+                                  volume_count=volume_count,
+                                  test=True)
 
-    def test_AccountMoveVolumesNoVolumes(self, state):
+    def test_AccountMoveVolumesNoVolumes(self):
         print
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         while True:
@@ -262,12 +262,11 @@ class TestAccountMoveVolumes(object):
             if len(account["volumes"]) > 0:
                 account_id = account["accountID"]
                 break
-        state.volume_count = random.randint(1, 10)
         from account_move_volumes import AccountMoveVolumes
         assert AccountMoveVolumes(account_id=account_id,
-                                   source_account_id=empty_id)
+                                  source_account_id=empty_id)
 
-    def test_negative_AccountMoveVolumesNoVolumesStrict(self, state):
+    def test_negative_AccountMoveVolumesNoVolumesStrict(self):
         print
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         while True:
@@ -280,13 +279,12 @@ class TestAccountMoveVolumes(object):
             if len(account["volumes"]) > 0:
                 account_id = account["accountID"]
                 break
-        state.volume_count = random.randint(1, 10)
         from account_move_volumes import AccountMoveVolumes
         assert not AccountMoveVolumes(account_id=account_id,
-                                        source_account_id=empty_id,
-                                        strict=True)
+                                      source_account_id=empty_id,
+                                      strict=True)
 
-    def test_negative_AccountMoveVolumesAlreadyThereStrict(self, state):
+    def test_negative_AccountMoveVolumesAlreadyThereStrict(self):
         print
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         while True:
@@ -294,13 +292,12 @@ class TestAccountMoveVolumes(object):
             if len(account["volumes"]) > 0:
                 account_id = account["accountID"]
                 break
-        state.volume_count = random.randint(1, 10)
         from account_move_volumes import AccountMoveVolumes
         assert not AccountMoveVolumes(account_id=account_id,
-                                        source_account_id=account_id,
-                                        strict=True)
+                                      source_account_id=account_id,
+                                      strict=True)
 
-    def test_negative_AccountMoveVolumesFailure(self, state):
+    def test_negative_AccountMoveVolumesFailure(self):
         print
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         while True:
@@ -308,14 +305,14 @@ class TestAccountMoveVolumes(object):
             if len(account["volumes"]) == 0:
                 empty_id = account["accountID"]
                 break
-        state.volume_count = random.randint(1, 10)
+        volume_count = random.randint(1, 10)
         from account_move_volumes import AccountMoveVolumes
         with APIFailure("ModifyVolume"):
             assert not AccountMoveVolumes(account_id=empty_id,
                                         volume_regex=".+",
-                                        volume_count=state.volume_count)
+                                        volume_count=volume_count)
 
-    def test_AccountMoveVolumes(self, state):
+    def test_AccountMoveVolumes(self):
         print
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         while True:

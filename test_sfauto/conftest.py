@@ -146,13 +146,4 @@ def pytest_runtest_setup(item):
         if previousfailed is not None:
             pytest.xfail("previous test failed ({})".format(previousfailed.name))
 
-class SharedState:
-    """Incremental test shared state"""
-
-def pytest_funcarg__state(request):
-    return request.cached_setup(
-        setup=lambda: SharedState(),
-        scope="class"
-    )
 # ===============================================================================================
-

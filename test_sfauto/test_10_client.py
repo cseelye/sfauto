@@ -237,12 +237,12 @@ class TestClientCreateVolumes(object):
                                                 wait=random.choice([0, 1]),
                                                 client_ips=client_ips)
 
-    def test_ClientCreateVolumes(self, state):
+    def test_ClientCreateVolumes(self):
         print
-        state.client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))]
 
         from client_create_account import ClientCreateAccount
-        assert ClientCreateAccount(client_ips=state.client_ips)
+        assert ClientCreateAccount(client_ips=client_ips)
 
         from client_create_volumes import ClientCreateVolumes
         max_iops = random.randint(3000, 50000)
@@ -256,23 +256,46 @@ class TestClientCreateVolumes(object):
                                         gib=random.choice([True, False]),
                                         create_single=random.choice([True, False]),
                                         wait=random.choice([0, 1]),
-                                        client_ips=state.client_ips)
+                                        client_ips=client_ips)
 
-    def test_ClientCreateVolumesExistingVolumes(self, state):
+    def test_ClientCreateVolumesExistingVolumes(self):
         print
+        # Create accounts for some random clients
+        client_ips = [RandomIP() for _ in xrange(random.randint(2, 6))]
+        from client_create_account import ClientCreateAccount
+        assert ClientCreateAccount(client_ips=client_ips)
+
+        # Create the first set of volumes
+        total_volumes = 0
         from client_create_volumes import ClientCreateVolumes
         max_iops = random.randint(3000, 50000)
         burst_iops = int(max_iops * 1.1)
+        volume_count = random.randint(1, 10)
         assert ClientCreateVolumes(volume_size=random.randint(1, 7400),
-                                        volume_count=random.randint(1, 10),
-                                        min_iops=random.randint(50, 1000),
-                                        max_iops=max_iops,
-                                        burst_iops=burst_iops,
-                                        enable512e=random.choice([True, False]),
-                                        gib=random.choice([True, False]),
-                                        create_single=random.choice([True, False]),
-                                        wait=random.choice([0, 1]),
-                                        client_ips=state.client_ips)
+                                   volume_count=volume_count,
+                                   min_iops=random.randint(50, 1000),
+                                   max_iops=max_iops,
+                                   burst_iops=burst_iops,
+                                   enable512e=random.choice([True, False]),
+                                   gib=random.choice([True, False]),
+                                   create_single=random.choice([True, False]),
+                                   wait=random.choice([0, 1]),
+                                   client_ips=client_ips)
+        total_volumes += volume_count
+
+        # Create a second set of volumes on the same clients
+        volume_count = random.randint(1, 10)
+        assert ClientCreateVolumes(volume_size=random.randint(1, 7400),
+                                   volume_count=volume_count,
+                                   min_iops=random.randint(50, 1000),
+                                   max_iops=max_iops,
+                                   burst_iops=burst_iops,
+                                   enable512e=random.choice([True, False]),
+                                   gib=random.choice([True, False]),
+                                   create_single=random.choice([True, False]),
+                                   wait=random.choice([0, 1]),
+                                   client_ips=client_ips)
+        total_volumes += volume_count
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
 @pytest.mark.client_delete_account
@@ -466,13 +489,26 @@ class TestClientRemoveFromVolgroup(object):
                                          connection_type="iscsi")
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.mount_volumes_on_clients
+@pytest.mark.client_mount_volumes
 class TestClientMountVolumes(object):
 
-    def test_negative_ClientMountVolumesFailure(self):
+    def test_NoVolumes(self):
         print
         from client_mount_volumes import ClientMountVolumes
-        assert not ClientMountVolumes(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+        assert ClientMountVolumes(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+
+    def test_RandomVolumes(self):
+        print
+        from client_mount_volumes import ClientMountVolumes
+
+        volume_count = random.randint(10, 100)
+        client_ips = []
+        for idx in xrange(random.randint(2, 5)):
+            client = globalconfig.clients.CreateClient()
+            client.SetClientConnectedVolumes(volume_count)
+            client_ips.append(client.ip)
+
+        assert ClientMountVolumes(client_ips=client_ips)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
 @pytest.mark.client_verify_volume_count

@@ -1779,7 +1779,12 @@ class SFClient:
             volumes = self.GetVolumeSummary()
             for vol_info in volumes.values():
                 vname = vol_info["iqn"].split(".")[-2]
+                self._info("Mounting {}".format(vname))
                 self.ExecuteCommand("mkdir -p /mnt/{}".format(vname))
+                self.ExecuteCommand(r"""parted {} --script mklabel msdos \
+                    mkpart primary 2048s 100%""".format(vol_info["device"]))
+                self.ExecuteCommand("mkfs.ext4 -F -E nodiscard -L {} {}1".format(vname, vol_info["device"]))
+                self.ExecuteCommand("mount {}1 /mnt/{}".format(vol_info["device"], vname))
 
         else:
             raise ClientError("Sorry, not implemented yet for " + self.remoteOS)
