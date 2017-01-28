@@ -1,0 +1,24 @@
+#!/bin/bash
+set -eu
+
+# Create the container image if it does not exist
+if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q sfauto; then
+    echo
+    echo "======================================="
+    echo "    One-time build SFAUTO docker image"
+    echo "======================================="
+    echo
+    echo
+    docker build --force-rm --tag sfauto .
+fi
+
+if [[ $# -le 0 ]]; then
+    echo
+    echo "======================================="
+    echo " Entering SFAUTO docker container"
+    echo "======================================="
+    echo
+    docker run --rm --interactive --tty --volume $(pwd):/sfauto --workdir /sfauto --hostname sfauto-container --name sfauto sfauto /bin/bash
+else
+    docker run --rm --interactive --tty --volume $(pwd):/sfauto --workdir /sfauto --hostname sfauto-container --name sfauto sfauto $*
+fi
