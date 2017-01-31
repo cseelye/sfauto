@@ -32,6 +32,9 @@ else
     cmd="$*"
 fi
 
+index=$(docker ps --format '{{.Names}}' | grep sfauto | cut -d- -f3 | sort | tail)
+(( index++ ))
+
 # Save the SF* variables into a file to import them into the container
 env | grep "^SF" | sort > /tmp/sfauto-env
 
@@ -57,7 +60,7 @@ docker run \
     ${BASHRC_VOLUME} \
     ${VIMRC_VOLUME} \
     --workdir /sfauto \
-    --hostname sfauto-container \
-    --name sfauto-container \
+    --hostname sfauto-container-${index} \
+    --name sfauto-container-${index} \
     ${SFDOCKER_RUN_OPTIONS} \
     sfauto ${cmd}
