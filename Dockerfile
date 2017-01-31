@@ -4,6 +4,7 @@ ENV TERM=xterm-256color
 RUN apt-get update && \
     apt-get --assume-yes dist-upgrade && \
     DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes \
+        aptitude \
         build-essential \
         curl \
         inetutils-ping \
@@ -13,6 +14,7 @@ RUN apt-get update && \
         jq \
         libvirt-bin \
         libvirt-dev \
+        man \
         net-tools \
         nfs-common \
         openssh-client \
