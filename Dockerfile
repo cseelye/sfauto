@@ -7,12 +7,20 @@ RUN apt-get update && \
         build-essential \
         curl \
         ipmitool \
+        jq \
         libvirt-bin \
         libvirt-dev \
         net-tools \
+        nfs-common \
         pkg-config \
+        pigz \
         python2.7 \
-        python2.7-dev && \
+        python2.7-dev \
+        rsync \
+        sshpass \
+        sysstat \
+        vim \
+        wget && \
     curl https://bootstrap.pypa.io/get-pip.py | python2.7 && \
     apt-get autoremove && \
     apt-get clean && \
