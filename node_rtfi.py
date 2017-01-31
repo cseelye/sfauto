@@ -163,10 +163,10 @@ def RtfiNodes(node_ips,
 
     # iRTFI of virtual nodes
     if rtfi_type == "irtfi" and vm_names:
-        required_keys = ["ip", "hostname", "image_list", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
+        required_keys = ["ip", "hostname", "image_list", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
     # iRTFI of physical nodes
     elif rtfi_type == "irtfi":
-        required_keys = ["ip", "hostname", "image_list"]
+        required_keys = ["ip", "hostname", "image_list", "netmask", "gateway"]
     # PXE RTFI of virtual nodes
     elif rtfi_type == "pxe" and vm_names:
         required_keys = ["ip", "hostname", "image_list", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
@@ -253,7 +253,7 @@ def RtfiNodes(node_ips,
     # Make a list of available builds for the given repo
     image_html = HTTPDownloader.DownloadURL(image_list_url)
     iso_regex = re.compile(r'href="(solidfire-{}-{}-[1-9].+\.iso)"'.format(image_type, repo))
-    version_regex = re.compile(r'([0-9]\.[0-9]\.[0-9]\.[0-9]+)')
+    version_regex = re.compile(r'([0-9]+\.[0-9]\.[0-9]\.[0-9]+)')
     found_isos = iso_regex.findall(image_html)
     log.debug2("found_isos = [{}]".format(", ".join([str(iso) for iso in found_isos])))
     available_builds = []
@@ -390,7 +390,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
                 log.warning("This RTFI version does not support monitoring other than power status")
             elif SolidFireVersion(version) < SolidFireVersion("9.0.0.0"):
                 log.warning("This RTFI version supports incomplete status monitoring")
-            elif SolidFireVersion(version) < SolidFireVersion("10.0.0.0"):
+            elif SolidFireVersion(version) >= SolidFireVersion("9.0.0.0"):
                 _monitor_v90(rtfi_type, node, net_info, startTimeout=sfdefaults.node_boot_timeout, configureNetworking=configure_network)
             else:
                 log.warning("RTFI status monitoring not implemented for this Element version")
