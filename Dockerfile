@@ -6,12 +6,16 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes \
         build-essential \
         curl \
+        inetutils-ping \
+        inetutils-telnet \
+        inetutils-traceroute \
         ipmitool \
         jq \
         libvirt-bin \
         libvirt-dev \
         net-tools \
         nfs-common \
+        openssh-client \
         pkg-config \
         pigz \
         python2.7 \
