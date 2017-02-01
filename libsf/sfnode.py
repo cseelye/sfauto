@@ -546,9 +546,19 @@ class SFNode(object):
         """
         result = self.api.CallWithRetry("GetClusterConfig")
         return result["cluster"]["name"]
-        # with SSHConnection(self.ipAddress, self.sshUsername, self.sshPassword) as ssh:
-        #     _, stdout, _ = ssh.RunCommand("hostname")
-        #     return stdout.strip()
+
+    def IsDHCPEnabled(self):
+        """
+        Check if DHCP is enabled on any interfaces in this node
+
+        Returns:
+            True if DHCP is enabled, False otherwise (bool)
+        """
+        res = self.api.CallWithRetry("GetNetworkConfig")
+        for interface in res["network"].values():
+            if interface["method"] == "dhcp":
+                return True
+        return False
 
     def GetSfappVersion(self):
         """
