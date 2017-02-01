@@ -5,6 +5,7 @@ Helpers for network related
 
 import ctypes
 import dns
+import dns.resolver
 import email.encoders
 from email.mime.multipart import MIMEMultipart, MIMEBase
 from email.mime.text import MIMEText
