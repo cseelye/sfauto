@@ -136,9 +136,12 @@ class PythonApp(object):
         else:
             self.log = logutil.GetLogger()
 
+        self.log.TruncateMessages(True)
         debug = self.PopOption("debug")
         if debug:
             self.log.ShowDebug(level=debug)
+            if debug >= 3:
+                self.log.TruncateMessages(False)
         else:
             self.log.HideDebug()
 

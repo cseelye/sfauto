@@ -183,6 +183,7 @@ class MultiFormatter(logging.Formatter):
     def __init__(self, fmt=__defaultFormat):
         self.baseFormat = fmt
         self.rawFormat = '%(message)s'
+        self.truncateLongMessages = True
         logging.Formatter.__init__(self, fmt)
 
     def format(self, record):
@@ -242,6 +243,11 @@ class MultiFormatter(logging.Formatter):
                 record.msg = "  " + record.msg
 
             self._fmt = self.baseFormat
+
+        # Cut debug and debug2 messages to 1024 characters
+        if self.truncateLongMessages and record.levelno in (logging.DEBUG, CustomLogLevels.DEBUG2):
+            if len(record.msg) > 1024:
+                record.msg = record.msg[:1000] + " ...<truncated>"
 
         # Format the record
         result = logging.Formatter.format(self, record)
@@ -432,9 +438,14 @@ def GetLogger(name="sfauto", logConfig=None):
         for handler in self.handlers:
             if handler.get_name() == 'console':
                 handler.setLevel(999)
+    def _TruncateLongMessages(self, truncate):
+        """Truncate long log messages before displaying them"""
+        for handler in self.handlers:
+            setattr(handler.formatter, "truncateLongMessages", truncate)
     logging.Logger.ShowDebug = _ShowDebug
     logging.Logger.HideDebug = _HideDebug
     logging.Logger.Silence = _Silence
+    logging.Logger.TruncateMessages = _TruncateLongMessages
 
     # Add syslog logging
     if logConfig['enableSyslog']:
