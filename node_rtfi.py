@@ -276,6 +276,17 @@ def RtfiNodes(node_ips,
             return False
     log.info("Found {} {}".format(repo, version))
 
+    # Sanity check that the requested network config and RTFI type is possible for this element version
+    if SolidFireVersion(version) < SolidFireVersion("9.0.0.0") and rtfi_type == "pxe" and configure_network == "keep":
+        log.error("PXE RTFI cannot preserve the network config with this Element version. Use either iRTFI or reconfigure options")
+        return False
+    if configure_network == "keep":
+        for node_ip in node_ips:
+            node = SFNode(node_ip, clusterUsername=username, clusterPassword=password)
+            if node.IsUp() and node.IsDHCPEnabled():
+                log.error("Cannot preserve network config with a node in DHCP ({})".format(node_ip))
+                return False
+
     #
     # Start a thread to RTFI and monitor each node
     #
@@ -387,9 +398,10 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
         # Wait for RTFI to complete
         try:
             if SolidFireVersion(version) < SolidFireVersion("8.0.0.0"):
-                log.warning("This RTFI version does not support monitoring other than power status")
+                log.warning("This Element version does not support RTFI monitoring other than power status")
+                _monitor_legacy(node)
             elif SolidFireVersion(version) < SolidFireVersion("9.0.0.0"):
-                log.warning("This RTFI version supports incomplete status monitoring")
+                _monitor_v80(rtfi_type, node, net_info, startTimeout=sfdefaults.node_boot_timeout)
             elif SolidFireVersion(version) >= SolidFireVersion("9.0.0.0"):
                 _monitor_v90(rtfi_type, node, net_info, startTimeout=sfdefaults.node_boot_timeout, configureNetworking=configure_network)
             else:
@@ -477,11 +489,124 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
                             dnsSearch=net_info["domain"],
                             tengIP=net_info["cip"],
                             tengNetmask=net_info["cip_netmask"],
-                            tengGateway=net_info["cip_gateway"])
+                            tengGateway=net_info.get("cip_gateway", None))
         log.info("Node is configured to static IP {}".format(net_info["ip"]))
 
     log.passed("Successful RTFI")
     return True
+
+def _monitor_legacy(node, timeout=3600):
+    """
+    Monitor old releases RTFI status and return when RTFI is complete
+    """
+    log = GetLogger()
+    start_time = time.time()
+    log.info("Waiting for node to power off")
+    while True:
+        time.sleep(20)
+        if node.GetPowerState() == "off":
+            node.PowerOn(waitForUp=False)
+            break
+
+        # Timeout if the total time has been too long
+        if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
+            raise TimeoutError("Timeout waiting for RTFI to complete")
+
+def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None):
+    """
+    Monitor Oxygen RTFI status and return when RTFI is complete
+    """
+    log = GetLogger()
+    log.info("Waiting for RTFI status")
+    removed_pxe = False
+    status = None
+    previous_status = []
+    last_api_check = time.time()
+    last_power_check = time.time()
+    state_timeout = KNOWN_STATE_TIMEOUTS["DEFAULT"]
+    state_start_time = 0
+    start_time = time.time()
+    log.debug("Waiting for status server timeout={}".format(startTimeout))
+    while True:
+        try:
+            status = node.GetAllRTFIStatus()
+        except ConnectionError as ex:
+            if not ex.IsRetryable() and ex.code not in RETRYABLE_RTFI_STATUS_ERRORS:
+                log.warning(str(ex))
+            status = None
+
+        # Timeout if we haven't gotten any status within the startTimeout period
+        if not previous_status and time.time() - start_time > startTimeout * sfdefaults.TIME_SECOND:
+            raise TimeoutError("Timeout waiting for RTFI to start")
+
+        # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
+        if rtfiType == "pxe" and not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
+            last_api_check = time.time()
+            log.debug("Checking if node skipped RTFI and came back up")
+            if node.IsUp():
+                log.debug("API is back up but never got any RTFI status")
+                raise SolidFireError("Node did not RTFI, check PXE boot settings")
+
+        # See if the current state has changed
+        if status and status != previous_status:
+            new_status = [stat for stat in status if stat not in previous_status]
+
+            # Sanity check the status and display it to the user
+            for stat in new_status:
+                _check_and_log_new_status(stat, start_time, agentID)
+
+            if "Abort" in status[-1]["state"]:
+                log.error("RTFI error:\n{}".format(PrettyJSON(status[-1])))
+
+            # Log some info about how long state transitions take
+            if previous_status:
+                log.debug("PreviousState={} duration={} timeout={}".format(previous_status[-1]["state"], time.time() - state_start_time, state_timeout))
+            else:
+                log.debug("FirstState duration={}".format(time.time() - start_time))
+
+            previous_status = status
+            state_start_time = time.time()
+            state_timeout = KNOWN_STATE_TIMEOUTS.get(previous_status[-1]["state"], None) or KNOWN_STATE_TIMEOUTS["DEFAULT"]
+            log.debug("CurrentState={} timeout={}".format(previous_status[-1]["state"], state_timeout))
+            log.debug("Waiting for a new status")
+
+        # If we got at least one good status, then we did successfully PXE boot and don't need the PXE config file anymore
+        if rtfiType == "pxe" and previous_status and not removed_pxe:
+            pxeutil.DeletePXEFile(node.GetPXEMacAddress(),
+                                  pxeServer=netInfo["pxe"],
+                                  pxeUser=netInfo["pxe_user"],
+                                  pxePassword=netInfo["pxe_pass"])
+            removed_pxe = True
+
+        # If the status indicates we are finished with RTFI, break
+        if status and status[-1]["state"] == "FinishSuccess":
+            break
+
+        # If the status indicates a failure, raise an error
+        if status and status[-1]["state"] == "FinishFailure":
+            raise SolidFireError("RTFI failed")
+
+        # If we hit the Stop state, the node should now finish RTFI and power itself off
+        if status and status[-1]["state"] == "Stop":
+            _handle_coldboot(node)
+            break
+
+        # If we know RTFI was able to start and the node has now powered down, assume that RTFI finished successfully
+        # This is in case we missed the final state, or the final state is unknown to this script
+        if previous_status and time.time() - last_power_check > 20:
+            last_power_check = time.time()
+            log.debug("Checking if node finished RTFI and powered off")
+            if node.GetPowerState() == "off":
+                _handle_coldboot(node)
+                break
+
+        # Timeout if the current state has lasted too long
+        if state_start_time > 0 and time.time() - state_start_time > state_timeout:
+            raise TimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
+
+        # Timeout if the total time has been too long
+        if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
+            raise TimeoutError("Timeout waiting for RTFI to complete")
 
 def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
     """
@@ -512,6 +637,7 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
         # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
         if rtfiType == "pxe" and not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
             last_api_check = time.time()
+            log.debug("Checking if node skipped RTFI and came back up")
             if node.IsUp():
                 log.debug("API is back up but never got any RTFI status")
                 raise SolidFireError("Node did not RTFI, check PXE boot settings")
@@ -539,7 +665,7 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
             log.debug("CurrentState={} timeout={}".format(previous_status[-1]["state"], state_timeout))
             log.debug("Waiting for a new status")
 
-        # If we got a good status, then we did successfully PXE boot and don't need the PXE config file anymore
+        # If we got at least one good status, then we did successfully PXE boot and don't need the PXE config file anymore
         if rtfiType == "pxe" and previous_status and not removed_pxe:
             pxeutil.DeletePXEFile(node.GetPXEMacAddress(),
                                   pxeServer=netInfo["pxe"],
@@ -552,6 +678,7 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
             _handle_coldboot(node)
             if configureNetworking != "keep":
                 break
+            log.info("Waiting for node to come up")
 
         # If the status indicates we are finished with RTFI, break
         if status and status[-1]["state"] == "FinishSuccess":
@@ -584,8 +711,11 @@ def _handle_coldboot(node):
     # If this is not a virt node, wait for the node to auto wakeup
     else:
         log.info("Waiting for node to power on")
-        time.sleep(50)
-        node.WaitForOn(timeout=330)
+        try:
+            node.WaitForOn(timeout=310)
+        except TimeoutError:
+            log.warning("Node failed to auto wakeup")
+            node.PowerOn(waitForUp=False)
 
 def _check_and_log_new_status(status, startTime, agentID):
     log = GetLogger()
