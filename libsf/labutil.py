@@ -24,12 +24,13 @@ class AT2Resources(object):
             A dictionary of clients and nodes (dict)
         """
         if not self.resourceCache:
-            GetLogger().debug("Refreshing AT2 resource cache")
+            log = GetLogger()
+            log.debug("Refreshing AT2 resource cache")
             try:
                 self.resourceCache["clients"] = self.api.ListClientPool()
                 self.resourceCache["nodes"] = self.api.ListNodePool()
-            except SolidFireError:
-                pass
+            except SolidFireError as ex:
+                log.debug("Failed to get resource list from AT2: {}".format(str(ex)))
         return self.resourceCache
 _AT2_RESOURCES = AT2Resources()
 
