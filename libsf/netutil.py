@@ -322,6 +322,34 @@ class IPAddress(object):
     Common IP address operations
     """
 
+    @staticmethod
+    def IsValid(ipString):
+        try:
+            socket.inet_pton(socket.AF_INET, ipString)
+            return True
+        except AttributeError: # inet_pton not available
+            try:
+                socket.inet_aton(ipString)
+                return True
+            except socket.error:
+                return False
+        except socket.error: # not a valid address
+            return False
+
+        pieces = ipString.split(".")
+        if len(pieces) != 4:
+            return False
+    
+        try:
+            pieces = [int(i) for i in pieces]
+        except ValueError:
+            return False
+
+        if not all([i >= 0 and i <= 255 for i in pieces]):
+            return False
+
+        return True
+
     def __init__(self, ipString):
         self.raw = ipString
 
