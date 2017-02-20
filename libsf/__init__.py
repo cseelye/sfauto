@@ -871,6 +871,18 @@ class AutotestAPI(SolidFireAPI):
         """
         return self._Call("ListResources")
 
+    def ListNetworks(self):
+        """
+        Get a list of 'network' resources from AT2
+        """
+        return self._Call("ListResources", {"resourceTypeName" : "network"}, apiVersion=2.0)["resources"]
+
+    def ListFDVAPool(self):
+        """
+        Get a list of FDVA resources from AT2
+        """
+        return self._Call("ListResources", {"resourceTypeName" : "fdva"}, apiVersion=2.0)["resources"]
+
     def ListNodePool(self):
         return self._Call("ListNodePool")["nodes"]
 
