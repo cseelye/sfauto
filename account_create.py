@@ -78,8 +78,8 @@ if __name__ == '__main__':
     parser = SFArgumentParser(description=GetFirstLine(__doc__), formatter_class=SFArgFormatter)
     parser.add_cluster_mvip_args()
     parser.add_argument("--account-name", type=str, required=True, metavar="NAME", help="the name for the new account")
-    parser.add_argument("--init-secret", type=str, help="the initiator secret for the account")
-    parser.add_argument("--targ-secret", type=str, help="the target secret for the account")
+    parser.add_argument("--init-secret", type=str, dest="initiator_secret", help="the initiator secret for the account")
+    parser.add_argument("--targ-secret", type=str, dest="target_secret", help="the target secret for the account")
     parser.add_argument("--strict", action="store_true", default=False, help="fail if the account already exists")
     args = parser.parse_args_to_dict()
 
