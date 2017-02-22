@@ -124,6 +124,11 @@ class ValidateAndDefault(object):
                 elif user_val is None or user_val == "":
                     errors.append("{} must have a value".format(arg_name))
 
+            # Look for any "extra" args that were passed in
+            for arg_name in user_args.keys():
+                if arg_name not in self.validators.keys():
+                    errors.append("Unknown argument {}".format(arg_name))
+
             if errors:
                 raise InvalidArgumentError("\n".join(errors))
 
