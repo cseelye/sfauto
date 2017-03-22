@@ -157,16 +157,16 @@ def RtfiNodes(node_ips,
     #
     # Find all of the network and infrastructure info for the nodes
     #
-    log.info("Determining network and infrastructure info for the nodes")
+    log.info("Determining network and infrastructure info for {} {}".format(len(node_ips), "node" if len(node_ips) == 1 else "nodes"))
     at2_net_info = None
     net_info = {}
 
     # iRTFI of virtual nodes
     if rtfi_type == "irtfi" and vm_names:
-        required_keys = ["ip", "hostname", "image_list", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
+        required_keys = ["ip", "hostname", "image_list", "pxe", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
     # iRTFI of physical nodes
     elif rtfi_type == "irtfi":
-        required_keys = ["ip", "hostname", "image_list", "netmask", "gateway"]
+        required_keys = ["ip", "hostname", "image_list", "pxe", "netmask", "gateway"]
     # PXE RTFI of virtual nodes
     elif rtfi_type == "pxe" and vm_names:
         required_keys = ["ip", "hostname", "image_list", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
@@ -437,7 +437,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
             return True
 
         log.info("Calling StartRtfi")
-        node.StartRTFI(repo, version, rtfi_options)
+        node.StartRTFI(repo, version, rtfi_options, buildServer=net_info["pxe"])
 
         # Wait for RTFI to complete
         if SolidFireVersion(version) >= SolidFireVersion("9.0.0.0"):
