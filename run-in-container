@@ -49,6 +49,8 @@ BASHRC="${HOMEDIR}/.bashrc"
 [[ -e ${BASHRC} ]] && BASHRC_VOLUME="--volume ${BASHRC}:/root/.bashrc" || BASHRC_VOLUME=""
 VIMRC="${HOMEDIR}/.vimrc"
 [[ -e ${VIMRC} ]] && VIMRC_VOLUME="--volume ${VIMRC}:/root/.vimrc" || VIMRC_VOLUME=""
+DOTSSH="${HOMEDIR}/.ssh"
+[[ -d ${DOTSSH} ]] && SSH_VOLUME="--volume ${DOTSSH}:/root/.ssh" || SSH_VOLUME=""
 
 docker run \
     --interactive \
@@ -59,6 +61,7 @@ docker run \
     --volume "${SFAUTO_DIR}":/sfauto \
     ${BASHRC_VOLUME} \
     ${VIMRC_VOLUME} \
+    ${SSH_VOLUME} \
     --workdir /sfauto \
     --hostname sfauto-container-${index} \
     --name sfauto-container-${index} \
