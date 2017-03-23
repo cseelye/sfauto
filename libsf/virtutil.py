@@ -185,6 +185,8 @@ def VMwareConnect(server, username, password):
         username:   username for the server (str)
         password:   password for the server (str)
     """
+    log = GetLogger()
+    log.debug2("Trying to connect to VMware on {}".format(server))
     try:
         service = connectVSphere.SmartConnect(host=server, user=username, pwd=password)
     except vim.fault.InvalidLogin:
@@ -240,9 +242,7 @@ def VMwareFindObjectGetProperties(connection, obj_name, obj_type, properties=Non
     Returns:
         The requested vim object with only the requested properties
     """
-#    log = GetLogger()
 
-#    log.debug2('Searching for a {} named "{}"'.format(obj_type.__name__, obj_name))
     if obj_type == vim.VirtualMachine and obj_name in sfdefaults.blacklisted_vm_names:
         raise VirtualizationError('{} is a reserved name and cannot be used here'.format(obj_name))
 
@@ -321,9 +321,7 @@ def VMwareWaitForTasks(connection, tasks):
                     task = objSet.obj
                     if not str(task) in taskList:
                         continue
-#                    log.debug2("Got an update for the task")
                     for change in objSet.changeSet:
-#                        log.debug2("{}".format(change))
 
                         # Initial change when the task starts
                         if change.name == 'info':
@@ -441,10 +439,25 @@ class VirtualMachineVMware(VirtualMachine):
         Set the boot order of this VM to PXE boot first
         """
         with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
-            vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name'])
-            boot_config = vim.option.OptionValue(key='bios.bootDeviceClasses', value='allow:net,cd,hd')
+            vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'config.hardware'])
+            disks = []
+            nics = []
+            for device in vm.config.hardware.device:
+                if isinstance(device, vim.vm.device.VirtualDisk):
+                    disks.append(device.key)
+                elif isinstance(device, vim.vm.device.VirtualEthernetCard):
+                    nics.append(device.key)
+            boot_disk = vim.vm.BootOptions.BootableDiskDevice()
+            boot_disk.deviceKey = sorted(disks)[0]
+            boot_nic = vim.vm.BootOptions.BootableEthernetDevice()
+            if len(nics) == 1:
+                boot_nic.deviceKey = sorted(nics)[0]
+            elif len(nics) == 2:
+                boot_nic.deviceKey = sorted(nics)[1]
+            else:
+                boot_nic.deviceKey = sorted(nics)[2]
             config = vim.vm.ConfigSpec()
-            config.extraConfig = [boot_config]
+            config.bootOptions = vim.vm.BootOptions(bootOrder=[boot_nic, vim.vm.BootOptions.BootableCdromDevice(), boot_disk])
             task = vm.ReconfigVM_Task(config)
             VMwareWaitForTasks(vsphere, [task])
 
@@ -750,9 +763,14 @@ class VirtualMachineKVM(VirtualMachine):
         """
         with LibvirtConnection(self.hostServer, self.hostUsername, self.hostPassword) as conn:
             vm = LibvirtFindVM(conn, self.vmName)
+            if vm.state()[0] != libvirt.VIR_DOMAIN_RUNNING:
+                return
+
             try:
                 vm.destroy()
             except libvirt.libvirtError as ex:
+                if ("domain is not running" in ex.message):
+                    return
                 raise VirtualizationError("Failed to power off {}: {}".format(self.vmName, ex.message), ex)
 
     def GetPowerState(self):
@@ -806,6 +824,8 @@ class VirtualMachineKVM(VirtualMachine):
         """
         Set the boot order of this VM to PXE boot first
         """
+        return
+
         with LibvirtConnection(self.hostServer, self.hostUsername, self.hostPassword) as conn:
             vm = LibvirtFindVM(conn, self.vmName)
             vm_xml = ElementTree.fromstring(vm.XMLDesc(0))
@@ -890,4 +910,3 @@ class VMHostKVM(VMHost):
 
 
 # ================================================================================================================================
-
