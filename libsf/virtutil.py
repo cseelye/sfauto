@@ -2,7 +2,7 @@
 """Helpers for interacting with hypervisors and virtual machines"""
 
 from . import sfdefaults
-from . import SolidFireError, UnauthorizedError, TimeoutError
+from . import SolidFireError, UnauthorizedError, TimeoutError, UnknownObjectError
 from .logutil import GetLogger
 from .sfclient import SFClient
 import inspect
@@ -283,7 +283,7 @@ def VMwareFindObjectGetProperties(connection, obj_name, obj_type, properties=Non
             break
         result = connection.content.propertyCollector.ContinueRetrievePropertiesEx(token=result.token)
     if not result_list:
-        raise VirtualizationError('Could not find {}'.format(obj_name))
+        raise UnknownObjectError('Could not find {}'.format(obj_name))
     return result_list[0]
 
 def VMwareWaitForTasks(connection, tasks):
@@ -726,7 +726,7 @@ def LibvirtFindVM(connection, vmName):
     except libvirt.libvirtError as ex:
         raise VirtualizationError("Could not find VM {}: {}".format(vmName, ex.message), ex)
     if not vm:
-        raise VirtualizationError("Could not find VM {}".format(vmName))
+        raise UnknownObjectError("Could not find VM {}".format(vmName))
     return vm
 
 class VirtualMachineKVM(VirtualMachine):
