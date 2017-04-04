@@ -765,7 +765,7 @@ class SFCluster(object):
         self.log.debug("Searching for available drives...")
         return self.ListDrives(driveState=DriveState.Available)
 
-    def ListDrives(self, driveType=DriveType.Any, driveState=DriveState.Any, nodeID=0):
+    def ListDrives(self, driveType=DriveType.Any, driveState=DriveState.Any, nodeID=0, nodeIP=None):
         """
         Get a list of the drives in the cluster
 
@@ -773,10 +773,14 @@ class SFCluster(object):
             driveType:  only list drives of this type (DriveType) - this may be a scalar or a list
             driveState: only list drives in this state (DriveState) - this may be a scalar or a list
             nodeID:     only list drives from this node (int)
+            nodeIP:     only list drives from the node with this MIP (str)
 
         Returns:
             A list of drive dictionaries (list of dict)
         """
+        if nodeIP:
+            nodeID = self.GetNodeIDs([nodeIP])[0]
+
         result = self.api.CallWithRetry("ListDrives", {})
         if driveType == DriveType.Any and driveState == DriveState.Any:
             return result["drives"]
@@ -866,11 +870,13 @@ class SFCluster(object):
 
         params = {}
         params["drives"] = driveList
-        self.api.CallWithRetry("AddDrives", params)
+        result = self.api.CallWithRetry("AddDrives", params)
 
         if waitForSync:
-            self.log.info("Waiting a little while to make sure syncing has started")
-            time.sleep(sfdefaults.TIME_MINUTE * 2)
+            self.WaitForAsyncHandle(result["asyncHandle"])
+
+            # self.log.info("Waiting a little while to make sure syncing has started")
+            # time.sleep(sfdefaults.TIME_MINUTE * 2)
 
             self.log.info("Waiting for slice syncing")
             while self.IsSliceSyncing():
@@ -887,19 +893,24 @@ class SFCluster(object):
         Remove drive from the cluster
 
         Args:
-            driveList:      the list of drive objects to add (list of dict)
+            driveList:      the list of drive IDs or drive objects to remove (list of int or list of dict)
             waitForSync:    whether or not to wait for syncing before returning (bool)
         """
         if not driveList:
             return
 
+        if isinstance(driveList[0], dict):
+            driveList = [drive["driveID"] for drive in driveList]
+
         params = {}
         params["drives"] = driveList
-        self.api.CallWithRetry("RemoveDrives", params)
+        result = self.api.CallWithRetry("RemoveDrives", params)
 
         if waitForSync:
-            self.log.info("Waiting a little while to make sure syncing has started")
-            time.sleep(sfdefaults.TIME_MINUTE * 2)
+            self.WaitForAsyncHandle(result["asyncHandle"])
+
+            # self.log.info("Waiting a little while to make sure syncing has started")
+            # time.sleep(sfdefaults.TIME_MINUTE * 2)
 
             self.log.info("Waiting for slice syncing")
             while self.IsSliceSyncing():
@@ -910,6 +921,18 @@ class SFCluster(object):
             while self.IsBinSyncing():
                 time.sleep(sfdefaults.TIME_SECOND * 20)
             self.log.info("Bin syncing is complete")
+
+    def RemoveNodes(self, nodeIPList):
+        """
+        Remove nodes from the cluster
+
+        Args:
+            nodeIPList:     the list of active node IPs to remove (list of string)
+        """
+        node_ids = self.GetNodeIDs(nodeIPList)
+        params = {}
+        params["nodes"] = node_ids
+        self.api.CallWithRetry("RemoveNodes", params)
 
     def AddNodes(self, nodeIPList, autoRTFI=True):
         """
@@ -1116,6 +1139,7 @@ class SFCluster(object):
         """
         params = {}
         params["asyncHandle"] = asyncHandle
+        params["keepResult"] = True
         return self.api.CallWithRetry("GetAsyncResult", params, apiVersion=5.0)
 
     def CreateVolume(self, volumeName, volumeSize, accountID, enable512e=False, minIOPS=100, maxIOPS=100000, burstIOPS=100000):
@@ -1298,7 +1322,28 @@ class SFCluster(object):
         
         self.api.CallWithRetry("AddVirtualNetwork", params, apiVersion=8.0)
 
+    def SetSSLCertificate(self, cert, key):
+        """
+        Set the SSL certificate/key for this cluster
+        
+        Args:
+            cert:   the certificate, in PEM encoded form (str)
+            key:    the private key, in PEM encoded form (str)
+        """
+        params = {}
+        params["certificate"] = cert
+        params["privateKey"] = key
+        self.api.CallWithRetry("SetSSLCertificate", params, apiVersion=10.0)
 
-
+    def WaitForAsyncHandle(self, asyncHandle):
+        """
+        Wait for an async handle to complete
+        """
+        while True:
+            result = self.GetAsyncResult(asyncHandle)
+            if result["status"] == "complete":
+                break
+            time.sleep(sfdefaults.TIME_SECOND * 10)
+        return result
 
 
