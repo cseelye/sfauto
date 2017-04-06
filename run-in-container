@@ -1,9 +1,15 @@
 #!/bin/bash
 set -eu
 
+DEFAULT_NIC="eth0"
+[[ $(uname) == "Darwin" ]] && DEFAULT_NIC="en0"
+
 # You can export SFDOCKER_RUN_OPTIONS in your environment to add additional options to the docker run command
 # https://docs.docker.com/engine/reference/commandline/run/
 SFDOCKER_RUN_OPTIONS=${SFDOCKER_RUN_OPTIONS:-}
+
+# The NIC on the host that the container can connect to (primarily for X11)
+SFDOCKER_HOST_INTERFACE=${SFDOCKER_HOST_INTERFACE:-${DEFAULT_NIC}}
 
 # Create the container image if it does not exist
 if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q sfauto; then
@@ -32,17 +38,30 @@ else
     cmd="$*"
 fi
 
+# Get the host IP and name
+HOST_IP=$(/sbin/ifconfig ${SFDOCKER_HOST_INTERFACE} | /usr//bin/grep inet | /usr/bin/awk '$1=="inet" {print $2}')
+HOSTNAME=$(hostname -s)
+
 index=$(docker ps --format '{{.Names}}' | grep sfauto | cut -d- -f3 | sort | tail)
 (( index++ )) || true
 
 # Save the SF* variables into a file to import them into the container
 env | grep "^SF" | sort > /tmp/sfauto-env
 
+# Set up X11 options if X is running
+X11_OPTIONS=""
+if [[ -e /tmp/.X11-unix && -n ${HOST_IP} ]]; then
+    X11_OPTIONS="--env DISPLAY=${HOST_IP}:0 --volume /tmp/.X11-unix:/tmp/.X11-unix"
+fi
+
 # Start the container.  To make it as seamless as possible:
 #   Run in privileged mode so the user has max power
+#   Export DOCKER_HOST_USER, DOCKER_HOST_NAME and DOCKER_HOST_IP so that the container knows a little bit about its parent
 #   Use the SF* env variables from the current environment in the container
+#   Mount the X11 socket and export DISPLAY so that GUI apps can run in the container
 #   Mount this script's directory (assumed to be the sfauto repo directory) into the container
-#   Mount the current user's .bashrc and .vimrc into the container so they get the same environment
+#   Mount the current user's dotfiles into the container so they get the same environment
+
 SFAUTO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 eval HOMEDIR="~"
 BASHRC="${HOMEDIR}/.bashrc"
@@ -51,13 +70,20 @@ VIMRC="${HOMEDIR}/.vimrc"
 [[ -e ${VIMRC} ]] && VIMRC_VOLUME="--volume ${VIMRC}:/root/.vimrc" || VIMRC_VOLUME=""
 DOTSSH="${HOMEDIR}/.ssh"
 [[ -d ${DOTSSH} ]] && SSH_VOLUME="--volume ${DOTSSH}:/root/.ssh" || SSH_VOLUME=""
+CLUSTERSSH="${HOMEDIR}/.clusterssh"
+[[ -d ${CLUSTERSSH} ]] && CLUSTERSSH_VOLUME="--volume ${CLUSTERSSH}:/root/.clusterssh" || CLUSTERSSH_VOLUME=""
 
 docker run \
     --interactive \
     --tty \
     --privileged \
     --rm \
+    --env DOCKER_HOST_NAME=${HOSTNAME} \
+    --env DOCKER_HOST_IP=${HOST_IP} \
+    --env DOCKER_HOST_USER=${USER} \
     --env-file /tmp/sfauto-env \
+    ${X11_OPTIONS} \
+    ${CLUSTERSSH_VOLUME} \
     --volume "${SFAUTO_DIR}":/sfauto \
     ${BASHRC_VOLUME} \
     ${VIMRC_VOLUME} \
