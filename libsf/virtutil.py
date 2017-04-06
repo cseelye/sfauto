@@ -824,6 +824,7 @@ class VirtualMachineKVM(VirtualMachine):
         """
         Set the boot order of this VM to PXE boot first
         """
+        #pylint: disable=unreachable
         return
 
         with LibvirtConnection(self.hostServer, self.hostUsername, self.hostPassword) as conn:
@@ -854,6 +855,7 @@ class VirtualMachineKVM(VirtualMachine):
                 conn.defineXML(ElementTree.tostring(vm_xml))
             except libvirt.libvirtError as ex:
                 raise VirtualizationError("Could not update VM {}: {}".format(self.vmName, str(ex)))
+        #pylint: enable=unreachable
 
     def WaitForUp(self, timeout=300):
         """

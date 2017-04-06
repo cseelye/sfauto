@@ -47,12 +47,11 @@ def ClusterRemoveNodes(node_ips,
     # For each list in remove_nodes, we will remove all of those nodes at once and remove all of their drives at once
     remove_nodes = []
     if by_node:
-        remove_nodes = [[node_ip] for node in node_ips]
+        remove_nodes = [[node_ip] for node_ip in node_ips]
     else:
         remove_nodes.append(node_ips)
 
     for node_list in remove_nodes:
-        node_ids = cluster.GetNodeIDs(node_list)
 
         # Remove the drives
         if remove_drives:
@@ -62,7 +61,7 @@ def ClusterRemoveNodes(node_ips,
                 try:
                     drive_list.extend(cluster.ListDrives(driveState=DriveState.Active, nodeIP=node_ip))
                 except SolidFireError as ex:
-                    log.error("Failed to get a list of drives in node {}".format(node_ip))
+                    log.error("Failed to get a list of drives in node {}: {}".format(node_ip, ex))
                     return False
             if drive_list:
                 try:
