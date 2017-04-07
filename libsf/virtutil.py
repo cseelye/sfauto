@@ -2,7 +2,7 @@
 """Helpers for interacting with hypervisors and virtual machines"""
 
 from . import sfdefaults
-from . import SolidFireError, UnauthorizedError, TimeoutError, UnknownObjectError
+from . import SolidFireError, UnauthorizedError, TimeoutError, UnknownObjectError, ClientConnectionError, ConnectionError
 from .logutil import GetLogger
 from .sfclient import SFClient
 import inspect
@@ -15,6 +15,7 @@ from pyVmomi import vim, vmodl
 # pylint: enable=no-name-in-module
 import Queue
 import requests
+import socket
 import sys
 import time
 from xml.etree import ElementTree
@@ -37,9 +38,6 @@ def libvirt_callback(_, err):
     # Log libvirt errors only at highest verbosity
     GetLogger().debug2("* * * libvirt error: {}".format(str(err)))
 libvirt.registerErrorHandler(f=libvirt_callback, ctx=None)
-
-import socket
-socket.setdefaulttimeout(15)
 
 class VirtualizationError(SolidFireError):
     """Parent exception for virtualization errors"""
@@ -149,7 +147,7 @@ class VMHost(object):
 
 
     @staticmethod
-    def Create(vmhostName, mgmtServer, mgmtUsername, mgmtPassword):
+    def Create(vmhostName, mgmtServer, mgmtUsername, mgmtPassword, hint=None):
         """
         Factory method to create a VMHost of the correct sub-type
 
@@ -158,6 +156,7 @@ class VMHost(object):
             mgmtServer:     the server used to manage the hypervisor, or the hypervisor itself (str)
             mgmtUsername:   the username for the management server (str)
             mgmtPassword:   the password for the management server (str)
+            hint:           try to connect using this hypervisor class name (str)
         """
         log = GetLogger()
 
@@ -165,10 +164,12 @@ class VMHost(object):
         for classname, classdef in inspect.getmembers(sys.modules[__name__], lambda member: inspect.isclass(member) and \
                                                                                  issubclass(member, VMHost) and \
                                                                                  member != VMHost):
+            if hint and classname != hint:
+                continue
             log.debug2("Trying {} for VMHost {}".format(classname, vmhostName))
             try:
                 return classdef(vmhostName, mgmtServer, mgmtUsername, mgmtPassword)
-            except (VirtualizationError, TimeoutError) as ex:
+            except (VirtualizationError, TimeoutError, ConnectionError, ClientConnectionError) as ex:
                 log.debug2(str(ex))
 
         raise VirtualizationError("Could not create VMhost object; check connection to management server and host exists on server")
@@ -351,6 +352,21 @@ def VMwareWaitForTasks(connection, tasks):
         if task_filter:
             task_filter.Destroy()
 
+def SetVMwareTimeout(mo, timeout):
+    """
+    Set the low level connection timeout for a managed object
+    """
+    # Override HTTPSConnectionWrapper.__init__ in pyVmomi.SoapAdapter
+    # The new init calls the old init, then sets the timeout value
+    from pyVmomi.SoapAdapter import HTTPSConnectionWrapper
+    oldinit = HTTPSConnectionWrapper.__init__
+    def newinit(self, *args, **kwargs):
+        oldinit(self, *args, **kwargs)
+        self._wrapped.timeout = timeout
+    HTTPSConnectionWrapper.__init__ = newinit
+    # Drop all connections from the pool so they are forced to reconnect with the new __init__ we just created
+    mo._GetStub().DropConnections()
+
 class VirtualMachineVMware(VirtualMachine):
     """
     VMware implementation of VirtualMachine class
@@ -530,6 +546,8 @@ class VMHostVMware(VMHost):
             storage_manager = host.configManager.storageSystem
             datastore_manager = host.configManager.datastoreSystem
 
+            self.log.info("Querying connected disk devices on {}".format(self.vmhostName))
+
             # Go through each HBA and make a reference from LUN => datastore name
             lun2name = {}
             for adapter in storage_manager.storageDeviceInfo.hostBusAdapter:
@@ -547,39 +565,197 @@ class VMHostVMware(VMHost):
                                 name += "-lun{}".format(lun.lun)
                             lun2name[lun.scsiLun] = name
 
-                elif type(adapter) == vim.host.BlockHba:
-                    if adapter.driver == "ahci" and includeInternalDrives:
-                        # Internal SATA adapter
-                        # "sdimmX" naming
-                        for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
-                            for lun in target.lun:
-                                lun2name[lun.scsiLun] = "sdimm{}".format(target.target)
+                #elif type(adapter) == vim.host.BlockHba:
+                elif (adapter.driver == "ahci" or adapter.driver == "vmw_ahci") and includeInternalDrives:
+                    # Internal SATA adapter
+                    # "sdimmX" naming
+                    for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
+                        for lun in target.lun:
+                            lun2name[lun.scsiLun] = "sdimm{}".format(target.target)
 
-                    if (adapter.driver == "mpt2sas" or adapter.driver == "mpt3sas") and includeSlotDrives:
-                        # SAS adapter for nodes
-                        # "slotX" naming
-                        for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
-                            for lun in target.lun:
-                                lun2name[lun.scsiLun] = "slot{}".format(target.target)
+                elif (adapter.driver == "mpt2sas" or adapter.driver == "mpt3sas") and includeSlotDrives:
+                    # SAS adapter for nodes
+                    # "slotX" naming
+                    for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
+                        for lun in target.lun:
+                            lun2name[lun.scsiLun] = "slot{}".format(target.target)
 
                 else:
                     self.log.warning("Skipping unknown HBA {}".format(adapter.device))
+                    self.log.debug("adapter = {}".format(adapter))
 
             # Go through the list of connected LUNs and make a reference from device => datastore name
             device2name = {}
             for disk in storage_manager.storageDeviceInfo.scsiLun:
                 if disk.key in lun2name:
                     device2name[disk.deviceName] = lun2name[disk.key]
-                    print "{} => {}".format(disk.deviceName, lun2name[disk.key])
+                    self.log.debug("{} => {}".format(disk.deviceName, lun2name[disk.key]))
 
             # Get a list of available disks and create datastores on them
-            for disk in datastore_manager.QueryAvailableDisksForVmfs():
-                if disk.devicePath in device2name:
-                    option_list = datastore_manager.QueryVmfsDatastoreCreateOptions(devicePath=disk.devicePath)
+            available_devices = [disk.devicePath for disk in datastore_manager.QueryAvailableDisksForVmfs()]
+            for device_path in sorted(device2name, key=device2name.get):
+                if device_path in available_devices:
+                    self.log.info("Creating datastore {}".format(device2name[device_path]))
+                    option_list = datastore_manager.QueryVmfsDatastoreCreateOptions(devicePath=device_path)
                     create_spec = option_list[0].spec
-                    create_spec.vmfs.volumeName = device2name[disk.devicePath]
-                    self.log.info("Creating datastore {}".format(device2name[disk.devicePath]))
+                    create_spec.vmfs.volumeName = device2name[device_path]
                     datastore_manager.CreateVmfsDatastore(spec=create_spec)
+
+    def CreateVswitch(self, switchName, nicNames, mtu=1500):
+        """
+        Create a vswitch on this host
+
+        Args:
+            switchName:     the name of the switch to create (str)
+            nicNames:       optional list of physical uplink NICs to add to the switch (list of str)
+            mtu:            the MTU of the vswitch (int)
+        """
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
+            pnics = [pnic.device for pnic in host.config.network.pnic]
+            if not all([nic in pnics for nic in nicNames]):
+                raise VirtualizationError("Could not find all specified NICs")
+
+            network_manager = host.configManager.networkSystem
+
+            switch_spec = vim.host.VirtualSwitch.Specification()
+            switch_spec.mtu = mtu
+            switch_spec.numPorts = 128
+            switch_spec.bridge = vim.host.VirtualSwitch.BondBridge(nicDevice=nicNames)
+            network_manager.AddVirtualSwitch(vswitchName=switchName, spec=switch_spec)
+
+    def CreatePortgroup(self, portgroupName, switchName, vlan=0):
+        """
+        Create a port group on this host
+
+        Args:
+            portgroupName:      the name of the port group to create
+            switchName:         the name of the vswitch to create the port group on
+            vlan:               what VLAN to tag for this port group
+        """
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
+            vswitches = [sw.name for sw in host.config.network.vswitch]
+            if switchName not in vswitches:
+                raise UnknownObjectError("Could not find vswitch {}".format(switchName))
+            pgroups = [pg.spec.name for pg in host.config.network.portgroup]
+            if portgroupName in pgroups:
+                raise VirtualizationError("Port group {} already exists".format(portgroupName))
+
+            network_manager = host.configManager.networkSystem
+
+            sec_policy = vim.host.NetworkPolicy.SecurityPolicy()
+            sec_policy.allowPromiscuous = True
+            sec_policy.forgedTransmits = True
+            sec_policy.macChanges = True
+
+            pg_spec = vim.host.PortGroup.Specification()
+            pg_spec.name = portgroupName
+            pg_spec.vswitchName = switchName
+            pg_spec.vlanId = vlan
+            pg_spec.policy = vim.host.NetworkPolicy(security=sec_policy)
+            network_manager.AddPortGroup(portgrp=pg_spec)
+
+    def DeletePortgroup(self, portgroupName):
+        """
+        Delete a port group on this host
+
+        Args:
+            portgroupName:      the name of the port group to delete
+        """
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
+
+            spec = None
+            for pg in host.config.network.portgroup:
+                if pg.spec.name == portgroupName:
+                    spec = pg.spec
+                    break
+            if not spec:
+                raise UnknownObjectError("Cannot find port group {}".format(portgroupName))
+            
+            config = vim.host.NetworkConfig()
+
+            security = vim.host.NetworkPolicy.SecurityPolicy()
+            security.allowPromiscuous = False if spec.policy.security.allowPromiscuous is None else spec.policy.security.allowPromiscuous
+            security.forgedTransmits = True if spec.policy.security.forgedTransmits is None else spec.policy.security.forgedTransmits
+            security.macChanges = True if spec.policy.security.macChanges is None else spec.policy.security.macChanges
+
+            config.portgroup = [vim.host.PortGroup.Config()]
+            config.portgroup[0].changeOperation = vim.host.ConfigChange.Operation.remove
+            config.portgroup[0].spec = vim.host.PortGroup.Specification()
+            config.portgroup[0].spec.name = portgroupName
+            config.portgroup[0].spec.vlanId = -1
+            config.portgroup[0].spec.vswitchName = spec.vswitchName
+            config.portgroup[0].spec.policy = vim.host.NetworkPolicy()
+
+            network_manager = host.configManager.networkSystem
+            network_manager.UpdateNetworkConfig(config, vim.host.ConfigChange.Mode.modify)
+
+    def RenamePortgroup(self, oldname, newname):
+        """
+        Rename a portgroup
+
+        Args:
+            oldname:    the port group to rename
+            newname:    the new name for the port group
+        """
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
+            network_manager = host.configManager.networkSystem
+
+            spec = None
+            for pg in host.config.network.portgroup:
+                if pg.spec.name == oldname:
+                    spec = pg.spec
+                    break
+            if not spec:
+                raise UnknownObjectError("Cannot find port group {}".format(oldname))
+
+            spec.name = newname
+            network_manager.UpdatePortGroup(oldname, spec)
+
+    def SetNetworkInfo(self, nicName, ipAddress, subnetMask, mtu=1500):
+        """
+        Configure the network
+
+        Args:
+            nicName:    the NIC to configure (str)
+            ipAddress:  the IP address to set (str)
+            subnetMask: the subnet mask to set
+        """
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
+            
+            network_manager = host.configManager.networkSystem
+            spec = None
+            for vnic in network_manager.networkConfig.vnic:
+                if vnic.device == nicName:
+                    spec = vnic.spec
+                    break
+            if not spec:
+                raise UnknownObjectError("Could not find NIC {}".format(nicName))
+
+            spec.ip.dhcp = False
+            spec.ip.ipAddress = ipAddress
+            spec.ip.subnetMask = subnetMask
+            spec.mtu = mtu
+            network_manager.UpdateVirtualNic(nicName, spec)
+    
+    def SetHostname(self, hostname):
+        """
+        Set the hostname of this host
+
+        Args:
+            hostname:   the new hostname to set
+        """
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
+            network_manager = host.configManager.networkSystem
+            dns_config = network_manager.dnsConfig
+            dns_config.hostName = hostname
+            network_manager.UpdateDnsConfig(dns_config)
+
 
 # ================================================================================================================================
 
@@ -909,6 +1085,15 @@ class VMHostKVM(VMHost):
         Create filesystem on any volumes currently connected to this host
         """
         self.client.SetupVolumes()
+
+    def SetHostname(self, hostname):
+        """
+        Set the hostname of this host
+
+        Args:
+            hostname:   the new hostname to set
+        """
+        self.client.UpdateHostname(hostname)
 
 
 # ================================================================================================================================

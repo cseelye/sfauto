@@ -1,15 +1,14 @@
 #!/usr/bin/env python2.7
 
 """
-This action will create datastores on a hypervisor
-By default only iSCSI and FC disks are used
+This action will create a vswitch on a hypervisor
 """
 
 from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.virtutil import VMHost
-from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, StrType, BoolType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, StrType, PositiveNonZeroIntegerType, ItemList
 from libsf import sfdefaults
 from libsf import SolidFireError
 
@@ -17,20 +16,22 @@ from libsf import SolidFireError
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
     "vmhost_ip" : (IPv4AddressType, sfdefaults.vm_names),
-    "include_internal" : (BoolType, False),
-    "include_slots" : (BoolType, False),
+    "vswitch_name" : (StrType, None),
+    "vswitch_mtu" : (PositiveNonZeroIntegerType, 1500),
+    "vswitch_pnics" : (ItemList(StrType), None),
     "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vmware_mgmt_server),
     "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
     "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
 })
-def VmhostCreateDatastores(vmhost_ip,
-                           include_internal,
-                           include_slots,
-                           vm_mgmt_server,
-                           vm_mgmt_user,
-                           vm_mgmt_pass):
+def VmhostVswitchCreate(vmhost_ip,
+                        vswitch_name,
+                        vswitch_mtu,
+                        vswitch_pnics,
+                        vm_mgmt_server,
+                        vm_mgmt_user,
+                        vm_mgmt_pass):
     """
-    Create datastores
+    Create a vswitch
     
     Args:
         vmhost_ip:              the hypervisor IP address
@@ -49,22 +50,25 @@ def VmhostCreateDatastores(vmhost_ip,
         log.error("Could not connect to hypervisor: {}".format(str(ex)))
         return False
 
+    log.info("Creating vswitch")
     try:
-        host.CreateDatastores(includeInternalDrives=include_internal, includeSlotDrives=include_slots)
+        host.CreateVswitch(vswitch_name, vswitch_pnics, vswitch_mtu)
     except SolidFireError as ex:
-        log.error("Error creating datastores: {}".format(str(ex)))
+        log.error("Could not create vswitch: {}".format(str(ex)))
         return False
 
-    log.passed("Successfully created datastores")
+
+    log.passed("Successfully created vswitch {}".format(vswitch_name))
     return True
 
 if __name__ == '__main__':
     parser = SFArgumentParser(description=GetFirstLine(__doc__), formatter_class=SFArgFormatter)
     parser.add_argument("--vmhost-ip", type=IPv4AddressType, required=True, metavar="IP", help="the IP address of the hypervisor")
-    parser.add_argument("--include-internal", action="store_true", default=False, help="include internal drives (like satadim/dom)")
-    parser.add_argument("--include-slots", action="store_true", default=False, help="include external drives in slots")
+    parser.add_argument("--vswitch-name", type=StrType, required=True, metavar="NAME", help="the name of the switch to create")
+    parser.add_argument("--vswitch-mtu", type=PositiveNonZeroIntegerType, default=1500, required=True, metavar="MTU", help="the MTU of the switch")
+    parser.add_argument("--vswitch-pnics", type=ItemList(StrType), metavar="NIC1,NIC2,...", help="the physical NICs to attach to the vswitch")
     parser.add_vm_mgmt_args()
     args = parser.parse_args_to_dict()
 
-    app = PythonApp(VmhostCreateDatastores, args)
+    app = PythonApp(VmhostVswitchCreate, args)
     app.Run(**args)

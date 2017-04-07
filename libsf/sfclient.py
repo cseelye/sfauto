@@ -181,6 +181,8 @@ class SFClient:
             self._debug("Attempting connect to {} with SSH as {}:{}".format(self.ipAddress, self.username, self.password))
             retcode, stdout, stderr = self._execute_ssh_command(self.ipAddress, "hostname")
             if retcode != 0:
+                if "Ambiguous API call" in stdout:
+                    raise ClientConnectionError("Server appears to be a vSphere appliance")
                 raise ClientCommandError("Could not get hostname: {}".format(stderr))
             self.hostname = stdout.strip()
 

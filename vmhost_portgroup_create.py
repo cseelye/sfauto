@@ -1,45 +1,47 @@
 #!/usr/bin/env python2.7
 
 """
-This action will create datastores on a hypervisor
-By default only iSCSI and FC disks are used
+This action will create a port group on a hypervisor
 """
 
 from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.virtutil import VMHost
-from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, StrType, BoolType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, StrType, PositiveIntegerType
 from libsf import sfdefaults
-from libsf import SolidFireError
+from libsf import SolidFireError, InvalidArgumentError
 
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
     "vmhost_ip" : (IPv4AddressType, sfdefaults.vm_names),
-    "include_internal" : (BoolType, False),
-    "include_slots" : (BoolType, False),
+    "portgroup_name" : (StrType, None),
+    "portgroup_vlan" : (PositiveIntegerType, 0),
+    "vswitch_name" : (StrType, None),
     "vm_mgmt_server" : (OptionalValueType(IPv4AddressType), sfdefaults.vmware_mgmt_server),
     "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
     "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
 })
-def VmhostCreateDatastores(vmhost_ip,
-                           include_internal,
-                           include_slots,
-                           vm_mgmt_server,
-                           vm_mgmt_user,
-                           vm_mgmt_pass):
+def VmhostPortGroupCreate(vmhost_ip,
+                          portgroup_name,
+                          portgroup_vlan,
+                          vswitch_name,
+                          vm_mgmt_server,
+                          vm_mgmt_user,
+                          vm_mgmt_pass):
     """
-    Create datastores
+    Create a port group
     
     Args:
         vmhost_ip:              the hypervisor IP address
-        include_internal:       create datastores on internal drives (like satadimm/dom)
-        include_slots:          create datastores on external drives in chassis slots
         vm_mgmt_server:         the management server for the VMs (vSphere for VMware, hypervisor for KVM)
         vm_mgmt_user:           the management user for the VMs
         vm_mgmt_pass:           the management password for the VMs
     """
+    if portgroup_vlan > 4095:
+        raise InvalidArgumentError("Invalid VLAN")
+
     log = GetLogger()
 
     log.info("Connecting to {}".format(vm_mgmt_server))
@@ -49,22 +51,25 @@ def VmhostCreateDatastores(vmhost_ip,
         log.error("Could not connect to hypervisor: {}".format(str(ex)))
         return False
 
+    log.info("Creating port group")
     try:
-        host.CreateDatastores(includeInternalDrives=include_internal, includeSlotDrives=include_slots)
+        host.CreatePortgroup(portgroup_name, vswitch_name, portgroup_vlan)
     except SolidFireError as ex:
-        log.error("Error creating datastores: {}".format(str(ex)))
+        log.error("Could not create port group: {}".format(str(ex)))
         return False
 
-    log.passed("Successfully created datastores")
+
+    log.passed("Successfully created port group {}".format(portgroup_name))
     return True
 
 if __name__ == '__main__':
     parser = SFArgumentParser(description=GetFirstLine(__doc__), formatter_class=SFArgFormatter)
     parser.add_argument("--vmhost-ip", type=IPv4AddressType, required=True, metavar="IP", help="the IP address of the hypervisor")
-    parser.add_argument("--include-internal", action="store_true", default=False, help="include internal drives (like satadim/dom)")
-    parser.add_argument("--include-slots", action="store_true", default=False, help="include external drives in slots")
+    parser.add_argument("--portgroup-name", type=StrType, required=True, metavar="NAME", help="the name of the port group to create")
+    parser.add_argument("--portgroup-vlan", type=PositiveIntegerType, default=0, required=True, metavar="NAME", help="the VLAN of the port group to create")
+    parser.add_argument("--vswitch-name", type=StrType, required=True, metavar="NAME", help="the name of the switch to create the port group on")
     parser.add_vm_mgmt_args()
     args = parser.parse_args_to_dict()
 
-    app = PythonApp(VmhostCreateDatastores, args)
+    app = PythonApp(VmhostPortGroupCreate, args)
     app.Run(**args)
