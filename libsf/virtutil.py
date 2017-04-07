@@ -45,7 +45,7 @@ class VirtualizationError(SolidFireError):
 
 class VirtualMachine(object):
     """
-    Base class for virtual machines.  Do not instantiate this class directly, use the Create static method
+    Base class for virtual machines.  Do not instantiate this class directly, use the Attach static method
     """
 
     def __init__(self, vmName, hostServer, hostUsername, hostPassword):
@@ -88,7 +88,7 @@ class VirtualMachine(object):
 
 
     @staticmethod
-    def Create(vmName, mgmtServer, mgmtUsername, mgmtPassword):
+    def Attach(vmName, mgmtServer, mgmtUsername, mgmtPassword):
         """
         Factory method to create a VirtualMachine of the correct sub-type
 
@@ -114,7 +114,7 @@ class VirtualMachine(object):
 
 class VMHost(object):
     """
-    Base class for virtualization hosts (hypervisors).  Do not instantiate this class directly, use the Create static method
+    Base class for virtualization hosts (hypervisors).  Do not instantiate this class directly, use the Attach static method
     """
 
     def __init__(self, vmhostName, mgmtServer, mgmtUsername, mgmtPassword):
@@ -147,7 +147,7 @@ class VMHost(object):
 
 
     @staticmethod
-    def Create(vmhostName, mgmtServer, mgmtUsername, mgmtPassword, hint=None):
+    def Attach(vmhostName, mgmtServer, mgmtUsername, mgmtPassword, hint=None):
         """
         Factory method to create a VMHost of the correct sub-type
 

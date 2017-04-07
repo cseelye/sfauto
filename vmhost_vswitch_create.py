@@ -45,7 +45,7 @@ def VmhostVswitchCreate(vmhost_ip,
 
     log.info("Connecting to {}".format(vm_mgmt_server))
     try:
-        host = VMHost.Create(vmhost_ip, vm_mgmt_server, vm_mgmt_user, vm_mgmt_pass)
+        host = VMHost.Attach(vmhost_ip, vm_mgmt_server, vm_mgmt_user, vm_mgmt_pass)
     except SolidFireError as ex:
         log.error("Could not connect to hypervisor: {}".format(str(ex)))
         return False

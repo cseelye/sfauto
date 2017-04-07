@@ -65,7 +65,7 @@ def _VMThread(vm_name, timeout, vm_mgmt_server, vm_mgmt_username, vm_mgmt_passwo
     log = GetLogger()
     SetThreadLogPrefix(vm_name)
 
-    vm = VirtualMachine.Create(vm_name, vm_mgmt_server, vm_mgmt_username, vm_mgmt_password)
+    vm = VirtualMachine.Attach(vm_name, vm_mgmt_server, vm_mgmt_username, vm_mgmt_password)
     log.info("Waiting for VM to be powered on")
     vm.WaitForUp(timeout)
 

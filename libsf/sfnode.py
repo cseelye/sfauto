@@ -67,7 +67,7 @@ class SFNode(object):
         self.vmName = vmName
         self.vm = None
         if self.vmName:
-            self.vm = VirtualMachine.Create(vmName, vmManagementServer, vmManagementUsername, vmManagementPassword)
+            self.vm = VirtualMachine.Attach(vmName, vmManagementServer, vmManagementUsername, vmManagementPassword)
             self.log.debug("Node {} is VM {}".format(self.ipAddress, str(self.vm)))
 
         self._unpicklable = ["log", "api", "clusterAPI"]
