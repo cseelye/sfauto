@@ -1848,7 +1848,18 @@ class FakeCluster(object):
 
             self.data[DRIVES_PATH] = alldrives
 
-        return {}
+            handle_id = self._GetNextIDUnlocked()
+            handle = {
+                "createTime" : TimestampToStr(time.time(), formatString="%Y-%m-%dT%H:%M:%SZ", timeZone=UTCTimezone()),
+                "lastUpdateTime" : TimestampToStr(time.time(), formatString="%Y-%m-%dT%H:%M:%SZ", timeZone=UTCTimezone()),
+                "result": {
+                },
+                "resultType" : "AddDrives",
+                "status" : "complete"
+            }
+            self.data[ASYNC_HANDLES_PATH][handle_id] = handle
+
+        return { "asyncHandle" : handle_id }
 
     def RemoveDrives(self, methodParams, ip="", endpoint="", apiVersion=""):
         drives_to_rem = methodParams.get("drives")
@@ -1869,7 +1880,18 @@ class FakeCluster(object):
                 alldrives[drive_id]["status"] = "available"
             self.data[DRIVES_PATH] = alldrives
 
-        return {}
+            handle_id = self._GetNextIDUnlocked()
+            handle = {
+                "createTime" : TimestampToStr(time.time(), formatString="%Y-%m-%dT%H:%M:%SZ", timeZone=UTCTimezone()),
+                "lastUpdateTime" : TimestampToStr(time.time(), formatString="%Y-%m-%dT%H:%M:%SZ", timeZone=UTCTimezone()),
+                "result": {
+                },
+                "resultType" : "RemoveDrives",
+                "status" : "complete"
+            }
+            self.data[ASYNC_HANDLES_PATH][handle_id] = handle
+
+        return { "asyncHandle" : handle_id }
 
     def ListClusterFaults(self, methodParams, ip="", endpoint="", apiVersion=""):
         fault_types = methodParams.get("faultTypes", "all")
