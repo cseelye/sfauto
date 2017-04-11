@@ -202,11 +202,11 @@ def RtfiNodes(node_ips,
             net_info[node_ip]["ipmi"] = ipmi_ips[idx]
         if mac_addresses:
             net_info[node_ip]["mac"] = mac_addresses[idx]
-        if node_names:
-            net_info[node_ip]["hostname"] = node_names[idx]
         if vm_names:
             net_info[node_ip]["vm_name"] = vm_names[idx]
             net_info[node_ip]["hostname"] = vm_names[idx]
+        if node_names:
+            net_info[node_ip]["hostname"] = node_names[idx]
         if cip_ips:
             net_info[node_ip]["cip"] = cip_ips[idx]
             net_info[node_ip]["cip_netmask"] = cip_netmask
@@ -237,7 +237,8 @@ def RtfiNodes(node_ips,
         node_network = CalculateNetwork(net_info[node_ip]["ip"], net_info[node_ip]["netmask"])
         if not IPInNetwork(net_info[node_ip]["gateway"], node_network):
             raise InvalidArgumentError("The gateway ({}) must be on the same network as the node IP ({})".format(net_info[node_ip]["gateway"], net_info[node_ip]["ip"]))
-    log.debug2("net_info={}".format(json.dumps(net_info, sort_keys=True, indent=2)))
+    for node_ip in node_ips:
+        log.debug2("net_info[{}] = {}".format(node_ip, json.dumps(net_info[node_ip], sort_keys=True, indent=2)))
 
     #
     # Find the build to RTFI to
