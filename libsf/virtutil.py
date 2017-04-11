@@ -5,6 +5,8 @@ from . import sfdefaults
 from . import SolidFireError, UnauthorizedError, TimeoutError, UnknownObjectError, ClientConnectionError, ConnectionError
 from .logutil import GetLogger
 from .sfclient import SFClient
+from copy import deepcopy
+import functools
 import inspect
 import libvirt
 import libvirt_qemu
@@ -322,11 +324,15 @@ def VMwareWaitForTasks(connection, tasks):
                     task = objSet.obj
                     if not str(task) in taskList:
                         continue
+                    #print objSet
+                    #print task
+                    #print task.info
+                    #print task.info.descriptionId
                     for change in objSet.changeSet:
 
                         # Initial change when the task starts
                         if change.name == 'info':
-                            log.debug("progress={}%".format(change.val.progress or 0))
+                            log.debug("Task {} [{}] progress={}%".format(task.info.descriptionId, task.info.key, change.val.progress or 0))
                             state = change.val.state
 
                         # Final change when the task finishes or fails
@@ -334,13 +340,15 @@ def VMwareWaitForTasks(connection, tasks):
                             state = change.val
 
                         # Progress update change
-                        elif change.name == "info.progress":
-                            log.debug("progress={}%".format(change.val or 0))
+                        elif change.name == "info.progress" and change.val:
+                            log.debug("Task {} [{}] progress={}%".format(task.info.descriptionId, task.info.key, change.val))
+#                            log.debug("Task {} [{}] progress={}%".format(task.info.descriptionId, task.info.key, change.val or 0))
 
                         else:
                             continue
 
                         if state == vim.TaskInfo.State.success:
+                            log.debug("Task {} [{}] completed".format(task.info.descriptionId, task.info.key))
                             # Remove task from taskList
                             taskList.remove(str(task))
                         elif state == vim.TaskInfo.State.error:
@@ -375,10 +383,25 @@ class VirtualMachineVMware(VirtualMachine):
     def __init__(self, vmName, vsphereServer, vsphereUsername, vspherePassword):
         super(VirtualMachineVMware, self).__init__(vmName, vsphereServer, vsphereUsername, vspherePassword)
         self.vmType = "VMware"
+        self.vsphereConnection = None
 
         # Test the connection and make sure the VM exists
         with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
             VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
+
+    #pylint: disable=no-self-argument, not-callable
+    def _vsphere_session(f):
+        @functools.wraps(f)
+        def wrapped(self, *args, **kwargs):
+            if self.vsphereConnection:
+                self.log.debug("VirtualMachineVMware reusing vsphere connection")
+                return f(self, *args, **kwargs)
+            else:
+                self.log.debug("VirtualMachineVMware creating new vsphere connection")
+                with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as self.vsphereConnection:
+                    return f(self, *args, **kwargs)
+        return wrapped
+    #pylint: enable=no-self-argument, not-callable
 
     def PowerOn(self):
         """
@@ -520,6 +543,114 @@ class VirtualMachineVMware(VirtualMachine):
                     raise TimeoutError("Timeout waiting for guest heartbeat")
                 time.sleep(2)
 
+    @_vsphere_session
+    def Delete(self):
+        """
+        Delete this virtual machine
+        """
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name'])
+        task = vm.Destroy_Task()
+        VMwareWaitForTasks(self.vsphereConnection, [task])
+
+    @_vsphere_session
+    def SetVMXProperty(self, name, value):
+        """
+        Set a advanced property of this VM.  These are stored as key-value pairs in the VMX file.
+
+        Arg:
+            name:      the name (key) of the property to set
+            value:     the value to set
+        """
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name'])
+
+        self.log.debug("Setting property {}={} on VM {}".format(name, value, self.vmName))
+        option = vim.option.OptionValue(key=name, value=value)
+        config = vim.vm.ConfigSpec()
+        config.extraConfig = [option]
+        task = vm.ReconfigVM_Task(config)
+        VMwareWaitForTasks(self.vsphereConnection, [task])
+
+    @_vsphere_session
+    def AddNetworkAdapter(self, networkName):
+        """
+        Add a new NIC to this VM
+
+        Args:
+            networkName:    the name of the port group to connect the NIC to (str)
+        """
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name'])
+        network = VMwareFindObjectGetProperties(self.vsphereConnection, networkName, vim.Network, [])
+    
+        nic_spec = vim.vm.device.VirtualDeviceSpec()
+        nic_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        nic_spec.device = vim.vm.device.VirtualVmxnet3()
+        nic_spec.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+        nic_spec.device.backing.network = network
+        nic_spec.device.backing.deviceName = networkName
+        nic_spec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+        nic_spec.device.connectable.startConnected = True
+        nic_spec.device.connectable.startConnected = True
+        nic_spec.device.connectable.allowGuestControl = True
+        nic_spec.device.connectable.connected = False
+        nic_spec.device.connectable.status = 'untried'
+        nic_spec.device.wakeOnLanEnabled = True
+        nic_spec.device.addressType = 'assigned'
+    
+        config = vim.vm.ConfigSpec()
+        config.deviceChange = [nic_spec]
+        task = vm.ReconfigVM_Task(spec=config)
+        VMwareWaitForTasks(self.vsphereConnection, [task])
+
+    @_vsphere_session
+    def AddDisk(self, sizeGB, datastoreName, thinProvision=True):
+        """
+        Add a new virtual disk to this VM
+
+        Args:
+            sizeGB:         the size of the disk, in GB (int)
+            datastoreName:  the name of the datastore to put the disk in (str)
+            thinProvision:  make this disk thinly provisioned
+        """
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name', 'config'])
+        ds = VMwareFindObjectGetProperties(self.vsphereConnection, datastoreName, vim.Datastore, ["name"])
+        # Find the SCSI controller and current LUNs
+        controller = None
+        used_luns = set([7])
+        for dev in vm.config.hardware.device:
+            if isinstance(dev, vim.vm.device.VirtualDisk):
+                used_luns.add(dev.unitNumber)
+            if isinstance(dev, vim.vm.device.VirtualSCSIController):
+                controller = dev
+        if not controller:
+            raise VirtualizationError("Could not find a SCSI controller to attach the disk to")
+        available_lun = None
+        for lun in range(17):
+            if lun not in used_luns:
+                available_lun = lun
+                break
+        if available_lun is None:
+            raise VirtualizationError("There are no free LUNs on the SCSI controller")
+
+        self.log.debug("Adding LUN {} in datastore {}".format(available_lun, ds.name))
+        disk_spec = vim.vm.device.VirtualDeviceSpec()
+        disk_spec.fileOperation = "create"
+        disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        disk_spec.device = vim.vm.device.VirtualDisk()
+        disk_spec.device.backing = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
+        disk_spec.device.backing.thinProvisioned = thinProvision
+        disk_spec.device.backing.diskMode = 'persistent'
+        disk_spec.device.backing.fileName = "[{}] {}-{}.vmdk".format(ds.name, self.vmName, available_lun)
+        disk_spec.device.backing.datastore = ds
+        disk_spec.device.unitNumber = available_lun
+        disk_spec.device.capacityInKB = sizeGB * 1024 * 1024
+        disk_spec.device.controllerKey = controller.key
+
+        config = vim.vm.ConfigSpec()
+        config.deviceChange = [disk_spec]
+        task = vm.ReconfigVM_Task(spec=config)
+        VMwareWaitForTasks(self.vsphereConnection, [task])
+
+
 class VMHostVMware(VMHost):
     """
     VMware implementation of VMHost class
@@ -566,19 +697,29 @@ class VMHostVMware(VMHost):
                             lun2name[lun.scsiLun] = name
 
                 #elif type(adapter) == vim.host.BlockHba:
-                elif (adapter.driver == "ahci" or adapter.driver == "vmw_ahci") and includeInternalDrives:
+                elif adapter.driver == "ahci" or adapter.driver == "vmw_ahci":
                     # Internal SATA adapter
                     # "sdimmX" naming
+                    if not includeInternalDrives:
+                        self.log.info("Skipping adapter {} for internal drives".format(adapter.device))
+                        continue
                     for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
                         for lun in target.lun:
-                            lun2name[lun.scsiLun] = "sdimm{}".format(target.target)
+                            lun2name[lun.scsiLun] = "{}-sdimm{}".format(self.vmhostName, target.target)
 
-                elif (adapter.driver == "mpt2sas" or adapter.driver == "mpt3sas") and includeSlotDrives:
-                    # SAS adapter for nodes
+                elif adapter.driver == "mpt2sas" or adapter.driver == "mpt3sas":
+                    # SAS adapter for slot drives on the front of the chassis
                     # "slotX" naming
+                    if not includeSlotDrives:
+                        self.log.info("Skipping adapter {} for slot drives".format(adapter.device))
+                        continue
                     for target in [hba for hba in storage_manager.storageDeviceInfo.scsiTopology.adapter if hba.adapter == adapter.key][0].target:
                         for lun in target.lun:
-                            lun2name[lun.scsiLun] = "slot{}".format(target.target)
+                            lun2name[lun.scsiLun] = "{}-slot{}".format(self.vmhostName, target.target)
+
+                elif adapter.driver == "vmkusb":
+                    # Skip USB drives
+                    continue
 
                 else:
                     self.log.warning("Skipping unknown HBA {}".format(adapter.device))
@@ -756,6 +897,195 @@ class VMHostVMware(VMHost):
             dns_config.hostName = hostname
             network_manager.UpdateDnsConfig(dns_config)
 
+    def CreateVirtualMachine(self, vmName, cpuCount, memGB, diskGB, netLabel, datastore, guestType="ubuntu64Guest", hardwareVersion=None):
+        """
+        Create a virtual machine on this host
+
+        Args:
+            vmName:             the name for the new VM
+            cpuCount:           the number of vCPUs for the VM
+            memGB:              the memory size for the VM
+            diskGB:             the size of the disk for the VM
+            netLabel:           the name of the network to put the VM on
+            datastore:          the datastore to put the VM in
+            guestType:          the VM guest type
+            hardwareVersion:    the virtual hardware version to create the VM with
+
+        Returns:
+            The new virtual machine (VirtualMachine)
+        """
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
+            host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
+
+            # Find the datacenter for this host
+            dc = host
+            while type(dc) != vim.Datacenter:
+                dc = dc.parent
+
+            # Create the NIC spec for this VM
+            network = VMwareFindObjectGetProperties(vsphere, netLabel, vim.Network, [])
+            nic_spec = vim.vm.device.VirtualDeviceSpec()
+            nic_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+            nic_spec.device = vim.vm.device.VirtualVmxnet3()
+            nic_spec.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+            nic_spec.device.backing.network = network
+            nic_spec.device.backing.deviceName = netLabel
+            nic_spec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+            nic_spec.device.connectable.startConnected = True
+            nic_spec.device.connectable.startConnected = True
+            nic_spec.device.connectable.allowGuestControl = True
+            nic_spec.device.connectable.connected = False
+            nic_spec.device.connectable.status = 'untried'
+            nic_spec.device.wakeOnLanEnabled = True
+            nic_spec.device.addressType = 'assigned'
+
+            # Create the scsi controller spec for this VM
+            controller_spec = vim.vm.device.VirtualDeviceSpec()
+            controller_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+            controller_spec.device = vim.vm.device.VirtualLsiLogicController()
+            controller_spec.device.sharedBus = vim.vm.device.VirtualSCSIController.Sharing.noSharing
+
+            # Configure the VM
+            config = vim.vm.ConfigSpec()
+            config.name = vmName
+            config.numCPUs = int(cpuCount)
+            config.memoryMB = int(memGB * 1024)
+            config.guestId = guestType
+            config.version = "vmx-{}".format(hardwareVersion)
+            config.files = vim.vm.FileInfo(vmPathName="[{}] {}".format(datastore, vmName))
+            config.deviceChange = [nic_spec, controller_spec]
+
+            # Create the VM
+            task = dc.vmFolder.CreateVM_Task(config=config,
+                                             pool=host.parent.resourcePool)
+            VMwareWaitForTasks(vsphere, [task])
+
+            # Get a reference to the created VM
+            vm = VMwareFindObjectGetProperties(vsphere, vmName, vim.VirtualMachine, ["config"])
+
+            try:
+                # Create disk and CDROM spec to add to the VM
+                ds = VMwareFindObjectGetProperties(vsphere, datastore, vim.Datastore, [])
+                disk_spec = vim.vm.device.VirtualDeviceSpec()
+                disk_spec.fileOperation = "create"
+                disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+                disk_spec.device = vim.vm.device.VirtualDisk()
+                disk_spec.device.backing = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
+                disk_spec.device.backing.thinProvisioned = True
+                disk_spec.device.backing.diskMode = 'persistent'
+                disk_spec.device.backing.datastore = ds
+                disk_spec.device.unitNumber = 0
+                disk_spec.device.capacityInKB = int(diskGB * 1024 * 1024)
+
+                cdrom_spec = vim.vm.device.VirtualDeviceSpec()
+                cdrom_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+                cdrom_spec.device = vim.vm.device.VirtualCdrom()
+                cdrom_spec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+                cdrom_spec.device.connectable.allowGuestControl = True
+                cdrom_spec.device.connectable.startConnected = True
+                cdrom_spec.device.backing = vim.vm.device.VirtualCdrom.RemotePassthroughBackingInfo()
+                cdrom_spec.device.backing.deviceName = ""
+                cdrom_spec.device.backing.exclusive = False
+    
+                # Find the SCSI and IDE controllers
+                disk_spec.device.controllerKey = None
+                cdrom_spec.device.controllerKey = None
+                for dev in vm.config.hardware.device:
+                    if not disk_spec.device.controllerKey and isinstance(dev, vim.vm.device.VirtualSCSIController):
+                        disk_spec.device.controllerKey = dev.key
+                        self.log.debug2("Adding disk to controller {}".format(dev.key))
+                    if not cdrom_spec.device.controllerKey and isinstance(dev, vim.vm.device.VirtualIDEController) and len(dev.device) < 2:
+                        cdrom_spec.device.controllerKey = dev.key
+                        self.log.debug2("Adding cdrom to controller {}".format(dev.key))
+    
+                # Add the disk and CDROM to the VM
+                config = vim.vm.ConfigSpec()
+                config.deviceChange = [disk_spec, cdrom_spec]
+                task = vm.ReconfigVM_Task(spec=config)
+                VMwareWaitForTasks(vsphere, [task])
+            except:
+                # Clean up the VM
+                self.log.error("Exception, removing incomplete VM")
+                try:
+                    task = vm.Destroy_Task()
+                    VMwareWaitForTasks(vsphere, [task])
+                except (SolidFireError, vmodl.MethodFault, vmodl.RuntimeFault):
+                    # Cleanup is best effort, ignore any errors that happen here
+                    pass
+                # Now raise the original exception
+                raise
+            return VirtualMachineVMware(vmName, self.mgmtServer, self.mgmtUsername, self.mgmtPassword)
+
+    def CreateVMNode(self, vmName, mgmtNet, storageNet, datastores, cpuCount=6, memGB=24, sliceDriveSize=60, blockDriveSize=50, blockDriveCount=10):
+        """
+        Create a virtual SF node
+
+        Args:
+            vmName:             the name for the new VM (str)
+            mgmtNet:            the name of the network to put the 1G NICs on (str)
+            storageNet:         the name of the network to put the 10G NICs on (str)
+            datastores:         the list of datastores to put the VM disks in (list of str)
+            cpuCount:           the number of vCPUs for the VM (int)
+            memGB:              the memory size for the VM (int)
+            sliceDriveSize:     the size of the slice drive in GB (int)
+            blockDriveSize:     the size of the block drive in GB (int)
+            blockDriveCount:    the number of block drives (int)
+
+        Returns:
+            The new virtual node (VirtualMachine)
+        """
+        dest_datastores = deepcopy(datastores)
+        if len(datastores) > 1:
+            vm_datastore = dest_datastores.pop(0)
+        else:
+            vm_datastore = dest_datastores[0]
+        self.log.info("Creating base VM")
+        # Base VM disk is 100MB boot + 32GB root + 8GB var/log + 8GB NVRAM + slice size
+        vm = self.CreateVirtualMachine(vmName, cpuCount, memGB, 48.1 + sliceDriveSize, storageNet, vm_datastore, "ubuntu64Guest", 10)
+
+        with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vm.vsphereConnection:
+            try:
+                self.log.info("Enabling disk UUIDs")
+                vm.SetVMXProperty("disk.EnableUUID", "true")
+
+                self.log.info("Adding network adapters")
+                vm.AddNetworkAdapter(storageNet)
+                vm.AddNetworkAdapter(mgmtNet)
+                vm.AddNetworkAdapter(mgmtNet)
+
+                self.log.info("Adding block drives")
+                for disk_idx in range(blockDriveCount):
+                    vm.AddDisk(blockDriveSize, dest_datastores[disk_idx % len(dest_datastores)])
+            except:
+                # Clean up the VM
+                self.log.error("Exception, removing incomplete VM")
+                try:
+                    vm.Delete()
+                except (SolidFireError, vmodl.MethodFault, vmodl.RuntimeFault):
+                    # Cleanup is best effort, ignore any errors that happen here
+                    pass
+
+                # Now raise the original exception
+                raise
+
+        return vm
+
+    def CreateVMNodeManagement(self, vmName, mgmtNet, datastore):
+        """
+        Create a virtual SF management node
+
+        Args:
+            vmName:             the name for the new VM (str)
+            mgmtNet:            the name of the network to put the NIC on (str)
+            datastore:          the datastore to put the VM in (str)
+
+        Returns:
+            The new virtual node (VirtualMachine)
+        """
+        CPU_COUNT = 1
+        MEM_SIZE = 8
+        DISK_SIZE = 150
+        return self.CreateVirtualMachine(vmName, CPU_COUNT, MEM_SIZE, DISK_SIZE, mgmtNet, datastore, "ubuntu64Guest", 10)
 
 # ================================================================================================================================
 
