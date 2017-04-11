@@ -8,9 +8,9 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.virtutil import VMHost
-from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, StrType, PositiveIntegerType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, StrType
 from libsf import sfdefaults
-from libsf import SolidFireError, InvalidArgumentError
+from libsf import SolidFireError
 
 @logargs
 @ValidateAndDefault({
@@ -22,7 +22,7 @@ from libsf import SolidFireError, InvalidArgumentError
     "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
     "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
 })
-def VmhostPortGroupCreate(vmhost_ip,
+def VmhostPortGroupRename(vmhost_ip,
                           portgroup_name,
                           newname,
                           vm_mgmt_server,
@@ -65,5 +65,5 @@ if __name__ == '__main__':
     parser.add_vm_mgmt_args()
     args = parser.parse_args_to_dict()
 
-    app = PythonApp(VmhostPortGroupCreate, args)
+    app = PythonApp(VmhostPortGroupRename, args)
     app.Run(**args)

@@ -21,7 +21,7 @@ from libsf import SolidFireError
     "vm_mgmt_user" : (StrType, sfdefaults.vm_mgmt_user),
     "vm_mgmt_pass" : (StrType, sfdefaults.vm_mgmt_pass),
 })
-def NodePowerOn(vm_names,
+def VmWaitForUp(vm_names,
                 timeout,
                 vm_mgmt_server,
                 vm_mgmt_user,
@@ -77,5 +77,5 @@ if __name__ == '__main__':
     parser.add_vm_mgmt_args()
     args = parser.parse_args_to_dict()
 
-    app = PythonApp(NodePowerOn, args)
+    app = PythonApp(VmWaitForUp, args)
     app.Run(**args)

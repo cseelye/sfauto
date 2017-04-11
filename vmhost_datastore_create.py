@@ -23,7 +23,7 @@ from libsf import SolidFireError
     "vm_mgmt_user" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_user),
     "vm_mgmt_pass" : (OptionalValueType(StrType), sfdefaults.vmware_mgmt_pass),
 })
-def VmhostCreateDatastores(vmhost_ip,
+def VmhostDatastoreCreate(vmhost_ip,
                            include_internal,
                            include_slots,
                            vm_mgmt_server,
@@ -66,5 +66,5 @@ if __name__ == '__main__':
     parser.add_vm_mgmt_args()
     args = parser.parse_args_to_dict()
 
-    app = PythonApp(VmhostCreateDatastores, args)
+    app = PythonApp(VmhostDatastoreCreate, args)
     app.Run(**args)

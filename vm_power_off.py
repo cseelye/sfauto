@@ -20,10 +20,10 @@ from libsf import SolidFireError
     "vm_mgmt_user" : (StrType, sfdefaults.vm_mgmt_user),
     "vm_mgmt_pass" : (StrType, sfdefaults.vm_mgmt_pass),
 })
-def NodePowerOff(vm_names,
-                 vm_mgmt_server,
-                 vm_mgmt_user,
-                 vm_mgmt_pass):
+def VmPowerOff(vm_names,
+               vm_mgmt_server,
+               vm_mgmt_user,
+               vm_mgmt_pass):
     """
     Power off VMs
 
@@ -74,5 +74,5 @@ if __name__ == '__main__':
     parser.add_vm_mgmt_args()
     args = parser.parse_args_to_dict()
 
-    app = PythonApp(NodePowerOff, args)
+    app = PythonApp(VmPowerOff, args)
     app.Run(**args)
