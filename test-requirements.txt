@@ -1,0 +1,9 @@
+# These requirements are only needed for running the unit tests
+
+# To use this file, run this command to install/upgrade:
+#   pip install -U -r requirements.txt
+
+coverage==4.0.3
+pylint==1.5.2
+pytest==2.8.5
+pytest-cov==2.2.0
