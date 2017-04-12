@@ -324,10 +324,6 @@ def VMwareWaitForTasks(connection, tasks):
                     task = objSet.obj
                     if not str(task) in taskList:
                         continue
-                    #print objSet
-                    #print task
-                    #print task.info
-                    #print task.info.descriptionId
                     for change in objSet.changeSet:
 
                         # Initial change when the task starts
@@ -394,45 +390,49 @@ class VirtualMachineVMware(VirtualMachine):
         @functools.wraps(f)
         def wrapped(self, *args, **kwargs):
             if self.vsphereConnection:
-                self.log.debug("VirtualMachineVMware reusing vsphere connection")
+                self.log.debug2("VirtualMachineVMware reusing vsphere connection")
                 return f(self, *args, **kwargs)
             else:
-                self.log.debug("VirtualMachineVMware creating new vsphere connection")
-                with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as self.vsphereConnection:
-                    return f(self, *args, **kwargs)
+                self.log.debug2("VirtualMachineVMware creating new vsphere connection")
+                try:
+                    with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as self.vsphereConnection:
+                        return f(self, *args, **kwargs)
+                finally:
+                    self.vsphereConnection = None
         return wrapped
     #pylint: enable=no-self-argument, not-callable
 
+    @_vsphere_session
     def PowerOn(self):
         """
         Power On this VM
         """
-        with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
-            vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
 
-            self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
-            if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
-                return
+        self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
+        if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
+            return
 
-            self.log.info("Waiting for {} to turn on".format(self.vmName))
-            task = vm.PowerOn()
-            VMwareWaitForTasks(vsphere, [task])
+        self.log.info("Waiting for {} to turn on".format(self.vmName))
+        task = vm.PowerOn()
+        VMwareWaitForTasks(self.vsphereConnection, [task])
 
+    @_vsphere_session
     def PowerOff(self):
         """
         Power Off this VM
         """
-        with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
-            vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
-            
-            self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
-            if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOff:
-                return True
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
 
-            self.log.info("Waiting for {} to turn off".format(self.vmName))
-            task = vm.PowerOff()
-            VMwareWaitForTasks(vsphere, [task])
+        self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
+        if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOff:
+            return True
 
+        self.log.info("Waiting for {} to turn off".format(self.vmName))
+        task = vm.PowerOff()
+        VMwareWaitForTasks(self.vsphereConnection, [task])
+
+    @_vsphere_session
     def GetPowerState(self):
         """
         Get the current power state of this VM
@@ -440,15 +440,15 @@ class VirtualMachineVMware(VirtualMachine):
         Returns:
             A string containing 'on' or 'off' (str)
         """
-        with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
-            vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
-            self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name', 'runtime.powerState'])
+        self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
 
-            if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
-                return "on"
-            else:
-                return "off"
+        if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
+            return "on"
+        else:
+            return "off"
 
+    @_vsphere_session
     def GetPXEMacAddress(self):
         """
         Get the MAC address of the VM to use when PXE booting
@@ -456,92 +456,91 @@ class VirtualMachineVMware(VirtualMachine):
         Returns:
             A string containing the MAC address in 00:00:00:00:00 format (str)
         """
-        with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
-            vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'config.hardware'])
-            macs = []
-            for dev in vm.config.hardware.device:
-                if isinstance(dev, vim.vm.device.VirtualEthernetCard):
-                    macs.append(dev.macAddress)
-            if not macs:
-                raise SolidFireError("Could not find any ethernet devices in VM {}".format(self.vmName))
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name', 'config.hardware'])
+        macs = []
+        for dev in vm.config.hardware.device:
+            if isinstance(dev, vim.vm.device.VirtualEthernetCard):
+                macs.append(dev.macAddress)
+        if not macs:
+            raise SolidFireError("Could not find any ethernet devices in VM {}".format(self.vmName))
 
-            if len(macs) == 1:
-                return macs[0]
-            elif len(macs) == 2:
-                return macs[0]
-            elif len(macs) == 4:
-                return macs[2]
+        if len(macs) == 1:
             return macs[0]
-    
+        elif len(macs) == 2:
+            return macs[0]
+        elif len(macs) == 4:
+            return macs[2]
+        return macs[0]
+
+    @_vsphere_session
     def SetPXEBoot(self):
         """
         Set the boot order of this VM to PXE boot first
         """
-        with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
-            vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ['name', 'config.hardware'])
-            disks = []
-            nics = []
-            for device in vm.config.hardware.device:
-                if isinstance(device, vim.vm.device.VirtualDisk):
-                    disks.append(device.key)
-                elif isinstance(device, vim.vm.device.VirtualEthernetCard):
-                    nics.append(device.key)
-            boot_disk = vim.vm.BootOptions.BootableDiskDevice()
-            boot_disk.deviceKey = sorted(disks)[0]
-            boot_nic = vim.vm.BootOptions.BootableEthernetDevice()
-            if len(nics) == 1:
-                boot_nic.deviceKey = sorted(nics)[0]
-            elif len(nics) == 2:
-                boot_nic.deviceKey = sorted(nics)[1]
-            else:
-                boot_nic.deviceKey = sorted(nics)[2]
-            config = vim.vm.ConfigSpec()
-            config.bootOptions = vim.vm.BootOptions(bootOrder=[boot_nic, vim.vm.BootOptions.BootableCdromDevice(), boot_disk])
-            task = vm.ReconfigVM_Task(config)
-            VMwareWaitForTasks(vsphere, [task])
+        vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name', 'config.hardware'])
+        disks = []
+        nics = []
+        for device in vm.config.hardware.device:
+            if isinstance(device, vim.vm.device.VirtualDisk):
+                disks.append(device.key)
+            elif isinstance(device, vim.vm.device.VirtualEthernetCard):
+                nics.append(device.key)
+        boot_disk = vim.vm.BootOptions.BootableDiskDevice()
+        boot_disk.deviceKey = sorted(disks)[0]
+        boot_nic = vim.vm.BootOptions.BootableEthernetDevice()
+        if len(nics) == 1:
+            boot_nic.deviceKey = sorted(nics)[0]
+        elif len(nics) == 2:
+            boot_nic.deviceKey = sorted(nics)[1]
+        else:
+            boot_nic.deviceKey = sorted(nics)[2]
+        config = vim.vm.ConfigSpec()
+        config.bootOptions = vim.vm.BootOptions(bootOrder=[boot_nic, vim.vm.BootOptions.BootableCdromDevice(), boot_disk])
+        task = vm.ReconfigVM_Task(config)
+        VMwareWaitForTasks(self.vsphereConnection, [task])
 
+    @_vsphere_session
     def WaitForUp(self, timeout=300):
         """
         Wait for this VM to be powered on and the guest OS booted up
         """
         start_time = time.time()
-        with VMwareConnection(self.hostServer, self.hostUsername, self.hostPassword) as vsphere:
-            # Wait for VM to be powered on
-            while True:
-                vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "runtime.powerState"])
-                self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
-                if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
-                    self.log.info("VM is powered on")
-                    break
-                if timeout > 0 and time.time() - start_time > timeout:
-                    raise TimeoutError("Timeout waiting for VM to power on")
-                time.sleep(2)
+        # Wait for VM to be powered on
+        while True:
+            vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ["name", "runtime.powerState"])
+            self.log.debug2("{} runtime.powerState={}".format(self.vmName, vm.runtime.powerState))
+            if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
+                self.log.info("VM is powered on")
+                break
+            if timeout > 0 and time.time() - start_time > timeout:
+                raise TimeoutError("Timeout waiting for VM to power on")
+            time.sleep(2)
 
-            self.log.info("Waiting for VMware tools")
-            # Wait for VMwware tools to be running
-            while True:
-                vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "guest.toolsRunningStatus", "guest.toolsStatus"])
-                self.log.debug2("{} guest.toolsRunningStatus={}".format(self.vmName, vm.guest.toolsRunningStatus))
-                if vm.guest.toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
-                    self.log.warning("VMware tools are not installed in this VM; cannot detect VM boot/health")
-                    return
-                if vm.guest.toolsStatus == vim.VirtualMachineToolsStatus.toolsOk:
-                    self.log.info("VMware tools are running")
-                    break
-                if timeout > 0 and time.time() - start_time > timeout:
-                    raise TimeoutError("Timeout waiting for VMware tools to start")
-                time.sleep(2)
+        self.log.info("Waiting for VMware tools")
+        # Wait for VMwware tools to be running
+        while True:
+            vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ["name", "guest.toolsRunningStatus", "guest.toolsStatus"])
+            self.log.debug2("{} guest.toolsRunningStatus={}".format(self.vmName, vm.guest.toolsRunningStatus))
+            if vm.guest.toolsRunningStatus == vim.VirtualMachineToolsStatus.toolsNotInstalled:
+                self.log.warning("VMware tools are not installed in this VM; cannot detect VM boot/health")
+                return
+            if vm.guest.toolsStatus == vim.VirtualMachineToolsStatus.toolsOk:
+                self.log.info("VMware tools are running")
+                break
+            if timeout > 0 and time.time() - start_time > timeout:
+                raise TimeoutError("Timeout waiting for VMware tools to start")
+            time.sleep(2)
 
-            # Wait for VM heartbeat to be green
-            while True:
-                vm = VMwareFindObjectGetProperties(vsphere, self.vmName, vim.VirtualMachine, ["name", "guestHeartbeatStatus"])
-                self.log.debug2("{} guestHeartbeatStatus={}".format(self.vmName, vm.guestHeartbeatStatus))
-                if vm.guestHeartbeatStatus == vim.ManagedEntityStatus.green:
-                    self.log.info("VM guest heartbeat is green")
-                    break
-                if timeout > 0 and time.time() - start_time > timeout:
-                    raise TimeoutError("Timeout waiting for guest heartbeat")
-                time.sleep(2)
+        # Wait for VM heartbeat to be green
+        while True:
+            vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ["name", "guestHeartbeatStatus"])
+            self.log.debug2("{} guestHeartbeatStatus={}".format(self.vmName, vm.guestHeartbeatStatus))
+            if vm.guestHeartbeatStatus == vim.ManagedEntityStatus.green:
+                self.log.info("VM guest heartbeat is green")
+                break
+            if timeout > 0 and time.time() - start_time > timeout:
+                raise TimeoutError("Timeout waiting for guest heartbeat")
+            time.sleep(2)
 
     @_vsphere_session
     def Delete(self):
