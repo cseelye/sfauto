@@ -1346,4 +1346,17 @@ class SFCluster(object):
             time.sleep(sfdefaults.TIME_SECOND * 10)
         return result
 
+    def RemoveSSLCertificate(self):
+        """
+        Remove the user SSL certificate and return the cluster to the default SSL certificate
+        """
+        self.api.CallWithRetry("RemoveSSLCertificate", {}, apiVersion=10.0)
 
+    def GetSSLCertificate(self):
+        """
+        Get the active SSL certificate for this cluster
+
+        Returns:
+            A dictionary with the SSL certificate info (dict)
+        """
+        return self.api.CallWithRetry("GetSSLCertificate", {}, apiVersion=10.0)
