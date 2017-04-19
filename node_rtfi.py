@@ -283,7 +283,8 @@ def RtfiNodes(node_ips,
         return False
     if configure_network == "keep":
         for node_ip in node_ips:
-            node = SFNode(node_ip, clusterUsername=username, clusterPassword=password)
+            node = SFNode(node_ip, clusterUsername=username, clusterPassword=password, vmManagementServer=vm_mgmt_server, vmManagementUsername=vm_mgmt_user, vmManagementPassword=vm_mgmt_pass)
+
             if node.IsUp() and node.IsDHCPEnabled():
                 log.error("Cannot preserve network config with a node in DHCP ({})".format(node_ip))
                 return False

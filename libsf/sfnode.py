@@ -398,7 +398,7 @@ class SFNode(object):
 
         # Test if the API is responding
         try:
-            self.api.Call("GetAPI")
+            self.api.Call("GetAPI", timeout=10)
         except SolidFireError:
             return False
 
