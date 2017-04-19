@@ -92,7 +92,7 @@ def ClusterAddNodes(node_ips,
 if __name__ == '__main__':
     parser = SFArgumentParser(description=GetFirstLine(__doc__), formatter_class=SFArgFormatter)
     parser.add_cluster_mvip_args()
-    parser.add_argument("-n", "--node_ips", type=ItemList(IPv4AddressType), required=True, default=sfdefaults.node_ips, help="the IP addresses of the nodes to add")
+    parser.add_argument("-n", "--node-ips", type=ItemList(IPv4AddressType), required=True, default=sfdefaults.node_ips, help="the IP addresses of the nodes to add")
     parser.add_argument("--bynode", action="store_true", dest="by_node", default=False, help="add the nodes one at a time instead of all at once")
     parser.add_argument("--nortfi", action="store_false", dest="rtfi", default=True, help="do not auto RTFI the node when adding")
     parser.add_argument("--nodrives", action="store_false",dest="add_drives", default=True, help="do not add the drives from the nodes after adding the nodes")
