@@ -4,23 +4,28 @@ set -eu
 DEFAULT_NIC="eth0"
 [[ $(uname) == "Darwin" ]] && DEFAULT_NIC="en0"
 
-# You can export SFDOCKER_RUN_OPTIONS in your environment to add additional options to the docker run command
-# https://docs.docker.com/engine/reference/commandline/run/
+# Additional options to the docker run command - https://docs.docker.com/engine/reference/commandline/run/
 SFDOCKER_RUN_OPTIONS=${SFDOCKER_RUN_OPTIONS:-}
+
+# The base docker image to use for SFAUTO shells
+SFDOCKER_IMAGE_NAME=${SFDOCKER_IMAGE_NAME:-sfauto}
+
+# The name to give to SFAUTO container instances
+SFDOCKER_CONTAINER_NAME="sfauto-container-"
 
 # The NIC on the host that the container can connect to (primarily for X11)
 SFDOCKER_HOST_INTERFACE=${SFDOCKER_HOST_INTERFACE:-${DEFAULT_NIC}}
 
 # Create the container image if it does not exist
-if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q sfauto; then
+if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q ${SFDOCKER_IMAGE_NAME}; then
     echo
     echo "======================================="
     echo "    One-time build SFAUTO docker image"
     echo "======================================="
     echo
     echo
-    docker build --force-rm --tag sfauto .
-    echo "Finished building sfauto docker image"
+    docker build --force-rm --tag ${SFDOCKER_IMAGE_NAME} .
+    echo "Finished building SFAUTO docker image"
     echo
 fi
 
@@ -42,11 +47,8 @@ fi
 HOST_IP=$(/sbin/ifconfig ${SFDOCKER_HOST_INTERFACE} | /usr//bin/grep inet | /usr/bin/awk '$1=="inet" {print $2}')
 HOSTNAME=$(hostname -s)
 
-index=$(docker ps --format '{{.Names}}' | grep sfauto | cut -d- -f3 | sort | tail)
+index=$(docker ps --format '{{.Names}}' | grep ${SFDOCKER_IMAGE_NAME} | cut -d- -f3 | sort | tail)
 (( index++ )) || true
-
-# Save the SF* variables into a file to import them into the container
-env | grep "^SF" | sort > /tmp/sfauto-env
 
 # Set up X11 options if X is running
 X11_OPTIONS=""
@@ -54,16 +56,12 @@ if [[ -e /tmp/.X11-unix && -n ${HOST_IP} ]]; then
     X11_OPTIONS="--env DISPLAY=${HOST_IP}:0 --volume /tmp/.X11-unix:/tmp/.X11-unix"
 fi
 
-# Start the container.  To make it as seamless as possible:
-#   Run in privileged mode so the user has max power
-#   Export DOCKER_HOST_USER, DOCKER_HOST_NAME and DOCKER_HOST_IP so that the container knows a little bit about its parent
-#   Use the SF* env variables from the current environment in the container
-#   Mount the X11 socket and export DISPLAY so that GUI apps can run in the container
-#   Mount this script's directory (assumed to be the sfauto repo directory) into the container
-#   Mount the current user's dotfiles into the container so they get the same environment
+# Save the SF* variables into a file to import them into the container
+env | grep "^SF" | sort > /tmp/sfauto-env
 
-SFAUTO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Find the volumes to mount into the container
 eval HOMEDIR="~"
+SFAUTO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BASHRC="${HOMEDIR}/.bashrc"
 [[ -e ${BASHRC} ]] && BASHRC_VOLUME="--volume ${BASHRC}:/root/.bashrc" || BASHRC_VOLUME=""
 VIMRC="${HOMEDIR}/.vimrc"
@@ -73,7 +71,16 @@ DOTSSH="${HOMEDIR}/.ssh"
 CLUSTERSSH="${HOMEDIR}/.clusterssh"
 [[ -d ${CLUSTERSSH} ]] && CLUSTERSSH_VOLUME="--volume ${CLUSTERSSH}:/root/.clusterssh" || CLUSTERSSH_VOLUME=""
 
-docker run \
+# Start the container.  To make it as seamless as possible:
+#   Run in privileged mode so the user has max power
+#   Export DOCKER_HOST_USER, DOCKER_HOST_NAME and DOCKER_HOST_IP so that the container knows a little bit about its parent
+#   Use the SF* env variables from the current environment in the container
+#   Mount the X11 socket and export DISPLAY so that GUI apps can run in the container
+#   Mount this script's directory (assumed to be the sfauto repo directory) into the container
+#   Mount the current user's dotfiles into the container so they get the same environment
+
+
+exec docker run \
     --interactive \
     --tty \
     --privileged \
@@ -89,7 +96,8 @@ docker run \
     ${VIMRC_VOLUME} \
     ${SSH_VOLUME} \
     --workdir /sfauto \
-    --hostname sfauto-container-${index} \
-    --name sfauto-container-${index} \
+    --hostname ${SFDOCKER_CONTAINER_NAME}${index} \
+    --name ${SFDOCKER_CONTAINER_NAME}${index} \
     ${SFDOCKER_RUN_OPTIONS} \
-    sfauto ${cmd}
+    ${SFDOCKER_IMAGE_NAME} \
+    ${cmd}
