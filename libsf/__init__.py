@@ -23,7 +23,7 @@ from . import sfdefaults
 
 class SolidFireError(Exception):
     """Base class for SolidFire exceptions"""
-    
+
     def __init__(self, message, originalTraceback=None, innerException=None):
         super(SolidFireError, self).__init__(message)
         self.originalTraceback = originalTraceback
@@ -274,7 +274,7 @@ class LocalEnvironmentError(SolidFireError):
         # Make sure the input at least looks like an EnvironmentError
         assert(hasattr(innerException, 'errno'))
         assert(hasattr(innerException, 'strerror'))
-        
+
         self.args = (innerException)
 
         if innerException.strerror:

@@ -4,7 +4,7 @@
 from . import sfdefaults
 from . import SolidFireError, UnauthorizedError, TimeoutError, UnknownObjectError, ClientConnectionError, ConnectionError
 from .logutil import GetLogger
-from .sfclient import SFClient
+from .sfclient import SFClient, OSType
 from copy import deepcopy
 import functools
 import inspect
@@ -171,7 +171,7 @@ class VMHost(object):
             log.debug2("Trying {} for VMHost {}".format(classname, vmhostName))
             try:
                 return classdef(vmhostName, mgmtServer, mgmtUsername, mgmtPassword)
-            except (VirtualizationError, TimeoutError, ConnectionError, ClientConnectionError) as ex:
+            except (VirtualizationError, TimeoutError, ConnectionError, ClientConnectionError, UnauthorizedError) as ex:
                 log.debug2(str(ex))
 
         raise VirtualizationError("Could not create VMhost object; check connection to management server and host exists on server")
@@ -1407,7 +1407,7 @@ class VMHostKVM(VMHost):
         super(VMHostKVM, self).__init__(vmhostName, mgmtServer, mgmtUsername, mgmtPassword)
         self.hostType = "KVM"
 
-        self.client = SFClient(self.mgmtServer, self.mgmtUsername, self.mgmtPassword)
+        self.client = SFClient(self.mgmtServer, self.mgmtUsername, self.mgmtPassword, OSType.Linux)
 
     def CreateDatastores(self, includeInternalDrives=False, includeSlotDrives=False):
         """

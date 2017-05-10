@@ -35,7 +35,7 @@ def _prefix(logfn):
 class SFClient:
     """Common interactions with a client"""
 
-    def __init__(self, clientIP, clientUser, clientPass):
+    def __init__(self, clientIP, clientUser, clientPass, clientTypeHint=None):
         self.log = GetLogger()
 
         self.ipAddress = str(clientIP).lower()
@@ -64,7 +64,7 @@ class SFClient:
 
         self._unpicklable = ["log", "sshSession"]
 
-        self._Connect()
+        self._Connect(clientTypeHint)
 
     def __getstate__(self):
         attrs = {}
@@ -103,14 +103,15 @@ class SFClient:
         self.log.step(message)
     #pylint: enable=missing-docstring
 
-    def _Connect(self):
+    def _Connect(self, clientTypeHint=None):
         """
         Connect to the client
-        
+
         Args:
-            clientIP:   the IP address of the client
-            clientUser: the username for the client
-            clientPass: the password for the client
+            clientIP:           the IP address of the client
+            clientUser:         the username for the client
+            clientPass:         the password for the client
+            clientTypeHint:     assume the client is this type instead of trying to discover
         """
 
         if self.ipAddress == "localhost":
@@ -144,72 +145,74 @@ class SFClient:
             return
 
         # First try with winexe to see if it is a Windows client
-        try:
-            self._debug("Attempting connect to {} with winexe as {}:{}".format(self.ipAddress, self.username, self.password))
-            retcode, stdout, stderr = self._execute_winexe_command(self.ipAddress, "hostname", timeout=3)
-            if retcode != 0:
-                raise ClientCommandError("Could not get hostname: {}".format(stderr))
-
-            # If we get here, we successfully connected - must be a windows machine
-            self.remoteOS = OSType.Windows
-            self.hostname = stdout.strip()
-
-            # Make sure winexe will survive a reboot
-            self._execute_winexe_command(self.ipAddress, "sc config winexesvc start= auto")
-
-            # Make sure the latest version of diskapp.exe is on the client
-            self._debug("Updating diskapp")
-            if self.localOS == OSType.Windows:
-                command = r"robocopy {}\..\diskapp\bin \\{}\c$\Windows\System32 diskapp.* /z /r:1 /w:3 /tbd".format(self.libPath, self.ipAddress)
-                retcode, stdout, stderr = shellutil.Shell(command)
+        if clientTypeHint == None or clientTypeHint == OSType.Windows:
+            try:
+                self._debug("Attempting connect to {} with winexe as {}:{}".format(self.ipAddress, self.username, self.password))
+                retcode, stdout, stderr = self._execute_winexe_command(self.ipAddress, "hostname", timeout=3)
                 if retcode != 0:
-                    raise ClientError("Failed to update diskapp on client: {}".format(stderr))
-            else:
-                command = "smbclient //{}/c$ {} -U {} <<EOC\ncd Windows\\System32\nlcd {}/../windiskhelper\nput diskapp.exe\nexit\nEOC".format(self.ipAddress, self.password, self.username, self.libPath)
-                retcode, stdout, stderr = shellutil.Shell(command)
-                if retcode != 0:
-                    raise ClientError("Failed to update diskapp on client: {}".format(stderr))
-                for line in stdout.split("\n"):
-                    if line.startswith("NT_"):
-                        raise ClientError("Failed to update diskapp on client: {}".format(line))
-        except ClientRefusedError:
-            # This means it is not Windows
-            pass
+                    raise ClientCommandError("Could not get hostname: {}".format(stderr))
 
-        # If winexe fails, try with SSH
-        if self.hostname == None:
-            self._debug("Attempting connect to {} with SSH as {}:{}".format(self.ipAddress, self.username, self.password))
-            retcode, stdout, stderr = self._execute_ssh_command(self.ipAddress, "hostname")
-            if retcode != 0:
-                if "Ambiguous API call" in stdout:
-                    raise ClientConnectionError("Server appears to be a vSphere appliance")
-                raise ClientCommandError("Could not get hostname: {}".format(stderr))
-            self.hostname = stdout.strip()
+                # If we get here, we successfully connected - must be a windows machine
+                self.remoteOS = OSType.Windows
+                self.hostname = stdout.strip()
 
-            # Check what we are connected to
-            retcode, stdout, stderr = self._execute_ssh_command(self.ipAddress, "uname -a")
-            if retcode != 0:
-                raise ClientCommandError("Could not get uname: {}".format(stderr))
-            uname_str = stdout.lower()
-            if "cygwin" in uname_str:
-                raise ClientError("Sorry, cygwin is not supported. This script requires your Windows client accept connections from winexe")
-            elif "linux" in uname_str:
-                self.remoteOS = OSType.Linux
-                if "ubuntu" in uname_str:
-                    self.remoteOSVersion = "ubuntu"
-                elif "el" in uname_str:
-                    self.remoteOSVersion = "redhat"
-                elif "fc" in uname_str:
-                    self.remoteOSVersion = "redhat"
-                elif "solidfire" in uname_str:
-                    self.remoteOSVersion = "solidfire"
+                # Make sure winexe will survive a reboot
+                self._execute_winexe_command(self.ipAddress, "sc config winexesvc start= auto")
+
+                # Make sure the latest version of diskapp.exe is on the client
+                self._debug("Updating diskapp")
+                if self.localOS == OSType.Windows:
+                    command = r"robocopy {}\..\windiskhelper \\{}\c$\Windows\System32 diskapp.* /z /r:1 /w:3 /tbd".format(self.libPath, self.ipAddress)
+                    retcode, stdout, stderr = shellutil.Shell(command)
+                    if retcode != 0:
+                        raise ClientError("Failed to update diskapp on client: {}".format(stderr))
                 else:
-                    self.remoteOSVersion = "linux"
-            elif "sunos" in uname_str:
-                self.remoteOS = OSType.SunOS
-            else:
-                self._warn("Could not determine type of remote client; assuming Linux (uname -> " + uname_str + ")")
-                self.remoteOS = OSType.Linux
+                    command = "smbclient //{}/c$ {} -U {} <<EOC\ncd Windows\\System32\nlcd {}/../windiskhelper\nput diskapp.exe\nexit\nEOC".format(self.ipAddress, self.password, self.username, self.libPath)
+                    retcode, stdout, stderr = shellutil.Shell(command)
+                    if retcode != 0:
+                        raise ClientError("Failed to update diskapp on client: {}".format(stderr))
+                    for line in stdout.split("\n"):
+                        if line.startswith("NT_"):
+                            raise ClientError("Failed to update diskapp on client: {}".format(line))
+            except ClientRefusedError:
+                # This means it is not Windows
+                pass
+
+        if clientTypeHint != OSType.Windows:
+            # If winexe fails, try with SSH
+            if self.hostname == None:
+                self._debug("Attempting connect to {} with SSH as {}:{}".format(self.ipAddress, self.username, self.password))
+                retcode, stdout, stderr = self._execute_ssh_command(self.ipAddress, "hostname")
+                if retcode != 0:
+                    if "Ambiguous API call" in stdout:
+                        raise ClientConnectionError("Server appears to be a vSphere appliance")
+                    raise ClientCommandError("Could not get hostname: {}".format(stderr))
+                self.hostname = stdout.strip()
+
+                # Check what we are connected to
+                retcode, stdout, stderr = self._execute_ssh_command(self.ipAddress, "uname -a")
+                if retcode != 0:
+                    raise ClientCommandError("Could not get uname: {}".format(stderr))
+                uname_str = stdout.lower()
+                if "cygwin" in uname_str:
+                    raise ClientError("Sorry, cygwin is not supported. This script requires your Windows client accept connections from winexe")
+                elif "linux" in uname_str:
+                    self.remoteOS = OSType.Linux
+                    if "ubuntu" in uname_str:
+                        self.remoteOSVersion = "ubuntu"
+                    elif "el" in uname_str:
+                        self.remoteOSVersion = "redhat"
+                    elif "fc" in uname_str:
+                        self.remoteOSVersion = "redhat"
+                    elif "solidfire" in uname_str:
+                        self.remoteOSVersion = "solidfire"
+                    else:
+                        self.remoteOSVersion = "linux"
+                elif "sunos" in uname_str:
+                    self.remoteOS = OSType.SunOS
+                else:
+                    self._warn("Could not determine type of remote client; assuming Linux (uname -> " + uname_str + ")")
+                    self.remoteOS = OSType.Linux
 
         self._debug("Client OS is {} {}".format(self.remoteOS, self.remoteOSVersion))
 
@@ -335,7 +338,7 @@ class SFClient:
     def PutFile(self, localPath, remotePath):
         """
         Upload a file to the client
-        
+
         Args:
             localPath:      the source path to the file locally
             remotePath:     the path to put the file on the client
@@ -349,11 +352,11 @@ class SFClient:
     def ExecuteCommand(self, command, ipAddress=None, throwOnError=True):
         """
         Execute a command on the client
-        
+
         Args:
             command:    the command to execute
             ipAddress:  the IP address to use to connect to the client
-            
+
         Returns:
             A tuple of (return code, stdout, stderr)
         """
@@ -463,7 +466,7 @@ class SFClient:
     def ChangeIPAddress(self, newIP, newNetmask, newGateway=None, interfaceName=None, interfaceMAC=None, updateHosts=False):
         """
         Change the IP address of a NIC on the client
-        
+
         Args:
             newIP:          the new IP address
             newNetmask:     the new netmask
@@ -921,7 +924,7 @@ class SFClient:
                     break
             self._info("Setting initiator name to '{}'".format(initiator_name))
             self.ExecuteCommand("iscsiadm modify initiator-node --node-name={}".format(initiator_name))
-            
+
         else:
             raise ClientError("Sorry, this is not implemented for {}".format(self.remoteOS))
 
@@ -937,13 +940,13 @@ class SFClient:
         """
         if ipAddress == None:
             ipAddress = self.ipAddress
-        
+
         return netutil.Ping(ipAddress)
 
     def EnableInterfaces(self, fromIPAddress):
         """
         Enable all of the NICs on the client
-        
+
         Args:
             fromIPAddress:  the IP address to use to connect to the client
         """
@@ -1030,7 +1033,7 @@ class SFClient:
     def CleanIscsi(self, defaultConfigFile=True):
         """
         Clean the iSCSI initiator on the client
-        
+
         Args:
             defaultConfigFile:  restore the default iscsid config file
         """
@@ -1524,7 +1527,7 @@ class SFClient:
     def GetVdbenchDevices(self):
         """
         Get a list of SCSI devices that can be used as vdbench targets
-        
+
         Returns:
             A list of string vdbench devices
         """
@@ -1616,7 +1619,7 @@ class SFClient:
     def GetVolumeSummary(self):
         """
         Get a list of connected volumes and some info about them
-        
+
         Returns:
             A dictionary of string device name => device info
         """
@@ -2054,15 +2057,15 @@ class SFClient:
             if m:
                 host_num = m.group(1)
             hbas[host] = {}
-            
+
             cmd = "[ -e /sys/class/fc_host/" + host + "/device/scsi_host/" + host + "/modeldesc ] && cat /sys/class/fc_host/" + host + "/device/scsi_host/" + host + "/modeldesc || cat /sys/class/fc_host/" + host + "/device/scsi_host/" + host + "/model_desc"
             _, stdout, _ = self.ExecuteCommand(cmd)
             hbas[host]['desc'] = stdout.strip()
-            
+
             cmd = "cat /sys/class/fc_host/" + host + "/port_name"
             _, stdout, _ = self.ExecuteCommand(cmd)
             hbas[host]['wwn'] = util.HumanizeWWN(stdout.strip())
-            
+
             cmd = "cat /sys/class/fc_host/" + host + "/speed"
             _, stdout, _ = self.ExecuteCommand(cmd)
             hbas[host]['speed'] = stdout.strip()
@@ -2084,6 +2087,3 @@ class SFClient:
                 hbas[host]['targets'].append(util.HumanizeWWN(line1.strip()))
 
         return hbas
-
-
-
