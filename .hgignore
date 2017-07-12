@@ -1,0 +1,8 @@
+syntax: glob
+*.pyc
+*.komodoproject
+ssl
+vdbench_input
+tmp
+.cache
+*.orig
