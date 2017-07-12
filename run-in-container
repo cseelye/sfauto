@@ -44,7 +44,7 @@ else
 fi
 
 # Get the host IP and name
-HOST_IP=$(/sbin/ifconfig ${SFDOCKER_HOST_INTERFACE} | /usr//bin/grep inet | /usr/bin/awk '$1=="inet" {print $2}')
+HOST_IP=$(/sbin/ifconfig ${SFDOCKER_HOST_INTERFACE} | grep inet | /usr/bin/awk '$1=="inet" {print $2}')
 HOSTNAME=$(hostname -s)
 
 index=$(docker ps --format '{{.Names}}' | grep ${SFDOCKER_IMAGE_NAME} | cut -d- -f3 | sort | tail)
