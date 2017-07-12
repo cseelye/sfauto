@@ -81,12 +81,12 @@ volume_access = "readWrite"         # Volume access level
 # VDbench
 vdbench_inputfile = "vdbench_input"         # Input file for vdbench
 vdbench_outputdir = "output.tod"            # Output directory for vdbench
-vdbench_workload = "rdpct=50,seekpct=random,xfersize=8k"    # IO workload to run
+vdbench_workload = "rdpct=80,seekpct=random,xfersize=4k"    # IO workload to run
 vdbench_data_errors = 5             # How many IO errors to fail vdbench after
 vdbench_compratio = 2               # IO compression ratio
-vdbench_dedupratio = 1              # IO dedup ratio
-vdbench_run_time = "800h"           # How long to run IO
-vdbench_interval = 10               # How often to report results
+vdbench_dedupratio = 2              # IO dedup ratio
+vdbench_run_time = "72h"            # How long to run IO
+vdbench_interval = 2                # How often to report results
 vdbench_threads = 4                 # Queue depth per device
 vdbench_warmup = 0                  # How long to warmup before recording results
 vdbench_data_vaidation = True       # Use data validation
