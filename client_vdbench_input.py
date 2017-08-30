@@ -8,8 +8,7 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, SetThreadLogPrefix, logargs
 from libsf.sfclient import SFClient, OSType
-from libsf.sfcluster import SFCluster
-from libsf.util import ValidateAndDefault, IPv4AddressType, ItemList, SelectionType, OptionalValueType, BoolType, StrType, SolidFireIDType, PositiveIntegerType, PositiveNonZeroIntegerType
+from libsf.util import ValidateAndDefault, IPv4AddressType, ItemList, BoolType, StrType, PositiveIntegerType, PositiveNonZeroIntegerType
 from libsf import sfdefaults
 from libsf import SolidFireError
 from libsf import threadutil
@@ -103,6 +102,10 @@ def ClientVdbenchInput(client_ips,
                     host_lines.append("host=hd{},system={},vdbench=/opt/vdbench,user=root,shell=ssh\n".format(client_idx, client_ip))
 
             for dev_idx, dev in enumerate(client_info["devices"]):
+                if volume_start > 0 and dev_idx < volume_start:
+                    continue
+                if volume_end > 0 and dev_idx > volume_end:
+                    continue
                 line = "sd=sd{}_{},lun={},openflags=o_direct".format(client_idx, dev_idx, dev)
                 if not local:
                     line += ",host=hd{}".format(client_idx)
