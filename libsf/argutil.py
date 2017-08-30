@@ -2273,8 +2273,15 @@ class SFArgumentParser(_AttributeHolder, _ActionsContainer):
         # return the pattern
         return nargs_pattern
 
-    def parse_args_to_dict(self, args=None, namespace=None):
-        parsed = self.parse_args(args=args, namespace=namespace)
+    def parse_args_to_dict(self, args=None, namespace=None, allowExtraArgs=False, extraArgsKey="extra_args"):
+        if allowExtraArgs:
+            parsed, extras = self.parse_known_args(args=args, namespace=namespace)
+            if hasattr(parsed, extraArgsKey):
+                raise ArgumentError("Conflicting extra args key '{}'".format(extraArgsKey))
+            if extras:
+                setattr(parsed, extraArgsKey, extras)
+        else:
+            parsed = self.parse_args(args=args, namespace=namespace)
         return { key : value for key, value in vars(parsed).iteritems() if value != None }
 
     # ========================
