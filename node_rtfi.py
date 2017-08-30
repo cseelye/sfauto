@@ -52,6 +52,7 @@ RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 51, 54, 60, 61, 110]
     "rtfi_type" : (SelectionType(["pxe", "irtfi"]), "irtfi"),
     "configure_network" : (SelectionType(sfdefaults.all_network_config_options), "keep"),
     "image_type" : (SelectionType(["rtfi", "fdva"]), "rtfi"),
+    "extra_args" : (OptionalValueType(ItemList(StrType)), None),
     "fail" : (OptionalValueType(StrType), None),
     "test" : (BoolType, False),
     "ipmi_ips" : (OptionalValueType(ItemList(IPv4AddressType)), sfdefaults.ipmi_ips),
@@ -83,6 +84,7 @@ def RtfiNodes(node_ips,
               rtfi_type,
               configure_network,
               image_type,
+              extra_args,
               fail,
               test,
               ipmi_ips,
@@ -119,6 +121,7 @@ def RtfiNodes(node_ips,
         configure_network:      how to configure the hostname/network of the nodes (keep, clear, reconfigure)
         rtfi_type:              type of RTFI (pxe, irtfi)
         image_type:             type of image (rtfi, fdva)
+        extra_args:             additional options to pass to RTFI1
         fail:                   inject a failure during this RTFI state
         test:                   test the config options and nodes but do not RTFI
         ipmi_ips:               the IPMI IPs of the nodes
@@ -305,7 +308,8 @@ def RtfiNodes(node_ips,
                                               test,
                                               net_info[node_ip],
                                               username,
-                                              password))
+                                              password,
+                                              extra_args))
 
     #
     # Wait for all threads to complete
@@ -330,7 +334,7 @@ def RtfiNodes(node_ips,
 
 
 @threadutil.threadwrapper
-def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, test, net_info, username, password):
+def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, test, net_info, username, password, extra_args=None):
     """RTFI a node"""
     log = GetLogger()
     SetThreadLogPrefix(net_info["ip"])
@@ -360,7 +364,11 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
     if fail:
         rtfi_opts.append("sf_status_inject_failure={}".format(fail))
 
+    if extra_args:
+        rtfi_opts.extend(extra_args)
+
     rtfi_options = ",".join(rtfi_opts)
+    log.debug("RTFI options: {}".format(rtfi_options))
 
     # PXE boot traditional RTFI
     if rtfi_type == "pxe":
@@ -432,7 +440,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
     # in place RTFI
     elif rtfi_type == "irtfi":
         if not node.IsUp():
-            raise SolidFireError("Node must be up for iRTFI")
+            raise SolidFireError("Node must be up and running to use iRTFI, try PXE instead")
 
         if test:
             log.info("Test mode set; skipping RTFI node")
@@ -780,7 +788,7 @@ if __name__ == '__main__':
     special_group.add_argument("--test", action="store_true", default=False, help=SUPPRESS) # test the supplied options and nodes
     special_group.add_argument("--fail", type=StrType, help="inject an error during this RTFI state")
 
-    args = parser.parse_args_to_dict()
+    args = parser.parse_args_to_dict(allowExtraArgs=True)
 
     app = PythonApp(RtfiNodes, args)
     app.Run(**args)
