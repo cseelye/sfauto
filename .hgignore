@@ -6,3 +6,4 @@ vdbench_input
 tmp
 .cache
 *.orig
+configs
