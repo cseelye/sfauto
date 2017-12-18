@@ -1,0 +1,46 @@
+#!/bin/bash
+set -e
+
+# The VCS_REF will be set to the last changeset where the Dockerfile changed
+# The BUILD_DATE will be set to the last datestamp the Dockerfile changed
+# The VERSION will be set to the contents of the .container-version file
+
+
+# Make sure we are not inside a container already
+[[ -e /proc/1 ]] && grep -q 'cpu:/docker/' /proc/1/cgroup && { echo "Cannot build a container inside another container"; exit 1; }
+
+LOCAL_CHANGES=0
+hg status Dockerfile | grep -q Dockerfile && LOCAL_CHANGES=1
+
+echo
+echo "======================================="
+echo "    Building SFAUTO docker image"
+if [[ ${LOCAL_CHANGES} -eq 1 ]]; then
+    echo
+    echo "* * * Local changes to Dockerfile * * *"
+    echo
+    echo "    Building custom sfauto image"
+fi
+echo "======================================="
+echo
+echo
+
+TIMESTAMP=$(hg log --limit 1 --template '{date}\n' Dockerfile | cut -d' ' -f1 | cut -d'.' -f1)
+if [[ $(uname) == "Darwin" ]]; then
+    date_args="-j -f %s "
+else
+    date_args='-d @'
+fi
+DATE=$(date -u ${date_args}${TIMESTAMP} +"%Y-%m-%dT%H:%M:%SZ")
+
+VERSION=$(cat .container-version)
+hg status Dockerfile | grep -q Dockerfile && VERSION=0.0
+
+docker build --build-arg VCS_REF=$(hg log --limit 1 --template '{node}' Dockerfile ) \
+             --build-arg BUILD_DATE=${DATE} \
+             --build-arg VERSION=${VERSION} \
+             --tag sfauto \
+             .
+
+echo "Finished building SFAUTO docker image"
+echo

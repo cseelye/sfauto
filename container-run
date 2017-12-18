@@ -1,0 +1,151 @@
+#!/bin/bash
+set -euo pipefail
+
+# Additional options to the docker run command - https://docs.docker.com/engine/reference/commandline/run/
+SFAUTO_CONTAINER_RUN_OPTIONS=${SFAUTO_CONTAINER_RUN_OPTIONS:-}
+
+# The base docker image to use for shells
+SFAUTO_IMAGE_NAME=${SFAUTO_IMAGE_NAME:-sfauto}
+
+# The name to give to shell container instances
+SFAUTO_CONTAINER_NAME=${SFAUTO_CONTAINER_NAME:-linux-shell-}
+
+# Path to an explicit docker binary. Leave blank to auto-discover
+DOCKER_BINARY=${DOCKER_BINARY-}
+
+
+
+# Parse command line options
+SHARED=0
+while getopts ":s" opt; do
+    case ${opt} in
+        s)
+            SHARED=1 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# Make sure we are not inside a container already
+[[ -e /proc/1 ]] && grep -q 'cpu:/docker/' /proc/1/cgroup && { echo "Cannot start a container inside another container"; exit 1; }
+
+# Find the docker binary
+[[ -z ${DOCKER_BINARY} ]] && { DOCKER_BINARY=$(which docker || true);
+    [[ -z ${DOCKER_BINARY} ]] && { DOCKER_BINARY=/usr/local/bin/docker;
+        [[ -e ${DOCKER_BINARY} ]] || { DOCKER_BINARY=/usr/bin/docker;
+            [[ -e ${DOCKER_BINARY} ]] || { echo "Could not find a docker binary"; exit 1; }
+        }
+    }
+}
+
+# See if the image needs rebuilding
+rebuild=0
+# If the image deos not exist locally, build it
+if ! "${DOCKER_BINARY}" images --format '{{.Repository}}:{{.Tag}}' | grep -q ${SFAUTO_IMAGE_NAME}; then
+    rebuild=1
+else
+    # Compare the changeset/version of the docker image to the Dockerfile in the current repo
+    IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
+    REPO_VERSION=$(cat .container-version)
+    IMAGE_REV=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output '.[0].Config.Labels | .["vcs-ref"]')
+    REPO_REV=$(hg log --limit 1 --template '{node}' Dockerfile)
+
+    # echo "IMAGE_VERSION='${IMAGE_VERSION}'"
+    # echo " REPO_VERSION='${REPO_VERSION}'"
+    # echo "IMAGE_REV='${IMAGE_REV}'"
+    # echo " REPO_REV='${REPO_REV}'"
+
+    # If there was no version label, it is an old image so rebuild it
+    if [[ -z ${IMAGE_VERSION} ]]; then
+        rebuild=1
+    # If the version is 0.0, it was a local build and we don't want to overwrite it
+    # If the version is not 0.0, and the rev or version in the repo is newer, rebuild the image
+elif [[ ${IMAGE_VERSION} != "0.0" && ( ${IMAGE_REV} != ${REPO_REV} || ${IMAGE_VERSION} != ${REPO_VERSION} ) ]]; then
+        rebuild=1
+    fi
+fi
+if [[ ${rebuild} -eq 1 ]]; then
+    ./container-build
+    IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
+fi
+
+
+# If the user did not supply a command to run, start the container with an interactive shell
+if [[ $# -le 0 ]]; then
+    echo
+    echo "======================================="
+    echo "     Entering SFAUTO docker container"
+    if [[ ${IMAGE_VERSION} == "0.0" ]]; then
+        echo
+        echo "   * * * Running custom image * * *"
+        echo
+        echo "To return to standard image, run 'docker rmi sfauto' and re-run"
+    fi
+    echo "======================================="
+    echo
+
+    cmd="/bin/bash"
+
+# If the user specified a command, run that command in the container
+else
+    cmd="$*"
+fi
+
+# Get the host name and IP
+HOSTNAME=$(hostname -s)
+if [[ $(uname) == "Darwin" ]]; then
+    ORIGINAL_IFS=${IFS}
+    IFS=$'\n'
+    for service in $(/usr/sbin/networksetup -listnetworkserviceorder | grep '([0123456789])' | cut -d' ' -f2-); do
+        HOST_IP=$(/usr/sbin/networksetup -getinfo "${service}" | grep "^IP address" | cut -d' ' -f3 || true)
+        [[ -n ${HOST_IP} ]] && break
+    done
+    IFS=${ORIGINAL_IFS}
+else
+    for nicpath in /sys/class/net/*; do
+        [[ ! -e ${nicpath}/device ]] && continue
+        HOST_IP=$(/sbin/ifconfig $(basename ${nicpath}) | /usr/bin/grep inet | /usr/bin/awk '$1=="inet" {print $2}')
+    done
+fi
+
+# Find the volumes to mount into the container
+eval HOMEDIR="~"
+SFAUTO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BASHRC="${HOMEDIR}/.bashrc"
+[[ -e ${BASHRC} ]] && BASHRC_VOLUME="--volume ${BASHRC}:/root/.bashrc" || BASHRC_VOLUME=""
+VIMRC="${HOMEDIR}/.vimrc"
+[[ -e ${VIMRC} ]] && VIMRC_VOLUME="--volume ${VIMRC}:/root/.vimrc" || VIMRC_VOLUME=""
+DOTSSH="${HOMEDIR}/.ssh"
+[[ -d ${DOTSSH} ]] && SSH_VOLUME="--volume ${DOTSSH}:/root/.ssh" || SSH_VOLUME=""
+
+# Save the SF* variables into a file to import them into the container
+envfile=$(mktemp -t docker-pullXXXX)
+env | grep "^SF" | sort > ${envfile}
+
+# Find any other existing containers to give this one a unique name
+index=$("${DOCKER_BINARY}" container ls --all --format '{{.Names}}' | grep ${SFAUTO_CONTAINER_NAME} | cut -d- -f3 | sort | tail -n1 || echo 0)
+(( index++ )) || true
+
+# Start the container.  To make it as seamless as possible:
+#   Run in privileged mode so the user has max power
+#   Export DOCKER_HOST_USER, DOCKER_HOST_NAME and DOCKER_HOST_IP so that the container knows a little bit about its parent
+#   Use the SF* env variables from the current environment in the container
+#   Mount this script's directory (assumed to be the sfauto repo directory) into the container
+#   Mount the current user's dotfiles into the container so they get the same environment
+
+exec "${DOCKER_BINARY}" container run \
+  --interactive \
+  --tty \
+  --privileged \
+  --rm \
+  --env DOCKER_HOST_NAME=${HOSTNAME} \
+  --env DOCKER_HOST_IP=${HOST_IP:-} \
+  --env DOCKER_HOST_USER=${USER:-$(whoami)} \
+  --env-file ${envfile} \
+  --volume ${HOMEDIR}:/root \
+  --volume /var/run/docker.sock:/var/run/docker.sock \
+  --workdir /root \
+  --hostname ${SFAUTO_CONTAINER_NAME}${index} \
+  --name ${SFAUTO_CONTAINER_NAME}${index} \
+  ${SFAUTO_CONTAINER_RUN_OPTIONS} \
+  ${SFAUTO_IMAGE_NAME} \
+  ${cmd}
