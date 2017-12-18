@@ -25,6 +25,7 @@ def CreatePXEFile(macAddress,
                   netmask=None,
                   gateway=None,
                   hostname=None,
+                  includeSerialConsole=True
                   ):
     """
     Create a config file for a machine on the PXE server
@@ -40,7 +41,7 @@ def CreatePXEFile(macAddress,
         pxeUser:            the username of the server
         pxePassword:        the password of the server
         bootNic:            the NIC the machine to be imaged will boot from
-        
+        includeSerialConsole:   add the serial console option to the kernel commandline
     """
     options = baseOptions
     if additionalOptions:
@@ -66,7 +67,7 @@ PROMPT 0
 LABEL BootImage
     KERNEL images/{imageType}/solidfire-{imageType}-{repo}-{version}/casper/vmlinuz
     INITRD images/{imageType}/solidfire-{imageType}-{repo}-{version}/casper/initrd.lz
-    APPEND console=tty0 ip={ip}::{gateway}:{netmask}:{hostname}:{bootNic}:{autoconf} boot=casper vga=791 console=tty0 console=ttyS1,115200n8 fetch=ftp://{pxeServer}/images/{imageType}/solidfire-{imageType}-{repo}-{version}/casper/filesystem.squashfs {options} --
+    APPEND ip={ip}::{gateway}:{netmask}:{hostname}:{bootNic}:{autoconf} boot=casper vga=791 toram console=tty0 {serial} fetch=ftp://{pxeServer}/images/{imageType}/solidfire-{imageType}-{repo}-{version}/casper/filesystem.squashfs {options} --
 LABEL BootLocal
     localboot 0
 """.format(imageType=imageType,
@@ -79,7 +80,8 @@ LABEL BootLocal
            ip=ip,
            netmask=netmask,
            gateway=gateway,
-           hostname=hostname)
+           hostname=hostname,
+           serial="console=ttyS1,115200n8" if includeSerialConsole else "")
 
     log.debug("Sending PXE config file {} to server {} with contents:\n{}".format(remote_filename, pxeServer, pxe_file_contents))
     with tempfile.NamedTemporaryFile() as temp:
@@ -98,4 +100,3 @@ def DeletePXEFile(macAddress, pxeServer=sfdefaults.pxe_server, pxeUser=sfdefault
     log.debug("Removing PXE config file {} from server {}".format(remote_filename, pxeServer))
     with SSHConnection(pxeServer, pxeUser, pxePassword) as ssh:
         ssh.RunCommand("rm -f " + remote_filename)
-
