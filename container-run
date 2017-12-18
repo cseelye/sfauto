@@ -141,7 +141,7 @@ exec "${DOCKER_BINARY}" container run \
   --env DOCKER_HOST_IP=${HOST_IP:-} \
   --env DOCKER_HOST_USER=${USER:-$(whoami)} \
   --env-file ${envfile} \
-  --volume ${HOMEDIR}:/root \
+  --volume ${CFT_DIR}:/root \
   --volume /var/run/docker.sock:/var/run/docker.sock \
   --workdir /root \
   --hostname ${SFAUTO_CONTAINER_NAME}${index} \
