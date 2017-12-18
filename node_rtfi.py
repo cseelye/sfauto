@@ -355,6 +355,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
     rtfi_opts = [
         "sf_hostname={}{}".format(net_info["hostname"], sfdefaults.rtfi_hostname_suffix),
         "sf_agent={}".format(agent),
+        "sf_allow_virtnode=1"
     ]
     if configure_network == "keep":
         rtfi_opts.extend(["sf_keep_hostname=1",
@@ -396,7 +397,8 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
                               pxePassword=net_info["pxe_pass"],
                               ip=net_info["ip"],
                               netmask=net_info["netmask"],
-                              gateway=net_info["gateway"])
+                              gateway=net_info["gateway"],
+                              includeSerialConsole=False if net_info.get("vm_name") else True)
 
         # Make sure the boot order is correct
         node.SetPXEBoot()
