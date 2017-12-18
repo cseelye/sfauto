@@ -16,11 +16,19 @@ DOCKER_BINARY=${DOCKER_BINARY-}
 
 
 # Parse command line options
-SHARED=0
-while getopts ":s" opt; do
+usage()
+{
+    echo "$(basename $0) [OPTIONS]"
+    echo "  -n    Never rebuild the container, always use the existing image"
+}
+
+NEVER_REBUILD=0
+while getopts ":hn" opt; do
     case ${opt} in
-        s)
-            SHARED=1 ;;
+        n)
+            NEVER_REBUILD=1 ;;
+        h)
+            usage; exit 0;
     esac
 done
 shift $((OPTIND - 1))
@@ -37,35 +45,37 @@ shift $((OPTIND - 1))
     }
 }
 
-# See if the image needs rebuilding
-rebuild=0
-# If the image deos not exist locally, build it
-if ! "${DOCKER_BINARY}" images --format '{{.Repository}}:{{.Tag}}' | grep -q ${SFAUTO_IMAGE_NAME}; then
-    rebuild=1
-else
-    # Compare the changeset/version of the docker image to the Dockerfile in the current repo
-    IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
-    REPO_VERSION=$(cat .container-version)
-    IMAGE_REV=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output '.[0].Config.Labels | .["vcs-ref"]')
-    REPO_REV=$(hg log --limit 1 --template '{node}' Dockerfile)
-
-    # echo "IMAGE_VERSION='${IMAGE_VERSION}'"
-    # echo " REPO_VERSION='${REPO_VERSION}'"
-    # echo "IMAGE_REV='${IMAGE_REV}'"
-    # echo " REPO_REV='${REPO_REV}'"
-
-    # If there was no version label, it is an old image so rebuild it
-    if [[ -z ${IMAGE_VERSION} ]]; then
+IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
+if [[ ${NEVER_REBUILD} -eq 0 ]]; then
+    # See if the image needs rebuilding
+    rebuild=0
+    # If the image deos not exist locally, build it
+    if ! "${DOCKER_BINARY}" images --format '{{.Repository}}:{{.Tag}}' | grep -q ${SFAUTO_IMAGE_NAME}; then
         rebuild=1
-    # If the version is 0.0, it was a local build and we don't want to overwrite it
-    # If the version is not 0.0, and the rev or version in the repo is newer, rebuild the image
-elif [[ ${IMAGE_VERSION} != "0.0" && ( ${IMAGE_REV} != ${REPO_REV} || ${IMAGE_VERSION} != ${REPO_VERSION} ) ]]; then
-        rebuild=1
+    else
+        # Compare the changeset/version of the docker image to the Dockerfile in the current repo
+        REPO_VERSION=$(cat .container-version)
+        IMAGE_REV=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output '.[0].Config.Labels | .["vcs-ref"]')
+        REPO_REV=$(hg log --limit 1 --template '{node}' Dockerfile)
+
+        # echo "IMAGE_VERSION='${IMAGE_VERSION}'"
+        # echo " REPO_VERSION='${REPO_VERSION}'"
+        # echo "IMAGE_REV='${IMAGE_REV}'"
+        # echo " REPO_REV='${REPO_REV}'"
+
+        # If there was no version label, it is an old image so rebuild it
+        if [[ -z ${IMAGE_VERSION} ]]; then
+            rebuild=1
+        # If the version is 0.0, it was a local build and we don't want to overwrite it
+        # If the version is not 0.0, and the rev or version in the repo is newer, rebuild the image
+    elif [[ ${IMAGE_VERSION} != "0.0" && ( ${IMAGE_REV} != ${REPO_REV} || ${IMAGE_VERSION} != ${REPO_VERSION} ) ]]; then
+            rebuild=1
+        fi
     fi
-fi
-if [[ ${rebuild} -eq 1 ]]; then
-    ./container-build
-    IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
+    if [[ ${rebuild} -eq 1 ]]; then
+        ./container-build
+        IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
+    fi
 fi
 
 
