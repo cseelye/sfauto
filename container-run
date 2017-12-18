@@ -8,7 +8,7 @@ SFAUTO_CONTAINER_RUN_OPTIONS=${SFAUTO_CONTAINER_RUN_OPTIONS:-}
 SFAUTO_IMAGE_NAME=${SFAUTO_IMAGE_NAME:-sfauto}
 
 # The name to give to shell container instances
-SFAUTO_CONTAINER_NAME=${SFAUTO_CONTAINER_NAME:-linux-shell-}
+SFAUTO_CONTAINER_NAME=${SFAUTO_CONTAINER_NAME:-sfauto-shell-}
 
 # Path to an explicit docker binary. Leave blank to auto-discover
 DOCKER_BINARY=${DOCKER_BINARY-}
@@ -141,7 +141,7 @@ exec "${DOCKER_BINARY}" container run \
   --env DOCKER_HOST_IP=${HOST_IP:-} \
   --env DOCKER_HOST_USER=${USER:-$(whoami)} \
   --env-file ${envfile} \
-  --volume ${CFT_DIR}:/root \
+  --volume ${SFAUTO_DIR}:/root \
   --volume /var/run/docker.sock:/var/run/docker.sock \
   --workdir /root \
   --hostname ${SFAUTO_CONTAINER_NAME}${index} \
