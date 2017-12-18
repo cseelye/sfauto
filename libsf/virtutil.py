@@ -480,22 +480,35 @@ class VirtualMachineVMware(VirtualMachine):
         vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name', 'config.hardware'])
         disks = []
         nics = []
+        cdrom_present = False
         for device in vm.config.hardware.device:
             if isinstance(device, vim.vm.device.VirtualDisk):
                 disks.append(device.key)
             elif isinstance(device, vim.vm.device.VirtualEthernetCard):
                 nics.append(device.key)
+            elif isinstance(device, vim.vm.device.VirtualCdrom):
+                cdrom_present = True
+        nics = sorted(nics)
         boot_disk = vim.vm.BootOptions.BootableDiskDevice()
         boot_disk.deviceKey = sorted(disks)[0]
         boot_nic = vim.vm.BootOptions.BootableEthernetDevice()
         if len(nics) == 1:
-            boot_nic.deviceKey = sorted(nics)[0]
+            self.log.debug2("Picking first NIC to PXE boot from ({})".format(nics[0]))
+            boot_nic.deviceKey = nics[0]
         elif len(nics) == 2:
-            boot_nic.deviceKey = sorted(nics)[1]
+            self.log.debug2("Picking second NIC to PXE boot from ({})".format(nics[1]))
+            boot_nic.deviceKey = nics[1]
         else:
-            boot_nic.deviceKey = sorted(nics)[2]
+            self.log.debug2("Picking third NIC to PXE boot from ({})".format(nics[2]))
+            #boot_nic.deviceKey = sorted(nics)[2]
+            boot_nic.deviceKey = nics[2]
+
+        if cdrom_present:
+            boot_devices = [boot_nic, vim.vm.BootOptions.BootableCdromDevice(), boot_disk]
+        else:
+            boot_devices = [boot_nic, boot_disk]
         config = vim.vm.ConfigSpec()
-        config.bootOptions = vim.vm.BootOptions(bootOrder=[boot_nic, vim.vm.BootOptions.BootableCdromDevice(), boot_disk])
+        config.bootOptions = vim.vm.BootOptions(bootOrder=boot_devices)
         task = vm.ReconfigVM_Task(config)
         VMwareWaitForTasks(self.vsphereConnection, [task])
 
@@ -579,7 +592,7 @@ class VirtualMachineVMware(VirtualMachine):
         """
         vm = VMwareFindObjectGetProperties(self.vsphereConnection, self.vmName, vim.VirtualMachine, ['name'])
         network = VMwareFindObjectGetProperties(self.vsphereConnection, networkName, vim.Network, [])
-    
+
         nic_spec = vim.vm.device.VirtualDeviceSpec()
         nic_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
         nic_spec.device = vim.vm.device.VirtualVmxnet3()
@@ -594,7 +607,7 @@ class VirtualMachineVMware(VirtualMachine):
         nic_spec.device.connectable.status = 'untried'
         nic_spec.device.wakeOnLanEnabled = True
         nic_spec.device.addressType = 'assigned'
-    
+
         config = vim.vm.ConfigSpec()
         config.deviceChange = [nic_spec]
         task = vm.ReconfigVM_Task(spec=config)
@@ -813,7 +826,7 @@ class VMHostVMware(VMHost):
                     break
             if not spec:
                 raise UnknownObjectError("Cannot find port group {}".format(portgroupName))
-            
+
             config = vim.host.NetworkConfig()
 
             security = vim.host.NetworkPolicy.SecurityPolicy()
@@ -866,7 +879,7 @@ class VMHostVMware(VMHost):
         """
         with VMwareConnection(self.mgmtServer, self.mgmtUsername, self.mgmtPassword) as vsphere:
             host = VMwareFindObjectGetProperties(vsphere, self.vmhostName, vim.HostSystem, ["name", "configManager"])
-            
+
             network_manager = host.configManager.networkSystem
             spec = None
             for vnic in network_manager.networkConfig.vnic:
@@ -881,7 +894,7 @@ class VMHostVMware(VMHost):
             spec.ip.subnetMask = subnetMask
             spec.mtu = mtu
             network_manager.UpdateVirtualNic(nicName, spec)
-    
+
     def SetHostname(self, hostname):
         """
         Set the hostname of this host
@@ -985,7 +998,7 @@ class VMHostVMware(VMHost):
                 cdrom_spec.device.backing = vim.vm.device.VirtualCdrom.RemotePassthroughBackingInfo()
                 cdrom_spec.device.backing.deviceName = ""
                 cdrom_spec.device.backing.exclusive = False
-    
+
                 # Find the SCSI and IDE controllers
                 disk_spec.device.controllerKey = None
                 cdrom_spec.device.controllerKey = None
@@ -996,7 +1009,7 @@ class VMHostVMware(VMHost):
                     if not cdrom_spec.device.controllerKey and isinstance(dev, vim.vm.device.VirtualIDEController) and len(dev.device) < 2:
                         cdrom_spec.device.controllerKey = dev.key
                         self.log.debug2("Adding cdrom to controller {}".format(dev.key))
-    
+
                 # Add the disk and CDROM to the VM
                 config = vim.vm.ConfigSpec()
                 config.deviceChange = [disk_spec, cdrom_spec]
@@ -1329,33 +1342,53 @@ class VirtualMachineKVM(VirtualMachine):
         """
         Set the boot order of this VM to PXE boot first
         """
-        #pylint: disable=unreachable
-        return
+
+        log = GetLogger()
 
         with LibvirtConnection(self.hostServer, self.hostUsername, self.hostPassword) as conn:
             vm = LibvirtFindVM(conn, self.vmName)
             vm_xml = ElementTree.fromstring(vm.XMLDesc(0))
+            parent_map = {c:p for p in vm_xml.iter() for c in p}
 
-            # Remove all of the existing boot entries but keep them in a local list
-            boot_entries = []
-            os_el = vm_xml.find("os")
+            # Remove any entries from the os/boot path (legacy)
             for boot_el in vm_xml.findall("os/boot"):
-                boot_entries.append(boot_el)
-                os_el.remove(boot_el)
+                parent_map[boot_el].remove(boot_el)
 
-            # Find the PXE entry in the list and remove it, then add it to the beginning of the list
-            pxe_entry = None
-            for idx, entry in enumerate(boot_entries):
-                if entry.get("dev") == "pxe":
-                    pxe_entry = boot_entries.pop(idx)
-                    break
-            if not pxe_entry:
-                pxe_entry = ElementTree.Element("boot")
-                pxe_entry.set("dev", "pxe")
-            boot_entries.insert(0, pxe_entry)
+            # Remove boot entries from all devices
+            for boot_el in vm_xml.findall("devices/*/boot"):
+                parent_map[boot_el].remove(boot_el)
 
-            # Add all of the boot entries back and commit the changes to the VM
-            os_el.extend(boot_entries)
+            # Find the appropriate NIC and set it to boot order 1
+            boot_el = ElementTree.Element("boot")
+            boot_el.set("order", "1")
+            interfaces = vm_xml.findall("devices/interface")
+            if len(interfaces) <= 0:
+                raise VirtualizationError("Could not find a NIC to PXE boot from")
+            if len(interfaces) == 1:
+                nic_order = (0)
+            elif len(interfaces) == 2:
+                nic_order = (1)
+            elif len(interfaces) == 4:
+                nic_order = (2, 3)
+            else:
+                nic_order = range(len(interfaces))
+
+            boot_order = 1
+            for idx in nic_order:
+                boot_el = ElementTree.Element("boot")
+                boot_el.set("order", str(boot_order))
+                interfaces[idx].append(boot_el)
+                boot_order += 1
+
+            # Find the first disk and set the boot order to follow the NICs
+            boot_el = ElementTree.Element("boot")
+            boot_el.set("order", str(boot_order))
+            disks = vm_xml.findall("devices/disk")
+            disks[0].append(boot_el)
+
+            log.debug("Setting boot order to [NIC {}, {}]".format(interfaces[2].find("mac").get("address"), disks[0].find("target").get("dev")))
+
+            # Commit the changes to the VM
             try:
                 conn.defineXML(ElementTree.tostring(vm_xml))
             except libvirt.libvirtError as ex:
