@@ -26,7 +26,7 @@ KNOWN_STATE_TIMEOUTS = {
     "Backup" : 1200,
     "BackupKexecLoad" : 60,
     "UpgradeFirmware" : 900,
-    "Firmware": 900,
+    "Firmware": 1800,
     "DriveErase" : 600,
     "Partition" : 180,
     "Image" : 600,
@@ -35,10 +35,10 @@ KNOWN_STATE_TIMEOUTS = {
     "InternalConfiguration" : 20,
     "PostInstallPre" : 300,
     "PostInstall" : 240,
-    "PostInstallKexecLoad" : 60,
+    "PostInstallKexecLoad" : 120,
     "PostInstallKexec" : 180,
     "Stop" : 180,
-    "Coldboot" : 660,
+    "Coldboot" : 900,
 }
 
 RETRYABLE_RTFI_STATUS_ERRORS = [404, 403, 51, 54, 60, 61, 110]
@@ -164,21 +164,17 @@ def RtfiNodes(node_ips,
     at2_net_info = None
     net_info = {}
 
+    # iRTFI of physical nodes, plus minimal set all types need
+    required_keys = ["ip", "hostname", "image_list", "pxe", "netmask", "gateway", "nameserver", "domain"]
     # iRTFI of virtual nodes
     if rtfi_type == "irtfi" and vm_names:
-        required_keys = ["ip", "hostname", "image_list", "pxe", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
-    # iRTFI of physical nodes
-    elif rtfi_type == "irtfi":
-        required_keys = ["ip", "hostname", "image_list", "pxe", "netmask", "gateway"]
+        required_keys += ["vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
     # PXE RTFI of virtual nodes
     elif rtfi_type == "pxe" and vm_names:
-        required_keys = ["ip", "hostname", "image_list", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
+        required_keys += ["pxe_user", "pxe_pass", "vm_name", "vm_mgmt_server", "vm_mgmt_user", "vm_mgmt_pass"]
     # PXE RTFI of physical nodes
     elif rtfi_type == "pxe":
-        required_keys = ["ip", "hostname", "image_list", "pxe", "pxe_user", "pxe_pass", "netmask", "gateway", "ipmi", "ipmi_user", "ipmi_pass"]
-
-    if configure_network == "clear" or configure_network == "reconfigure":
-        required_keys += ["nameserver", "domain"]
+        required_keys += ["pxe_user", "pxe_pass", "ipmi", "ipmi_user", "ipmi_pass"]
 
     if configure_network == "reconfigure":
         required_keys += ["cip", "cip_netmask"]
@@ -287,7 +283,6 @@ def RtfiNodes(node_ips,
     if configure_network == "keep":
         for node_ip in node_ips:
             node = SFNode(node_ip, clusterUsername=username, clusterPassword=password, vmManagementServer=vm_mgmt_server, vmManagementUsername=vm_mgmt_user, vmManagementPassword=vm_mgmt_pass)
-
             if node.IsUp() and node.IsDHCPEnabled():
                 log.error("Cannot preserve network config with a node in DHCP ({})".format(node_ip))
                 return False
@@ -342,6 +337,9 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
     # Generate a random identifier
     agent = "rtfiscript{}".format(random.randint(1000, 9999))
 
+    # Hostname to use during RTFI and first boot
+    net_info["rtfi_hostname"] = "{}{}".format(net_info["hostname"], sfdefaults.rtfi_hostname_suffix)
+
     node = SFNode(net_info["ip"],
                   clusterUsername=username,
                   clusterPassword=password,
@@ -353,14 +351,14 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
                   vmManagementUsername=net_info.get("vm_mgmt_user", None),
                   vmManagementPassword=net_info.get("vm_mgmt_pass", None))
     rtfi_opts = [
-        "sf_hostname={}{}".format(net_info["hostname"], sfdefaults.rtfi_hostname_suffix),
-        "sf_agent={}".format(agent),
-        "sf_allow_virtnode=1"
+        "sf_hostname={}".format(net_info["rtfi_hostname"]),
+        "sf_agent={}".format(agent)
     ]
     if configure_network == "keep":
-        rtfi_opts.extend(["sf_keep_hostname=1",
-                          "sf_keep_network_config=1",
-                          ])
+        rtfi_opts.extend(["sf_keep_network_config=1"])
+        # sf_keep_hostname is broken on 10.2+ PXE RTFI
+        if SolidFireVersion(version) < SolidFireVersion("10.2.0.0") or rtfi_type == "irtfi":
+            rtfi_opts.extend(["sf_keep_hostname=1"])
 
     if fail:
         rtfi_opts.append("sf_status_inject_failure={}".format(fail))
@@ -370,6 +368,15 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
 
     rtfi_options = ",".join(rtfi_opts)
     log.debug("RTFI options: {}".format(rtfi_options))
+
+    # Some versions of traditional RTFI have bugs around SF_KEEP_HOSTNAME
+    # Keep the current hostname in case we need to fix it later
+    previous_hostname = None
+    if configure_network == "keep" and rtfi_type == "pxe":
+        try:
+            previous_hostname = node.GetHostname()
+        except SolidFireError:
+            pass
 
     # PXE boot traditional RTFI
     if rtfi_type == "pxe":
@@ -413,9 +420,11 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
                 log.warning("This Element version does not support RTFI monitoring other than power status")
                 _monitor_legacy(node)
             elif SolidFireVersion(version) < SolidFireVersion("9.0.0.0"):
-                _monitor_v80(rtfi_type, node, net_info, startTimeout=sfdefaults.node_boot_timeout)
-            elif SolidFireVersion(version) >= SolidFireVersion("9.0.0.0"):
-                _monitor_v90(rtfi_type, node, net_info, startTimeout=sfdefaults.node_boot_timeout, configureNetworking=configure_network)
+                _monitor_v80(rtfi_type, node, net_info, startTimeout=sfdefaults.node_boot_timeout, configureNetworking=configure_network)
+            elif SolidFireVersion(version) >= SolidFireVersion("9.0.0.0") and SolidFireVersion(version) < SolidFireVersion("10.2.0.0"):
+                _monitor_v90(rtfi_type, node, net_info, startTimeout=600, configureNetworking=configure_network)
+            elif SolidFireVersion(version) >= SolidFireVersion("10.2.0.0"):
+                _monitor_v102(rtfi_type, node, net_info, startTimeout=600, configureNetworking=configure_network)
             else:
                 log.warning("RTFI status monitoring not implemented for this Element version")
                 return False
@@ -458,38 +467,16 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
             log.warning("RTFI status monitoring not implemented for this Element version")
             return False
 
-    # RTFI is done, now wait for the node to come back up
-    if configure_network == "keep":
-        node.WaitForUp(initialWait=0, timeout=sfdefaults.node_boot_timeout)
-        log.info("Node is back up")
-    else:
-        # Try to resolve the node with DDNS
-        log.info("Waiting for node DDNS registration")
-        start_time = time.time()
-        while True:
-            if time.time() - start_time > sfdefaults.node_boot_timeout:
-                raise TimeoutError("Timeout waiting for node DDNS. The node may have failed to boot up")
+    if configure_network != "keep":
+        # Look up the IP address
+        node_ddns_fqdn = "{}.{}".format(net_info["rtfi_hostname"], net_info["domain"])
+        try:
+            ans = netutil.ResolveHostname(node_ddns_fqdn, net_info["nameserver"])
+            log.info("Node is up on DHCP IP {}".format(ans[0]))
+        except SolidFireError:
+            pass
 
-            # Original sites like BDR and ZDC resolve directly to the domain, like eng.solidfire.net
-            # New PearlWest resolves to one.domain or ten.domain for 1G and 10G DHCP addresses
-            # So we try both versions just in case
-            for node_ddns_hostname in ["{}{}.{}".format(net_info["hostname"], sfdefaults.rtfi_hostname_suffix, net_info["domain"]),
-                                       "{}{}.one.{}".format(net_info["hostname"], sfdefaults.rtfi_hostname_suffix, net_info["domain"])]:
-                temp_node_ip = None
-                try:
-                    ans = netutil.ResolveHostname(node_ddns_hostname, net_info["nameserver"])
-                    temp_node_ip = ans[0]
-                    node._SetInternalManagementIP(temp_node_ip)
-                    break
-                except SolidFireError:
-                    continue
-            if temp_node_ip:
-                break
-            time.sleep(2)
-        node.WaitForUp()
-        log.info("Node is up on DHCP IP {}".format(temp_node_ip))
-
-    # Configure the network
+    # Configure the network if requested
     if configure_network == "reconfigure":
         log.info("Setting hostname to {}".format(net_info["hostname"]))
         node.SetHostname(net_info["hostname"])
@@ -503,6 +490,13 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
                             tengNetmask=net_info["cip_netmask"],
                             tengGateway=net_info.get("cip_gateway", None))
         log.info("Node is configured to static IP {}".format(net_info["ip"]))
+
+    if configure_network == "keep" and rtfi_type == "pxe":
+        # Make sure the hostname is correct
+        desired_hostname = previous_hostname or net_info["hostname"]
+        if node.GetHostname() != desired_hostname:
+            log.info("Setting hostname to {}".format(desired_hostname))
+            node.SetHostname(desired_hostname)
 
     log.passed("Successful RTFI")
     return True
@@ -524,7 +518,7 @@ def _monitor_legacy(node, timeout=3600):
         if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
             raise TimeoutError("Timeout waiting for RTFI to complete")
 
-def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None):
+def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
     """
     Monitor Oxygen RTFI status and return when RTFI is complete
     """
@@ -600,7 +594,7 @@ def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
 
         # If we hit the Stop state, the node should now finish RTFI and power itself off
         if status and status[-1]["state"] == "Stop":
-            _handle_coldboot(node)
+            _handle_coldboot(node, netInfo, configureNetworking)
             break
 
         # If we know RTFI was able to start and the node has now powered down, assume that RTFI finished successfully
@@ -609,7 +603,7 @@ def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
             last_power_check = time.time()
             log.debug("Checking if node finished RTFI and powered off")
             if node.GetPowerState() == "off":
-                _handle_coldboot(node)
+                _handle_coldboot(node, netInfo, configureNetworking)
                 break
 
         # Timeout if the current state has lasted too long
@@ -622,10 +616,12 @@ def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
 
 def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
     """
-    Monitor Fluorine RTFI status and return when RTFI is complete
+    Monitor Fluorine and later RTFI status and return when RTFI is complete
     """
     log = GetLogger()
     log.info("Waiting for RTFI status")
+
+    firmware_duration = 0
     removed_pxe = False
     status = None
     previous_status = []
@@ -635,6 +631,7 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
     start_time = time.time()
     log.debug("Waiting for status server timeout={}".format(startTimeout))
     while True:
+        time.sleep(1)
         try:
             status = node.GetAllRTFIStatus()
         except ConnectionError as ex:
@@ -667,9 +664,15 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
 
             # Log some info about how long state transitions take
             if previous_status:
-                log.debug("PreviousState={} duration={} timeout={}".format(previous_status[-1]["state"], time.time() - state_start_time, state_timeout))
+                duration = time.time() - state_start_time
+                log.debug("PreviousState={} duration={} timeout={}".format(previous_status[-1]["state"], duration, state_timeout))
             else:
-                log.debug("FirstState duration={}".format(time.time() - start_time))
+                duration = time.time() - start_time
+                log.debug("FirstState duration={}".format(duration))
+
+            # Record how long the firmware state lasted so we can guess if RTFI actually flashed the firmware
+            if previous_status and previous_status[-1]["state"] == "Firmware":
+                firmware_duration = duration
 
             previous_status = status
             state_start_time = time.time()
@@ -687,10 +690,8 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
 
         # If the status is Coldboot, wait for the node to power off and come back
         if status and status[-1]["state"] == "Coldboot":
-            _handle_coldboot(node)
-            if configureNetworking != "keep":
-                break
-            log.info("Waiting for node to come up")
+            wait_wakeup = False if firmware_duration < 60 else True
+            _handle_coldboot(node, netInfo, configureNetworking, waitForWakup=wait_wakeup)
 
         # If the status indicates we are finished with RTFI, break
         if status and status[-1]["state"] == "FinishSuccess":
@@ -708,15 +709,143 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
         if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
             raise TimeoutError("Timeout waiting for RTFI to complete")
 
-def _handle_coldboot(node):
+def _monitor_v102(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
+    """
+    Monitor Neon patch2 and later (ember based) RTFI status and return when RTFI is complete
+    """
+    log = GetLogger()
+    log.info("Waiting for RTFI status")
+
+    # Hack to handle DDNS registration problems
+    if configureNetworking != "keep":
+        log.debug2("Setting ColdBoot timeout to 1320 seconds to handle DHCP/DNS registration issues")
+        KNOWN_STATE_TIMEOUTS["Coldboot"] = 1320
+
+    firmware_duration = 0
+    removed_pxe = False
+    status = None
+    previous_status = []
+    last_api_check = time.time()
+    state_timeout = KNOWN_STATE_TIMEOUTS["DEFAULT"]
+    state_start_time = 0
+    start_time = time.time()
+    log.debug("Waiting for status server timeout={}".format(startTimeout))
+    while True:
+        time.sleep(1)
+
+        # Try to determine the correct endpoint to use for RTFI status
+        if not previous_status:
+            possible_endpoints = [netInfo["ip"]]
+            if "cip" in netInfo:
+                possible_endpoints.append(netInfo["cip"])
+            possible_endpoints.append("{}.{}".format(netInfo["rtfi_hostname"], netInfo["domain"]))
+            for endpoint in possible_endpoints:
+                log.debug("Testing endpoint {}".format(endpoint))
+                if netutil.Ping(endpoint):
+                    log.debug("Set node endpoint for RTFI status to {}".format(endpoint))
+                    node._SetInternalManagementIP(endpoint)
+                    break
+
+        try:
+            status = node.GetAllRTFIStatus()
+        except ConnectionError as ex:
+            if not ex.IsRetryable() and ex.code not in RETRYABLE_RTFI_STATUS_ERRORS:
+                log.warning(str(ex))
+            status = None
+
+        # Timeout if we haven't gotten any status within the startTimeout period
+        if not previous_status and time.time() - start_time > startTimeout * sfdefaults.TIME_SECOND:
+            raise TimeoutError("Timeout waiting for RTFI to start")
+
+        # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
+        if rtfiType == "pxe" and not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
+            last_api_check = time.time()
+            log.debug("Checking if node skipped RTFI and came back up")
+            if node.IsUp():
+                log.debug("API is back up but never got any RTFI status")
+                raise SolidFireError("Node did not RTFI, check PXE boot settings")
+
+        # See if the current state has changed
+        if status and status != previous_status:
+            new_status = [stat for stat in status if stat not in previous_status]
+
+            # Sanity check the status and display it to the user
+            for stat in new_status:
+                _check_and_log_new_status(stat, start_time, agentID)
+
+            if "Abort" in status[-1]["state"]:
+                log.error("RTFI error:\n{}".format(PrettyJSON(status[-1])))
+
+            # Log some info about how long state transitions take
+            if previous_status:
+                duration = time.time() - state_start_time
+                log.debug("PreviousState={} duration={} timeout={}".format(previous_status[-1]["state"], duration, state_timeout))
+            else:
+                duration = time.time() - start_time
+                log.debug("FirstState duration={}".format(duration))
+
+            # Record how long the firmware state lasted so we can guess if RTFI actually flashed the firmware
+            if previous_status and previous_status[-1]["state"] == "Firmware":
+                firmware_duration = duration
+
+            previous_status = status
+            state_start_time = time.time()
+            state_timeout = KNOWN_STATE_TIMEOUTS.get(previous_status[-1]["state"], None) or KNOWN_STATE_TIMEOUTS["DEFAULT"]
+            log.debug("CurrentState={} timeout={}".format(previous_status[-1]["state"], state_timeout))
+            log.debug("Waiting for a new status")
+
+        # If we got at least one good status, then we did successfully PXE boot and don't need the PXE config file anymore
+        if rtfiType == "pxe" and previous_status and not removed_pxe:
+            pxeutil.DeletePXEFile(node.GetPXEMacAddress(),
+                                  pxeServer=netInfo["pxe"],
+                                  pxeUser=netInfo["pxe_user"],
+                                  pxePassword=netInfo["pxe_pass"])
+            removed_pxe = True
+
+        # If the status is Coldboot, wait for the node to power off and come back
+        if status and status[-1]["state"] == "Coldboot":
+            wait_wakeup = False if firmware_duration < 60 else True
+            if configureNetworking == "keep":
+                _handle_coldboot(node, netInfo, configureNetworking, waitForWakup=wait_wakeup)
+            else:
+                # crazy long timeout to handle DDNS registration issues
+                _handle_coldboot(node, netInfo, configureNetworking, upTimeout=1200, waitForWakup=wait_wakeup)
+
+        # If the status indicates we are finished with RTFI, break
+        if status and status[-1]["state"] == "FinishSuccess":
+            break
+
+        # If the status indicates a failure, raise an error
+        if status and status[-1]["state"] == "FinishFailure":
+            raise SolidFireError("RTFI failed")
+
+        # Timeout if the current state has lasted too long
+        if state_start_time > 0 and time.time() - state_start_time > state_timeout:
+            raise TimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
+
+        # Timeout if the total time has been too long
+        if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
+            raise TimeoutError("Timeout waiting for RTFI to complete")
+
+
+def _handle_coldboot(node, netInfo, configureNetworking, upTimeout=600, waitForWakup=True):
+    """Handle the transition through the Coldboot/powered off state of RTFI"""
     log = GetLogger()
 
     # Wait for the node to power down
     log.info("Waiting for node to power off")
     node.WaitForOff()
 
+    # Update the address that we will use to talk to the node when it comes back up
+    if configureNetworking == "keep":
+        node._SetInternalManagementIP(netInfo["ip"])
+    else:
+        node_ddns_fqdn = "{}.{}".format(netInfo["rtfi_hostname"], netInfo["domain"])
+        node._SetInternalManagementIP(node_ddns_fqdn)
+
     # If this is a virt node, we must power it on because ACPI wakeup does not work
-    if node.IsVirtual():
+    # Or if we have been instructed not to wait for the auto wakeup
+    if node.IsVirtual() or not waitForWakup:
         log.info("Powering on node")
         node.PowerOn(waitForUp=False)
 
@@ -724,19 +853,24 @@ def _handle_coldboot(node):
     else:
         log.info("Waiting for node to power on")
         try:
-            node.WaitForOn(timeout=310)
+            node.WaitForOn(timeout=330)
         except TimeoutError:
             log.warning("Node failed to auto wakeup")
             node.PowerOn(waitForUp=False)
 
+    # Wait for the node to come back
+    node.WaitForUp(timeout=upTimeout)
+
+
 def _check_and_log_new_status(status, startTime, agentID):
+    """Validate that a status belongs to this run of RTFI and display it appropriately"""
     log = GetLogger()
     log.debug("found new status:\n{}".format(PrettyJSON(status)))
 
     # If the status does not match our agent ID, this is probably a stale status from an earlier RTFI
     #   Older traditional RTFI does not honor sf_agent so don't check it (SF_AGENT=Manual)
     #   PreparePivotRoot state does not show the correct agent so don't check it
-    if agentID and "sf_agent" in status and status["sf_agent"] != "Manual" and status["state"] != "PreparePivotRoot":
+    if agentID and "sf_agent" in status and status["sf_agent"] != "Manual" and status["state"] not in ("PreparePivotRoot", "PostPivotRoot"):
         if status["sf_agent"] != agentID:
             log.debug("sf_agent does not match agentID={}".format(agentID))
             raise SolidFireError("Node did not start RTFI (stale status)")

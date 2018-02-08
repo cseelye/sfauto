@@ -452,8 +452,16 @@ class SFNode(object):
         Args:
             ipAddress:      the management IP of this node (str)
         """
+        self.log.debug2("Using managment IP {} for node".format(ipAddress))
         self.ipAddress = ipAddress
-        self.api.server = ipAddress
+        self.api = SolidFireNodeAPI(self.ipAddress,
+                                    self.username,
+                                    self.password,
+                                    logger=self.log,
+                                    maxRetryCount=5,
+                                    retrySleep=20,
+                                    errorLogThreshold=1,
+                                    errorLogRepeat=1)
 
     def SetNetworkInfo(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP=None, tengNetmask=None, tengGateway=None, onegNic="Bond1G", tengNic="Bond10G"):
         """

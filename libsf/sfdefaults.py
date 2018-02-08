@@ -57,7 +57,7 @@ fault_whitelist = [                 # Ignore these faults if they are present on
     "clusterIOPSAreOverProvisioned",
     "nodeHardwareFault"
 ]
-rtfi_options = "sf_auto=1,sf_secure_erase=0"
+rtfi_options = "sf_auto=1,sf_internal=1,sf_allow_virt_node=1,sf_secure_erase=0,EPROGRESS=0"
 rtfi_hostname_suffix = "-rtfi"      # Suffix to add to the hostname during RTFI, and for DDNS discovery after node boot up
 username = "admin"                  # Cluster admin username
 password = "admin"                  # Cluster admin password
