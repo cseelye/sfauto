@@ -3,7 +3,7 @@
 
 from .logutil import GetLogger
 from . import sfdefaults as _sfdefaults
-from . import SolidFireError
+from . import SolidFireError, TimeoutError
 
 import fcntl as _fcntl
 import functools as _functools
@@ -71,6 +71,12 @@ class AsyncResult(object):
             The return value of the thread
         """
         return self.result.get(0xFFFF)
+
+    def GetWithTimeout(self, timeout):
+        try:
+            return self.result.get(timeout)
+        except _multiprocessing.TimeoutError as e:
+            raise TimeoutError("Timeout waiting for thread to complete", innerException=e)
 
     def Wait(self, timeout):
         """

@@ -9,6 +9,7 @@ import time
 
 from . import netutil
 from . import sfdefaults
+from . import threadutil
 from . import util
 from . import SSHConnection, SolidFireClusterAPI, SolidFireBootstrapAPI, SolidFireNodeAPI, SolidFireError, UnknownObjectError, TimeoutError
 from .shellutil import Shell
@@ -463,87 +464,58 @@ class SFNode(object):
                                     errorLogThreshold=1,
                                     errorLogRepeat=1)
 
-    def SetNetworkInfo(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP=None, tengNetmask=None, tengGateway=None, onegNic="Bond1G", tengNic="Bond10G"):
+    def SetNetworkConfig(self, managementIP=None, managementNetmask=None, managementGateway=None, dnsIP=None, dnsSearch=None, storageIP=None, storageNetmask=None, storageGateway=None):
         """
-        Set the network info on this node
+        Set the network info on this node. All params are optional and only the iones supplied will be changed
 
         Args:
-            onegIP:         the IP address for the 1G NIC
-            onegNetmask:    the netmask for the 1G NIC
-            onegGateway:    the gateway for the 1G NIC
-            dnsIP:          the IP of the DNS server
-            dnsSearch:      the search string for DNS lookups
-            tengIP:         the IP address for the 10G NIC
-            tengNetmask:    the netmask for the 10G NIC
-            tengGateway:    the gateway for the 10G NIC
-            onegNic:        the name of the 1G NIC ("Bond1G")
-            tengNic:        the name of the 10G NIC ("Bond10G")
+            managementIP:       the IP address for the managment NIC (MIPI)
+            managementNetmask:  the netmask for the managment NIC (MIPI)
+            managementGateway:  the gateway for the managment NIC (MIPI)
+            dnsIP:              the IP of the DNS server
+            dnsSearch:          the search string for DNS lookups
+            storageIP:          the IP address for the storage NIC (SIPI)
+            storageNetmask:     the netmask for the storage NIC (SIPI)
+            storageGateway:     the gateway for the storage NIC (SIPI)
         """
+        all_config = self.api.CallWithRetry("GetConfig")
+        mgmt_nic = all_config["config"]["cluster"]["mipi"]
+        stg_nic = all_config["config"]["cluster"]["sipi"]
+        params = { "network" : all_config["config"]["network"] }
+        # Filter the NICs we are interested in
+        params["network"] = { nic : params["network"][nic] for nic in params["network"] if nic in (mgmt_nic, stg_nic) }
 
-        # Must be done in a thread, because after changing the IP the old IP is no longer responsive and the API call hangs
-        start_time = time.time()
-        manager = multiprocessing.Manager()
-        #pylint: disable=no-member
-        status = manager.dict()
-        #pylint: enable=no-member
-        status["success"] = False
-        status["message"] = None
-        th = multiprocessing.Process(target=self._SetNetworkInfoThread, args=(onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, tengGateway, onegNic, tengNic, status))
-        th.daemon = True
-        th.start()
-        while True:
-            if not th.is_alive():
-                break
+        update_network = {
+            mgmt_nic : {
+                "address" : managementIP or params["network"][mgmt_nic]["address"],
+                "netmask" : managementNetmask or params["network"][mgmt_nic]["netmask"],
+                "gateway" : managementGateway or params["network"][mgmt_nic]["gateway"],
+                "dns-nameservers" : dnsIP or params["network"][mgmt_nic]["dns-nameservers"],
+                "dns-search" : dnsSearch or params["network"][mgmt_nic]["dns-search"],
+            },
+            stg_nic : {
+                "address" : storageIP or params["network"][stg_nic]["address"],
+                "netmask" : storageNetmask or params["network"][stg_nic]["netmask"],
+                "gateway" : storageGateway or params["network"][stg_nic]["gateway"],
+            }
+        }
+        params["network"][mgmt_nic].update(update_network[mgmt_nic])
+        params["network"][stg_nic].update(update_network[stg_nic])
 
-            if time.time() - start_time > 30:
-                self.log.debug("Terminating subprocess after timeout")
-                th.terminate()
-                status["success"] = True
-                break
+        # Send the API call in a thread, because after changing the IP the old IP is no longer responsive and the API call hangs
+        pool = threadutil.GlobalPool()
+        result = pool.Post(self.api.Call, "SetNetworkConfig", params)
+        try:
+            result.GetWithTimeout(30)
+        except TimeoutError:
+            pass
 
-        if not status["success"]:
-            raise SolidFireError(status["message"])
-
-        # Try to ping the new address to make sure it came up
-        start_time = time.time()
-        pingable = False
-        while not pingable:
-            pingable = netutil.Ping(onegIP)
-            if time.time() - start_time > 60:
-                break
-
-        if not pingable:
-            raise SolidFireError("Could not ping node at new address")
-
-        # Update my internal data
-        self._SetInternalManagementIP(onegIP)
+        # Wait for the network to be up on the new IP
+        self._SetInternalManagementIP(managementIP)
+        self.WaitForPing(60)
 
         # Wait for the API to be ready on the new IP
         self.WaitForNodeAPI()
-
-    def _SetNetworkInfoThread(self, onegIP, onegNetmask, onegGateway, dnsIP, dnsSearch, tengIP, tengNetmask, tengGateway, onegNic, tengNic, status):
-        """Internal method to set the network info using a separate thread"""
-        params = {}
-        params["network"] = {}
-        params["network"][onegNic] = {}
-        params["network"][onegNic]["address"] = onegIP
-        params["network"][onegNic]["netmask"] = onegNetmask
-        params["network"][onegNic]["gateway"] = onegGateway
-        params["network"][onegNic]["dns-nameservers"] = dnsIP
-        params["network"][onegNic]["dns-search"] = dnsSearch
-        if tengNic and tengIP and tengNetmask:
-            params["network"][tengNic] = {}
-            params["network"][tengNic]["address"] = tengIP
-            params["network"][tengNic]["netmask"] = tengNetmask
-            params["network"][tengNic]["mtu"] = 9000
-            if tengGateway:
-                params["network"][tengNic]["gateway"] = tengGateway
-        try:
-            self.api.Call("SetConfig", params)
-            status["success"] = True
-        except SolidFireError as e:
-            status["success"] = False
-            status["message"] = str(e)
 
     def GetHostname(self):
         """
