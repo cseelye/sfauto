@@ -1512,7 +1512,7 @@ class SFClient:
             targets = []
             for line in stdout.split("\n"):
                 line = line.strip()
-                m = re.search(r"(iqn\..+)", line)
+                m = re.search(r"(iqn\.\S+)", line)
                 if m:
                     targets.append(m.group(1))
             targets.sort()
@@ -1565,7 +1565,7 @@ class SFClient:
             new_volume = None
             volumes = {}
             for line in stdout.split("\n"):
-                m = re.search(r"Target:\s+(.+)", line)
+                m = re.search(r"Target:\s+(\S+)", line)
                 if(m):
                     new_volume = dict()
                     new_volume["iqn"] = m.group(1)
@@ -1652,7 +1652,7 @@ class SFClient:
             new_volume = None
             volumes = dict()
             for line in raw_iscsiadm.split("\n"):
-                m = re.search(r"Target:\s+(.+)", line)
+                m = re.search(r"Target:\s+(\S+)", line)
                 if m:
                     new_volume = dict()
                     new_volume["iqn"] = m.group(1)
