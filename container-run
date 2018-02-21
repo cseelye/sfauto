@@ -20,18 +20,23 @@ usage()
 {
     echo "$(basename $0) [OPTIONS]"
     echo "  -n    Never rebuild the container, always use the existing image"
+    echo "  -d    Turn on set -x for debugging"
 }
 
 NEVER_REBUILD=0
-while getopts ":hn" opt; do
+while getopts ":hnd" opt; do
     case ${opt} in
         n)
             NEVER_REBUILD=1 ;;
+        d)
+            set -x ;;
         h)
             usage; exit 0;
     esac
 done
 shift $((OPTIND - 1))
+
+echo ${PATH} | grep -q /usr/local/bin || export PATH=/usr/local/bin:"${PATH}"
 
 # Make sure we are not inside a container already
 [[ -e /proc/1 ]] && grep -q 'cpu:/docker/' /proc/1/cgroup && { echo "Cannot start a container inside another container"; exit 1; }
@@ -45,8 +50,11 @@ shift $((OPTIND - 1))
     }
 }
 
+SFAUTO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "${SFAUTO_DIR}"
+
 IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
-if [[ ${NEVER_REBUILD} -eq 0 ]]; then
+if [[ ${NEVER_REBUILD} -eq 0 && -e .container-version ]]; then
     # See if the image needs rebuilding
     rebuild=0
     # If the image deos not exist locally, build it
@@ -119,7 +127,6 @@ fi
 
 # Find the volumes to mount into the container
 eval HOMEDIR="~"
-SFAUTO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BASHRC="${HOMEDIR}/.bashrc"
 [[ -e ${BASHRC} ]] && BASHRC_VOLUME="--volume ${BASHRC}:/root/.bashrc" || BASHRC_VOLUME=""
 VIMRC="${HOMEDIR}/.vimrc"
@@ -128,8 +135,8 @@ DOTSSH="${HOMEDIR}/.ssh"
 [[ -d ${DOTSSH} ]] && SSH_VOLUME="--volume ${DOTSSH}:/root/.ssh" || SSH_VOLUME=""
 
 # Save the SF* variables into a file to import them into the container
-envfile=$(mktemp -t docker-pullXXXX)
-env | grep "^SF" | sort > ${envfile}
+envfile=$(mktemp -t docker-env.XXXX)
+env | grep "^SF" | sort > ${envfile} || true
 
 # Find any other existing containers to give this one a unique name
 index=$("${DOCKER_BINARY}" container ls --all --format '{{.Names}}' | grep ${SFAUTO_CONTAINER_NAME} | cut -d- -f3 | sort | tail -n1 || echo 0)
