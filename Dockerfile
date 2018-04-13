@@ -11,8 +11,9 @@ LABEL maintainer="cseelye@gmail.com" \
       version="$VERSION"
 
 COPY . /sfauto
-RUN pip install -U -r /sfauto/requirements.txt && \
-    pip install -U -r /sfauto/requirements-test.txt
+RUN pip install -U pip && \
+    pip install -U -r /sfauto/requirements.txt && \
+    pip install -U -r /sfauto/requirements-test.txt \
     pip install yamllint
 WORKDIR /sfauto
 CMD ["/bin/bash"]
