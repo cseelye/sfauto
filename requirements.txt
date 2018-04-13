@@ -4,8 +4,7 @@
 #   brew install libvirt pkg-config ipmitool
  
 dnspython==1.15.0
-libvirt-python
-netaddr==0.7.18
+libvirt-python<=4.0.0
 paramiko==1.16.0
 pyvmomi==5.5.0.2014.1.1
 requests==2.11.1
