@@ -121,7 +121,7 @@ if [[ $(uname) == "Darwin" ]]; then
 else
     for nicpath in /sys/class/net/*; do
         [[ ! -e ${nicpath}/device ]] && continue
-        HOST_IP=$(/sbin/ifconfig $(basename ${nicpath}) | /usr/bin/grep inet | /usr/bin/awk '$1=="inet" {print $2}')
+        HOST_IP=$(/sbin/ifconfig $(basename ${nicpath}) | grep inet | awk '$1=="inet" {print $2}')
     done
 fi
 
