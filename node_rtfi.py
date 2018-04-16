@@ -478,18 +478,18 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
 
     # Configure the network if requested
     if configure_network == "reconfigure":
+        log.info("Configuring network")
+        node.SetNetworkConfig(managementIP=net_info["ip"],
+                              managementNetmask=net_info["netmask"],
+                              managementGateway=net_info["gateway"],
+                              dnsIP=net_info["nameserver"],
+                              dnsSearch=net_info["domain"],
+                              storageIP=net_info["cip"],
+                              storageNetmask=net_info["cip_netmask"],
+                              storageGateway=net_info.get("cip_gateway", None))
+        log.info("Node is configured to static IP {}".format(net_info["ip"]))
         log.info("Setting hostname to {}".format(net_info["hostname"]))
         node.SetHostname(net_info["hostname"])
-        log.info("Configuring network")
-        node.SetNetworkInfo(onegIP=net_info["ip"],
-                            onegNetmask=net_info["netmask"],
-                            onegGateway=net_info["gateway"],
-                            dnsIP=net_info["nameserver"],
-                            dnsSearch=net_info["domain"],
-                            tengIP=net_info["cip"],
-                            tengNetmask=net_info["cip_netmask"],
-                            tengGateway=net_info.get("cip_gateway", None))
-        log.info("Node is configured to static IP {}".format(net_info["ip"]))
 
     if configure_network == "keep" and rtfi_type == "pxe":
         # Make sure the hostname is correct
@@ -908,14 +908,14 @@ if __name__ == '__main__':
     net_override_group.add_argument("--jenkins-server", type=IPv4AddressType, default=sfdefaults.jenkins_server, metavar="IP", required=False, help="use this jenkins server for all nodes to find available builds")
     net_override_group.add_argument("--mip-netmask", type=IPv4AddressType, default=sfdefaults.mip_netmask, required=False, help="use this netmask for all nodes during RTFI")
     net_override_group.add_argument("--mip-gateway", type=IPv4AddressType, default=sfdefaults.mip_gateway, required=False, help="use this gateway for all nodes during RTFI")
-    net_override_group.add_argument("--nameserver", type=IPv4AddressType, required=False, help="use this DNS server for all nodes to find them in DNS after RTFI")
-    net_override_group.add_argument("--domain", type=StrType, required=False, help="use this DNS search domain for all nodes to find them in DNS after RTFI")
+    net_override_group.add_argument("--nameserver", type=IPv4AddressType, default=sfdefaults.nameserver, required=False, help="use this DNS server for all nodes to find them in DNS after RTFI")
+    net_override_group.add_argument("--domain", type=StrType, default=sfdefaults.domain, required=False, help="use this DNS search domain for all nodes to find them in DNS after RTFI")
     net_override_group.add_argument("--cip-ips", type=ItemList(IPv4AddressType), default=sfdefaults.cip_ips, metavar="CIP1,CIP2...", help="the 10G IP addresses for the nodes")
     net_override_group.add_argument("--cip-netmask", type=IPv4AddressType, default=sfdefaults.cip_netmask, required=False, help="the 10G netmask for all nodes")
     net_override_group.add_argument("--cip-gateway", type=IPv4AddressType, default=sfdefaults.cip_gateway, required=False, help="the 10G gateway for all nodes")
 
     vm_group = parser.add_argument_group("Virtual Node Options", description="These settings are required for virt nodes, along with the network override settings.")
-    vm_group.add_argument("--vm-names", type=StrType, metavar="NAME", help="the name of the VMs to RTFI")
+    vm_group.add_argument("--vm-names", type=StrType, default=sfdefaults.vm_names, metavar="NAME", help="the name of the VMs to RTFI")
     vm_group.add_argument("-s", "--vm-mgmt-server", type=IPv4AddressType, default=sfdefaults.vm_mgmt_server, metavar="IP", help="the management server for the VMs (vSphere for VMware, hypervisor for KVM)")
     vm_group.add_argument("-e", "--vm-mgmt-user", type=StrType, default=sfdefaults.vm_mgmt_user, help="the VM management server username")
     vm_group.add_argument("-a", "--vm-mgmt-pass", type=StrType, default=sfdefaults.vm_mgmt_pass, help="the VM management server password")
