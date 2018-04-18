@@ -36,6 +36,8 @@ KNOWN_STATE_TIMEOUTS = {
     "PostInstallPre" : 300,
     "PostInstall" : 240,
     "PostInstallKexecLoad" : 120,
+    "SFDEMO_POST_PROCESS" : 300,
+    "SFDEMO_ENCRYPT_ROOTFS" : 60,
     "PostInstallKexec" : 180,
     "Stop" : 180,
     "Coldboot" : 900,
