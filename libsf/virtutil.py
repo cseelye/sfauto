@@ -465,12 +465,14 @@ class VirtualMachineVMware(VirtualMachine):
             raise SolidFireError("Could not find any ethernet devices in VM {}".format(self.vmName))
 
         if len(macs) == 1:
-            return macs[0]
+            idx = 0
         elif len(macs) == 2:
-            return macs[0]
-        elif len(macs) == 4:
-            return macs[2]
-        return macs[0]
+            idx = 0
+        else: # 4 NICs, or any other config we do not recognize
+            idx = 2
+
+        self.log.debug2("Getting MAC address from NIC {} ({})".format(idx, macs[idx]))
+        return macs[idx]
 
     @_vsphere_session
     def SetPXEBoot(self):
@@ -493,15 +495,14 @@ class VirtualMachineVMware(VirtualMachine):
         boot_disk.deviceKey = sorted(disks)[0]
         boot_nic = vim.vm.BootOptions.BootableEthernetDevice()
         if len(nics) == 1:
-            self.log.debug2("Picking first NIC to PXE boot from ({})".format(nics[0]))
-            boot_nic.deviceKey = nics[0]
+            idx = 0
         elif len(nics) == 2:
-            self.log.debug2("Picking second NIC to PXE boot from ({})".format(nics[1]))
-            boot_nic.deviceKey = nics[1]
-        else:
-            self.log.debug2("Picking third NIC to PXE boot from ({})".format(nics[2]))
-            #boot_nic.deviceKey = sorted(nics)[2]
-            boot_nic.deviceKey = nics[2]
+            idx = 0
+        else: # 4 NICs, or any other config we do not recognize
+            idx = 2
+
+        self.log.debug2("Picking NIC {} to PXE boot from ({})".format(idx, nics[idx]))
+        boot_nic.deviceKey = nics[idx]
 
         if cdrom_present:
             boot_devices = [boot_nic, vim.vm.BootOptions.BootableCdromDevice(), boot_disk]
