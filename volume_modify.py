@@ -130,10 +130,10 @@ def _APICallThread(mvip, username, password, volume_id, property_name, property_
     # Verify that the change was applied
     if isinstance(post_value, dict):
         for key, value in post_value.iteritems():
-            if vol[property_name][key] != value:
+            if str(vol[property_name][key]) != str(value):
                 raise SolidFireError("{} is not correct after modifying volume {} [expected={}, actual={}]".format(key, volume_id, value, vol[property_name][key]))
     else:
-        if vol[property_name] != post_value:
+        if str(vol[property_name]) != str(post_value):
             raise SolidFireError("{} is not correct after modifying volume {} [expected={}, actual={}]".format(property_name, volume_id, post_value, vol[property_name]))
 
 
