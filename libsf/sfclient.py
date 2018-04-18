@@ -1647,7 +1647,7 @@ class SFClient:
                 sectors[dev] = size
 
             retcode, raw_iscsiadm, stderr = self.ExecuteCommand("iscsiadm -m session -P 3 | egrep 'Target:|Portal:|State:|SID:|disk'", throwOnError=False)
-            if retcode != 0 and retcode != 21:
+            if not (retcode == 0 or retcode == 21 or (retcode == 1 and "No active sessions" in stderr)):
                 raise ClientCommandError("iscsiadm command failed: {} {}".format(raw_iscsiadm, stderr))
             new_volume = None
             volumes = dict()
