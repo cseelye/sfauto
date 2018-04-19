@@ -825,8 +825,10 @@ class SolidFireBootstrapAPI(SolidFireAPI):
         params["nodes"] = self.GetBootstrapNodes()
         params["acceptEula"] = True
         if len(params["nodes"]) == 1:
-            self.CreateStandaloneCluster(mvip, svip, username, password)
-            return
+            bc = self.Call("GetBootstrapConfig", apiVersion=9.0)
+            if bc["nodes"][0]["nodeType"] != "SFDEMO":
+                self.CreateStandaloneCluster(mvip, svip, username, password)
+                return
 
         self.Call("CreateCluster", params)
 

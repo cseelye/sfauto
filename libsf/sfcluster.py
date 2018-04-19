@@ -871,10 +871,9 @@ class SFCluster(object):
         params = {}
         params["drives"] = driveList
         result = self.api.CallWithRetry("AddDrives", params)
+        self.WaitForAsyncHandle(result["asyncHandle"])
 
         if waitForSync:
-            self.WaitForAsyncHandle(result["asyncHandle"])
-
             # self.log.info("Waiting a little while to make sure syncing has started")
             # time.sleep(sfdefaults.TIME_MINUTE * 2)
 
