@@ -53,17 +53,25 @@ echo ${PATH} | grep -q /usr/local/bin || export PATH=/usr/local/bin:"${PATH}"
 SFAUTO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "${SFAUTO_DIR}"
 
-IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
+"${DOCKER_BINARY}" image ls --format '{{.Repository}}:{{.Tag}}' | grep -q ${SFAUTO_IMAGE_NAME} && IMAGE_EXISTS=1 || IMAGE_EXISTS=0
+if [[ ${IMAGE_EXISTS} -eq 0 && ${NEVER_REBUILD} -eq 1 ]]; then
+    echo "${SFAUTO_IMAGE_NAME} image does not exist and must be built"
+    exit 1
+fi
+
+IMAGE_VERSION=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output .[0].Config.Labels.version || echo "")
+IMAGE_REV=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["vcs-ref"]' || echo "")
+
 if [[ ${NEVER_REBUILD} -eq 0 && -e .container-version ]]; then
     # See if the image needs rebuilding
     rebuild=0
+
     # If the image deos not exist locally, build it
-    if ! "${DOCKER_BINARY}" images --format '{{.Repository}}:{{.Tag}}' | grep -q ${SFAUTO_IMAGE_NAME}; then
+    if [[ ${IMAGE_EXISTS} -ne 1 ]]; then
         rebuild=1
     else
         # Compare the changeset/version of the docker image to the Dockerfile in the current repo
         REPO_VERSION=$(cat .container-version)
-        IMAGE_REV=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output '.[0].Config.Labels | .["vcs-ref"]')
         REPO_REV=$(hg log --limit 1 --template '{node}' Dockerfile)
 
         # echo "IMAGE_VERSION='${IMAGE_VERSION}'"
@@ -74,15 +82,19 @@ if [[ ${NEVER_REBUILD} -eq 0 && -e .container-version ]]; then
         # If there was no version label, it is an old image so rebuild it
         if [[ -z ${IMAGE_VERSION} ]]; then
             rebuild=1
+
         # If the version is 0.0, it was a local build and we don't want to overwrite it
         # If the version is not 0.0, and the rev or version in the repo is newer, rebuild the image
-    elif [[ ${IMAGE_VERSION} != "0.0" && ( ${IMAGE_REV} != ${REPO_REV} || ${IMAGE_VERSION} != ${REPO_VERSION} ) ]]; then
-            rebuild=1
+        elif [[ ${IMAGE_VERSION} != "0.0" && ( ${IMAGE_REV} != ${REPO_REV} || ${IMAGE_VERSION} != ${REPO_VERSION} ) ]]; then
+                rebuild=1
         fi
     fi
+
+    # Build the container
     if [[ ${rebuild} -eq 1 ]]; then
         ./container-build
-        IMAGE_VERSION=$(${DOCKER_BINARY} inspect ${SFAUTO_IMAGE_NAME} | jq --raw-output .[0].Config.Labels.version)
+        IMAGE_VERSION=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output .[0].Config.Labels.version || echo "")
+        IMAGE_REV=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["vcs-ref"]' || echo "")
     fi
 fi
 
@@ -92,11 +104,12 @@ if [[ $# -le 0 ]]; then
     echo
     echo "======================================="
     echo "     Entering SFAUTO docker container"
+    echo "Version ${IMAGE_VERSION}-${IMAGE_REV}"
     if [[ ${IMAGE_VERSION} == "0.0" ]]; then
         echo
         echo "   * * * Running custom image * * *"
         echo
-        echo "To return to standard image, run 'docker rmi sfauto' and re-run"
+        echo "To return to standard image, exit this container, run 'docker image rm ${SFAUTO_IMAGE_NAME}' and re-run"
     fi
     echo "======================================="
     echo
