@@ -279,7 +279,7 @@ def RtfiNodes(node_ips,
     log.info("Found {} {}".format(repo, version))
 
     # Sanity check that the requested network config and RTFI type is possible for this element version
-    if SolidFireVersion(version) < SolidFireVersion("9.0.0.0") and rtfi_type == "pxe" and configure_network == "keep":
+    if (SolidFireVersion(version) < SolidFireVersion("9.0.0.0") or SolidFireVersion(version) > SolidFireVersion("10.2.0.0")) and rtfi_type == "pxe" and configure_network == "keep":
         log.error("PXE RTFI cannot preserve the network config with this Element version. Use either iRTFI or reconfigure options")
         return False
     if configure_network == "keep":
