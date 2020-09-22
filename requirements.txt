@@ -2,14 +2,9 @@
 #   pip install -U -r requirements.txt
 # If you are on macOS, you will need to install some additional binary packages:
 #   brew install libvirt pkg-config ipmitool
- 
+
 dnspython==1.15.0
 libvirt-python<=4.0.0
 paramiko==1.16.0
 pyvmomi==5.5.0.2014.1.1
 requests==2.11.1
-
-coverage==4.0.3
-pylint==1.5.2
-pytest==2.8.5
-pytest-cov==2.2.0

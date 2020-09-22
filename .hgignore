@@ -7,3 +7,7 @@ tmp
 .cache
 *.orig
 configs
+*.pytest_cache*
+.viminfo
+.bash_history
+.coverage
