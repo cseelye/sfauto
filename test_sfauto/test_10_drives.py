@@ -9,7 +9,6 @@ from .fake_cluster import APIFailure, APIVersion
 from .testutil import RandomString, RandomIP
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.drive_verify_count
 class TestDriveVerifyCount(object):
 
     def test_negative_DriveVerifyCountFailure(self):
@@ -62,7 +61,6 @@ class TestDriveVerifyCount(object):
                            state=random.choice(["active", "available"]))
 
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.drive_add
 class TestDriveAdd(object):
 
     def test_negative_DriveAddNodeSearchFailure(self):
@@ -122,7 +120,6 @@ class TestDriveAdd(object):
                          wait_for_sync=random.choice([True, False]))
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.drive_remove
 class TestDriveRemove(object):
 
     def test_negative_DriveRemoveNodeSearchFailure(self):
@@ -197,7 +194,6 @@ class TestDriveRemove(object):
                             wait_for_sync=random.choice([True, False]))
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.drive_waitfor
 class TestDriveWaitfor(object):
 
     def test_negative_DriveWaitforListDrivesFailure(self):

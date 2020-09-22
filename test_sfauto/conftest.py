@@ -47,6 +47,9 @@ def pytest_configure(config):
     # Redirect so we can capture SSH commands (to simulate Linux clients or SF nodes)
     paramiko.SSHClient = FakeParamikoSSHClient
 
+    pytest.sfauto_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+    pytest.sfauto_lib_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "../libsf"))
+
 # Teardown run after all tests are completed
 def pytest_unconfigure(config):
     # Only keep the last 10 config files
@@ -116,15 +119,9 @@ def timer(request):
     request.addfinalizer(timer_stop)
 # ===============================================================================================
 
-def pytest_namespace():
-    return {
-        "sfauto_dir" : os.path.normpath(os.path.join(os.path.dirname(__file__), "..")),
-        "sfauto_lib_dir" : os.path.normpath(os.path.join(os.path.dirname(__file__), "../libsf"))
-    }
-
 def pytest_generate_tests(metafunc):
     if "scriptfiles_parametrize" in metafunc.fixturenames:
-        script_files = [os.path.join(pytest.sfauto_dir, f) for f in os.listdir(pytest.sfauto_dir) if os.path.isfile(os.path.join(pytest.sfauto_dir, f)) and f.endswith("py") and f != "test.py"]
+        script_files = [os.path.join(pytest.sfauto_dir, f) for f in os.listdir(pytest.sfauto_dir) if os.path.isfile(os.path.join(pytest.sfauto_dir, f)) and f.endswith("py") and f != "test.py" and f != "esx_configure.py"]
         metafunc.parametrize("scriptfiles_parametrize", script_files)
     if "libfiles_parametrize" in metafunc.fixturenames:
         script_files = [os.path.join(pytest.sfauto_lib_dir, f) for f in os.listdir(pytest.sfauto_lib_dir) if os.path.isfile(os.path.join(pytest.sfauto_lib_dir, f)) and f.endswith("py")]

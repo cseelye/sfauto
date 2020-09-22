@@ -11,7 +11,6 @@ from .fake_client import ClientCommandFailure
 from .testutil import RandomString, RandomIP
 
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.node_add_10g_route
 class TestNodeAdd10gRoute(object):
 
     def test_NodeAdd10gRoute(self):
@@ -40,7 +39,6 @@ class TestNodeAdd10gRoute(object):
                                          gateway=gateway)
 
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.cluster_add_nodes
 class TestClusterAddNodes(object):
 
     def test_negative_ClusterAddNodesListNodesFailure(self):
@@ -122,7 +120,6 @@ class TestClusterAddNodes(object):
                         wait_for_sync=random.choice([True, False]))
 
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.node_get_drive_count
 class TestNodeGetDriveCount(object):
 
     def test_NodeGetDriveCount(self):
@@ -164,7 +161,6 @@ class TestNodeGetDriveCount(object):
         assert int(drives["driveCount"]) == expected
 
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.cluster_list_nodes
 class TestClusterListNodes(object):
 
     def test_ActiveNodes(self, capfd):
@@ -274,7 +270,6 @@ class TestClusterListNodes(object):
 
 @pytest.mark.skipif(True, reason="Need to fake AT2 GetResource calls for looking up IPMI addresses")
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.node_power_off
 class TestNodePowerOff(object):
 
     def test_NodePowerOff(self):
@@ -308,7 +303,6 @@ class TestNodePowerOff(object):
 
 @pytest.mark.skipif(True, reason="Need to fake AT2 GetResource calls for looking up IPMI addresses")
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.node_power_on
 class TestNodePowerOn(object):
 
     def test_NodePowerOn(self):
@@ -349,7 +343,6 @@ class TestNodePowerOn(object):
 
 @pytest.mark.skipif(True, reason="Need to fake AT2 GetResource calls for looking up IPMI addresses")
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.node_power_cycle
 class TestNodePowerCycle(object):
 
     def test_NodePowerCycle(self):
@@ -399,7 +392,6 @@ class TestNodePowerCycle(object):
                                        ipmi_ips=ipmi_ips)
 
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.node_get_binary_version
 class TestNodeGetBinaryVersion(object):
 
     def test_NodeGetBinaryVersion(self):

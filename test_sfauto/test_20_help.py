@@ -6,7 +6,6 @@ import pytest
 import subprocess
 
 
-@pytest.mark.help
 class TestHelp:
 
     def test_ShortHelp(self, scriptfiles_parametrize):

@@ -11,7 +11,6 @@ from .fake_client import ClientConnectFailure, ClientCommandFailure
 from .testutil import RandomString, RandomIQN, RandomIP
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_add_clients
 class TestAddClientsToVolgroup(object):
 
     def test_negative_AddClientsToVolgroupClientFailure(self):
@@ -57,7 +56,6 @@ class TestAddClientsToVolgroup(object):
                                     connection_type="iscsi")
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_create_account
 class TestClientCreateAccount(object):
 
     def test_negative_ClientCreateAccountClusterInfoFailure(self):
@@ -119,7 +117,6 @@ class TestClientCreateAccount(object):
                                            chap=False)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.create_volgroup_for_client
 class TestClientCreateVolgroup(object):
 
     def test_negative_ClientCreateVolgroupSearchFailure(self):
@@ -162,7 +159,6 @@ class TestClientCreateVolgroup(object):
 
 @pytest.mark.incremental
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_create_volumes
 class TestClientCreateVolumes(object):
 
     def test_negative_ClientCreateVolumesAccountSearchFailure(self):
@@ -298,7 +294,6 @@ class TestClientCreateVolumes(object):
         total_volumes += volume_count
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_delete_account
 class TestClientDeleteAccount(object):
 
     def test_negative_ClientDeleteAccountConnectFailure(self):
@@ -354,7 +349,6 @@ class TestClientDeleteAccount(object):
         assert ClientDeleteAccount(client_ips=client_ips)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_delete_volumes
 class TestClientDeleteVolumes(object):
 
     def test_negative_DeleteVolumesforClientsConnectionFailure(self):
@@ -422,7 +416,6 @@ class TestClientDeleteVolumes(object):
                                        purge=random.choice([True, False]))
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_remove_from_volgroup
 class TestClientRemoveFromVolgroup(object):
 
     def test_negative_ClientRemoveFromVolgroupConnectFailure(self):
@@ -489,7 +482,6 @@ class TestClientRemoveFromVolgroup(object):
                                          connection_type="iscsi")
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_mount_volumes
 class TestClientMountVolumes(object):
 
     def test_NoVolumes(self):
@@ -511,7 +503,6 @@ class TestClientMountVolumes(object):
         assert ClientMountVolumes(client_ips=client_ips)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_verify_volume_count
 class TestClientVerifyVolumeCount(object):
 
     def test_NoVolumes(self, capfd):
@@ -616,7 +607,6 @@ class TestClientVerifyVolumeCount(object):
         assert stdout.count("Client command failed") == len(client_ips)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_list_volumes
 class TestGetClientVolumes(object):
 
     def test_NoVolumes(self, capfd):
@@ -687,7 +677,6 @@ class TestGetClientVolumes(object):
         assert "SSH error:" in stdout
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_clean_iscsi
 class TestClientCleanIscsi(object):
 
     def test_NoVolumes(self, capfd):
@@ -741,7 +730,6 @@ class TestClientCleanIscsi(object):
         print
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_login_volumes
 class TestClientLoginVolumes(object):
 
     def test_NoVolumes(self, capfd):
@@ -921,7 +909,6 @@ class TestClientLoginVolumes(object):
 
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.client_logout_volumes
 class TestClientLogoutVolumes(object):
 
     def test_NoVolumes(self, capfd):

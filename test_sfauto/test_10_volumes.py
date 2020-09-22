@@ -9,7 +9,6 @@ from .fake_cluster import APIFailure, APIVersion
 from .testutil import RandomString, RandomIP
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_create
 class TestVolumeCreate(object):
 
     def test_negative_VolumeCreateNoAccount(self):
@@ -118,7 +117,6 @@ class TestVolumeCreate(object):
                              account_id=existing_id)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_delete
 class TestVolumeDelete(object):
 
     def test_VolumeDeleteNoMatches(self):
@@ -190,7 +188,6 @@ class TestVolumeDelete(object):
                              purge=random.choice([True, False]))
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_purge
 class TestPurgeVolumes(object):
 
     def test_negative_VolumePurgeSearchFailure(self):
@@ -236,7 +233,6 @@ class TestPurgeVolumes(object):
         assert VolumePurge()
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_extend
 class TestVolumeExtend(object):
 
     def test_VolumeExtendNoMatch(self):
@@ -300,7 +296,6 @@ class TestVolumeExtend(object):
                                      volume_ids=volume_ids)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_set_qos
 class TestVolumeSetQos(object):
 
     def test_VolumeSetQos(self):
@@ -347,7 +342,6 @@ class TestVolumeSetQos(object):
             assert not VolumeSetQos(volume_ids=volume_ids)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_lock
 class TestVolumeLock(object):
 
     def test_VolumeLock(self):
@@ -383,7 +377,6 @@ class TestVolumeLock(object):
             assert not VolumeLock(volume_ids=volume_ids)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_unlock
 class TestVolumeUnlock(object):
 
     def test_VolumeUnlock(self):
@@ -419,7 +412,6 @@ class TestVolumeUnlock(object):
             assert not VolumeUnlock(volume_ids=volume_ids)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_set_attributes
 class TestVolumeSetAttributes(object):
 
     def test_VolumeSetAttribute(self):
@@ -465,7 +457,6 @@ class TestVolumeSetAttributes(object):
                                        attribute_value=RandomString(64))
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_get_iqn
 class TestGetVolumeIQN(object):
 
     def test_negative_GetVolumeIQNNoVolumeName(self):
@@ -523,7 +514,6 @@ class TestGetVolumeIQN(object):
         assert iqn.endswith("{}.{}".format(volume["name"], volume["volumeID"]))
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.clone_volume
 class TestVolumeClone(object):
 
     def test_negative_VolumeCloneLimitsFailure(self):
@@ -606,7 +596,6 @@ class TestVolumeClone(object):
                             clone_size=clone_size)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.remoterep_pause_volume
 class TestRemoteRepPauseVolume(object):
 
     def test_negative_RemoteRepPauseVolumeSearchFailure(self):
@@ -646,7 +635,6 @@ class TestRemoteRepPauseVolume(object):
         assert RemoteRepPauseVolume(volume_ids=volume_ids)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.remoterep_resume_volume
 class TestRemoteRepResumeVolume(object):
 
     def test_negative_RemoteRepResumeVolumeSearchFailure(self):
@@ -686,7 +674,6 @@ class TestRemoteRepResumeVolume(object):
         assert RemoteRepResumeVolume(volume_ids=volume_ids)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volume_force_whole_sync
 class TestForceWoleSync(object):
 
     def test_VolumeForceWholeSyncWait(self):

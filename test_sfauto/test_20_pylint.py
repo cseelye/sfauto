@@ -6,7 +6,6 @@ import os
 import pytest
 import subprocess
 
-@pytest.mark.pylint
 def test_pylint_scripts(scriptfiles_parametrize):
     """ Run pylint on each script """
 
@@ -27,7 +26,6 @@ def test_pylint_scripts(scriptfiles_parametrize):
     # 32 : usage error
     assert retcode == 0 or retcode == 16
 
-@pytest.mark.pylint
 def test_pylint_libs(libfiles_parametrize):
     """ Run pylint on each lib """
 

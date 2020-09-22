@@ -8,7 +8,6 @@ from .fake_cluster import APIFailure, APIVersion
 from .testutil import RandomString, RandomIQN, RandomIP
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.account_create
 class TestAccountCreate(object):
 
     def test_negative_AccountCreateAccountSearchFailure(self):
@@ -48,7 +47,6 @@ class TestAccountCreate(object):
             assert not AccountCreate(account_name=RandomString(random.randint(1, 64)))
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.account_list_volumes
 class TestAccountListVolumes(object):
 
     def test_AccountListVolumes(self):
@@ -134,7 +132,6 @@ class TestAccountListVolumes(object):
         assert len(js["volumes"]) == len(account["volumes"])
 
 @pytest.mark.usefixtures("fake_cluster_permethod")
-@pytest.mark.account_delete
 class TestAccountDelete(object):
 
     def test_AccountDeleteNoAccount(self):
@@ -213,7 +210,6 @@ class TestAccountDelete(object):
                              strict=True)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.account_move_volumes
 class TestAccountMoveVolumes(object):
 
     def test_negative_AccountMoveVolumesNoAccount(self):

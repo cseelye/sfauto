@@ -9,7 +9,6 @@ from .fake_cluster import APIFailure, APIVersion
 from .testutil import RandomString, RandomIP, RandomIQN
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_create
 class TestCreateVolgroup(object):
 
     def test_CreateVolgroup(self):
@@ -73,7 +72,6 @@ class TestCreateVolgroup(object):
                                          volume_ids=volume_ids)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_add_initiators
 class TestAddInitiatorsToVolgroup(object):
 
     def test_negative_AddInitiatorsToVolgroupNoGroup(self):
@@ -121,7 +119,6 @@ class TestAddInitiatorsToVolgroup(object):
                                        volgroup_name=volgroup_name)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_add_volumes
 class TestAddVolumesToVolgroup(object):
 
     def test_negative_AddVolumesToVolgroupNoGroup(self):
@@ -193,7 +190,6 @@ class TestAddVolumesToVolgroup(object):
                                     volgroup_name=volgroup["name"])
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_delete_all
 class TestDeleteAllVolgroups(object):
 
     def test_negative_DeleteAllVolgroupsSearchFailure(self):
@@ -214,7 +210,6 @@ class TestDeleteAllVolgroups(object):
         assert DeleteAllVolgroups()
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_delete
 class TestDeleteVolgroup(object):
 
     def test_negative_DeleteVolgroupNoGroupStrict(self):
@@ -249,7 +244,6 @@ class TestDeleteVolgroup(object):
         assert DeleteVolgroup(volgroup_id=volgroup_id)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_list
 class TestListVolgroups(object):
 
     def test_ListVolgroups(self):
@@ -286,7 +280,6 @@ class TestListVolgroups(object):
         assert all([name in groups["volumeAccessGroups"] for name in group_names])
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_modify_lun_assignments
 class TestModifyVolgroupLunAssignments(object):
 
     def test_negative_ModifyVolgroupLunAssignmentsNoGroup(self):
@@ -389,7 +382,6 @@ class TestModifyVolgroupLunAssignments(object):
                                             volgroup_id=volgroup_id)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_remove_initiators
 class TestRemoveInitiatorsFromVolgroup(object):
 
     def test_negative_RemoveInitiatorsFromVolgroupNoGroup(self):
@@ -437,7 +429,6 @@ class TestRemoveInitiatorsFromVolgroup(object):
                                             volgroup_id=volgroup["volumeAccessGroupID"])
 
 @pytest.mark.usefixtures("fake_cluster_perclass")
-@pytest.mark.volgroup_remove_volumes
 class TestRemoveVolumesFromVolgroup(object):
 
     def test_negative_RemoveVolumesFromVolgroupNoGroup(self):

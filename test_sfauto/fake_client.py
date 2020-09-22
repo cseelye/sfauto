@@ -321,6 +321,8 @@ class FakeClient(object):
                 (21, "", "iscsiadm: No active sessions."),
             "/etc/init.d/*open-iscsi stop":
                 (0, " * Unmounting iscsi-backed filesystems\n...done.\n * Disconnecting iSCSI targets\niscsiadm: No matching sessions found\n    ...done.\n * Stopping iSCSI initiator service\n   ...done.", ""),
+            "systemctl stop iscsid":
+                (0, " * Unmounting iscsi-backed filesystems\n...done.\n * Disconnecting iSCSI targets\niscsiadm: No matching sessions found\n    ...done.\n * Stopping iSCSI initiator service\n   ...done.", ""),
             "killall -9 iscsid":
                 (0, "", ""),
             "rm -rf /etc/iscsi/ifaces /etc/iscsi/nodes /etc/iscsi/send_targets":
@@ -330,6 +332,8 @@ class FakeClient(object):
             "touch /etc/iscsi/iscsi.initramfs":
                 (0, "", ""),
             "/etc/init.d/*open-iscsi start":
+                (0, " * Starting iSCSI initiator service iscsid\n   ...done.\n * Setting up iSCSI targets\n   ...done.\n * Mounting network filesystems\n   ...done.", ""),
+            "systemctl start iscsid":
                 (0, " * Starting iSCSI initiator service iscsid\n   ...done.\n * Setting up iSCSI targets\n   ...done.\n * Mounting network filesystems\n   ...done.", ""),
             "iscsiadm -m node -o update -n node.startup -v automatic -T":
                 (0, "", ""),
