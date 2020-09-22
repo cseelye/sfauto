@@ -29,9 +29,6 @@ class SolidFireError(Exception):
         self.originalTraceback = originalTraceback
         self.innerException = innerException
 
-    def __str__(self):
-        return self.message
-
     def IsRetryable(self):
         return False
 
@@ -482,7 +479,6 @@ class SolidFireAPI(object):
                  username,
                  password,
                  port=443,
-                 *args,
                  **kwargs):
         """
         Arguments:
@@ -860,9 +856,8 @@ class AutotestAPI(SolidFireAPI):
                  username="automation",
                  password="password",
                  port=443,
-                 *args,
                  **kwargs):
-        super(AutotestAPI, self).__init__(server, username, password, *args, **kwargs)
+        super(AutotestAPI, self).__init__(server, username, password, **kwargs)
 
     def ListResources(self):
         """
@@ -896,8 +891,8 @@ class SolidFireNodeAPI(SolidFireAPI):
     """Make SolidFire node API calls
     NOT thread safe - each thread should use its own instance"""
 
-    def __init__(self, nodeIP, username=None, password=None, port=442, *args, **kwargs):
-        super(SolidFireNodeAPI, self).__init__(nodeIP, username, password, port, *args, **kwargs)
+    def __init__(self, nodeIP, username=None, password=None, port=442, **kwargs):
+        super(SolidFireNodeAPI, self).__init__(nodeIP, username, password, port, **kwargs)
         self.minApiVersion = 5.0
 
     def Call(self, methodName, methodParams=None, apiVersion=None, timeout=60):

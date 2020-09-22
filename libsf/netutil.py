@@ -472,7 +472,7 @@ if LOCAL_SYS == "Windows":
         if WSAAddressToStringA(ctypes.byref(addr), addr_size, None, ip_string, ctypes.byref(ip_string_size)) != 0:
             raise socket.error(ctypes.FormatError())
 
-        return ip_string[:ip_string_size.value]
+        return ip_string[:ip_string_size.value] #pylint: disable=invalid-slice-index
 
     socket.inet_pton = inet_pton
     socket.inet_ntop = inet_ntop

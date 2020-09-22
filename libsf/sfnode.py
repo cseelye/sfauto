@@ -2,7 +2,6 @@
 """
 SolidFire node object and related data structures
 """
-import multiprocessing
 import platform
 import re
 import time

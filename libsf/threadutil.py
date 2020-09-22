@@ -120,8 +120,8 @@ class ThreadPool(object):
         Returns:
             AsyncResult object
         """
-        async = self.threadPool.apply_async(threadFunc, args, kwargs)
-        res = AsyncResult(async)
+        async_res = self.threadPool.apply_async(threadFunc, args, kwargs)
+        res = AsyncResult(async_res)
         self.results.append(res)
         return res
 
@@ -153,10 +153,10 @@ def WaitForThreads(asyncResults):
     """
     log = GetLogger()
     allgood = True
-    for async in asyncResults:
+    for async_res in asyncResults:
         # If the result is not True, or if there is an exception, this thread failed
         try:
-            result =  async.Get()
+            result =  async_res.Get()
             if result is False:
                 allgood = False
         except SolidFireError as e:

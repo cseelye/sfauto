@@ -115,7 +115,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
             #pylint: enable=import-error
             fn = getattr(self.stream, 'fileno', None)
             if fn is not None:
-                fd = fn()
+                fd = fn() #pylint: disable=not-callable
                 if fd in (1, 2): # stdout or stderr
                     c = win32console.GetStdHandle(-10 - fd)
             parts = self.ansiEscapes.split(message)
