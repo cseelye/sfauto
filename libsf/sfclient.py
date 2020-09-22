@@ -296,7 +296,7 @@ class SFClient:
                 # If winexe succeeded but the remote command failed, we want to pass the non-zero return and stdout/stderr back to the caller
                 # If winexe itself failed to connect and run the command we want to raise an exception
 
-#                self.log.debug2("return_code={} stdout={}".format(return_code, stdout))
+                # self.log.debug2("return_code={} stdout={}".format(return_code, stdout))
 
                 # Look for known error signatures from winexe, and assume everything else is from the remote command
                 if "NT_STATUS_RESOURCE_NAME_NOT_FOUND" in stdout:
@@ -1045,7 +1045,7 @@ class SFClient:
             self._debug("Logging out of all targets")
             self.ExecuteCommand("iscsiadm -m node -U all", throwOnError=False)
             self.ExecuteCommand("iscsiadm -m session -o delete", throwOnError=False)
-            self.ExecuteCommand("/etc/init.d/*open-iscsi stop")
+            self.ExecuteCommand("systemctl stop iscsid")
             time.sleep(sfdefaults.TIME_SECOND * 3)
             self.ExecuteCommand("killall -9 iscsid", throwOnError=False)
 
@@ -1057,7 +1057,7 @@ class SFClient:
             self.ExecuteCommand("rm -rf /etc/iscsi/ifaces /etc/iscsi/nodes /etc/iscsi/send_targets")
             self.ExecuteCommand("rm -rf /var/lib/iscsi")
             self.ExecuteCommand("touch /etc/iscsi/iscsi.initramfs")
-            self.ExecuteCommand("/etc/init.d/*open-iscsi start")
+            self.ExecuteCommand("systemctl start iscsid")
             time.sleep(sfdefaults.TIME_SECOND * 5)
             self._passed("Cleaned iSCSI")
 
