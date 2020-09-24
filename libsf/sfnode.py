@@ -414,7 +414,7 @@ class SFNode(object):
         params = {}
         params["cluster"] = {}
         params["cluster"]["cluster"] = clusterName
-        self.api.CallWithRetry("SetConfig", params)
+        self.api.CallWithRetry("SetClusterConfig", params)
         # Make sure the bootstrap API is back before returning
         self.log.debug("Waiting for bootstrap API to be ready")
         self.WaitForBootstrapAPI()
