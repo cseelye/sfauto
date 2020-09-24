@@ -1,0 +1,25 @@
+#!/bin/bash
+set -eo pipefail
+
+# Path to an explicit docker binary. Leave blank to auto-discover
+DOCKER_BINARY=${DOCKER_BINARY:-}
+SFAUTO_IMAGE_NAME=${SFAUTO_IMAGE_NAME:-sfauto}
+
+# Make sure we are not inside a container already
+[[ -e /proc/1 ]] && grep -q 'cpu:/docker/\|libpod' /proc/1/cgroup && { echo "Cannot manage a container inside another container"; exit 1; }
+
+# Find the docker binary
+if [[ -z ${DOCKER_BINARY} ]]; then
+    for possible in "$(which docker 2>/dev/null || true)" /usr/local/bin/docker /usr/bin/docker "$(which podman 2>/dev/null || true)" /usr/bin/podman; do
+        if [[ -e "${possible}" ]]; then
+            DOCKER_BINARY="${possible}"
+            break
+        fi
+    done
+fi
+if [[ -z ${DOCKER_BINARY} ]]; then
+    echo "Could not find a docker binary"
+    exit 1
+fi
+
+"${DOCKER_BINARY}" image rm --force ${SFAUTO_IMAGE_NAME}

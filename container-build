@@ -1,46 +1,85 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
-# The VCS_REF will be set to the last changeset where the Dockerfile changed
-# The BUILD_DATE will be set to the last datestamp the Dockerfile changed
-# The VERSION will be set to the contents of the .container-version file
+# Path to an explicit docker binary. Leave blank to auto-discover
+DOCKER_BINARY=${DOCKER_BINARY:-}
+DOCKERFILE=${DOCKERFILE-Dockerfile}
+SFAUTO_IMAGE_NAME=${SFAUTO_IMAGE_NAME:-sfauto}
+
+# The image revision will be set to the revision of HEAD
+# The image date will be set to the last datestamp the repo changed
+# The image version will be set to the contents of the .container-version file
 
 
 # Make sure we are not inside a container already
 [[ -e /proc/1 ]] && grep -q 'cpu:/docker/' /proc/1/cgroup && { echo "Cannot build a container inside another container"; exit 1; }
 
-LOCAL_CHANGES=0
-hg status Dockerfile | grep -q Dockerfile && LOCAL_CHANGES=1
+# Find the docker binary
+if [[ -z ${DOCKER_BINARY} ]]; then
+    for possible in "$(which docker 2>/dev/null || true)" /usr/local/bin/docker /usr/bin/docker "$(which podman 2>/dev/null || true)" /usr/bin/podman; do
+        if [[ -e "${possible}" ]]; then
+            DOCKER_BINARY="${possible}"
+            break
+        fi
+    done
+fi
+if [[ -z ${DOCKER_BINARY} ]]; then
+    echo "Could not find a docker binary"
+    exit 1
+fi
+
+# Check if the sandbox is clean
+local_changes=0
+if ! git diff --exit-code &>/dev/null; then
+    local_changes=1
+fi
+
+# Create/determine the date for the image
+if [[ ${local_changes} -eq 1 ]]; then
+    image_date="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+else
+    repo_date=$(git log -n 1 --pretty=format:%at -- ${DOCKERFILE} 2>/dev/null | cut -d' ' -f1 | cut -d'.' -f1 || date '+%s')
+    if [[ $(uname) == "Darwin" ]]; then
+        date_args="-j -f %s "
+    else
+        date_args='-d @'
+    fi
+    image_date=$(date -u ${date_args}${repo_date} +"%Y-%m-%dT%H:%M:%SZ")
+fi
+
+# Determine the revision for the image
+image_revision="$(git log -n 1 --pretty=format:%H -- ${DOCKERFILE} 2>/dev/null || echo 'unknown')"
+
+# Determine the revision for the image
+if [[ ${local_changes} -eq 1 ]]; then
+    image_version="0.0"
+else
+    image_version="$(cat .container-version || echo '0.0')"
+fi
 
 echo
 echo "======================================="
-echo "    Building SFAUTO docker image"
-if [[ ${LOCAL_CHANGES} -eq 1 ]]; then
+echo "    Building SFAUTO container image"
+if [[ ${local_changes} -eq 1 ]]; then
     echo
-    echo "* * * Local changes to Dockerfile * * *"
+    echo "* * * Local changes to repo * * *"
     echo
     echo "    Building custom sfauto image"
 fi
+echo "        Version ${image_version}"
+echo "        Revision ${image_revision}"
+echo "        Build date ${image_date}"
 echo "======================================="
 echo
 echo
 
-TIMESTAMP=$(hg log --limit 1 --template '{date}\n' Dockerfile | cut -d' ' -f1 | cut -d'.' -f1)
-if [[ $(uname) == "Darwin" ]]; then
-    date_args="-j -f %s "
-else
-    date_args='-d @'
-fi
-DATE=$(date -u ${date_args}${TIMESTAMP} +"%Y-%m-%dT%H:%M:%SZ")
+${DOCKER_BINARY} image build --rm --force-rm \
+                 --build-arg VCS_REF="${image_revision}" \
+                 --build-arg BUILD_DATE="${image_date}" \
+                 --build-arg VERSION="${image_version}" \
+                 --tag ${SFAUTO_IMAGE_NAME} \
+                 --file ${DOCKERFILE} \
+                 .
 
-VERSION=$(cat .container-version)
-hg status Dockerfile | grep -q Dockerfile && VERSION=0.0
-
-docker build --build-arg VCS_REF=$(hg log --limit 1 --template '{node}' Dockerfile ) \
-             --build-arg BUILD_DATE=${DATE} \
-             --build-arg VERSION=${VERSION} \
-             --tag sfauto \
-             .
-
-echo "Finished building SFAUTO docker image"
+echo "Finished building SFAUTO container image"
 echo

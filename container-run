@@ -11,7 +11,7 @@ SFAUTO_IMAGE_NAME=${SFAUTO_IMAGE_NAME:-sfauto}
 SFAUTO_CONTAINER_NAME=${SFAUTO_CONTAINER_NAME:-sfauto-shell-}
 
 # Path to an explicit docker binary. Leave blank to auto-discover
-DOCKER_BINARY=${DOCKER_BINARY-}
+DOCKER_BINARY=${DOCKER_BINARY:-}
 
 
 
@@ -42,110 +42,75 @@ echo ${PATH} | grep -q /usr/local/bin || export PATH=/usr/local/bin:"${PATH}"
 [[ -e /proc/1 ]] && grep -q 'cpu:/docker/' /proc/1/cgroup && { echo "Cannot start a container inside another container"; exit 1; }
 
 # Find the docker binary
-[[ -z ${DOCKER_BINARY} ]] && { DOCKER_BINARY=$(which docker || true);
-    [[ -z ${DOCKER_BINARY} ]] && { DOCKER_BINARY=/usr/local/bin/docker;
-        [[ -e ${DOCKER_BINARY} ]] || { DOCKER_BINARY=/usr/bin/docker;
-            [[ -e ${DOCKER_BINARY} ]] || { echo "Could not find a docker binary"; exit 1; }
-        }
-    }
-}
+if [[ -z ${DOCKER_BINARY} ]]; then
+    for possible in "$(which docker 2>/dev/null || true)" /usr/local/bin/docker /usr/bin/docker "$(which podman 2>/dev/null || true)" /usr/bin/podman; do
+        if [[ -e "${possible}" ]]; then
+            DOCKER_BINARY="${possible}"
+            break
+        fi
+    done
+fi
+if [[ -z ${DOCKER_BINARY} ]]; then
+    echo "Could not find a docker binary"
+    exit 1
+fi
 
 SFAUTO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "${SFAUTO_DIR}"
 
-"${DOCKER_BINARY}" image ls --format '{{.Repository}}:{{.Tag}}' | grep -q ${SFAUTO_IMAGE_NAME} && IMAGE_EXISTS=1 || IMAGE_EXISTS=0
-if [[ ${IMAGE_EXISTS} -eq 0 && ${NEVER_REBUILD} -eq 1 ]]; then
+if "${DOCKER_BINARY}" image ls --format '{{.Repository}}:{{.Tag}}' | grep -q ${SFAUTO_IMAGE_NAME}; then
+    image_exists=1
+else
+    image_exists=0
+fi
+
+if [[ ${image_exists} -eq 0 && ${NEVER_REBUILD} -eq 1 ]]; then
     echo "${SFAUTO_IMAGE_NAME} image does not exist and must be built"
     exit 1
 fi
 
-IMAGE_VERSION=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output .[0].Config.Labels.version || echo "")
-IMAGE_REV=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["vcs-ref"]' || echo "")
+# Check if the sandbox is clean
+local_changes=0
+if ! git diff --exit-code &>/dev/null; then
+    local_changes=1
+fi
 
-if [[ ${NEVER_REBUILD} -eq 0 && -e .container-version ]]; then
+image_version=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["org.opencontainers.image.version"]' || echo "")
+image_rev=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["org.opencontainers.image.revision"]' || echo "")
+image_date=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["org.opencontainers.image.created"]' || echo "")
+
+repo_image_version="$(cat .container-version || echo '0.0')"
+repo_image_rev="$(git log -n 1 --pretty=format:%H -- Dockerfile 2>/dev/null || echo 'unknown')"
+
+if [[ ${NEVER_REBUILD} -eq 0 ]]; then
     # See if the image needs rebuilding
     rebuild=0
 
     # If the image deos not exist locally, build it
-    if [[ ${IMAGE_EXISTS} -ne 1 ]]; then
+    if [[ ${image_exists} -ne 1 ]]; then
         rebuild=1
-    else
-        # Compare the changeset/version of the docker image to the Dockerfile in the current repo
-        REPO_VERSION=$(cat .container-version)
-        REPO_REV=$(hg log --limit 1 --template '{node}' Dockerfile)
-
-        # echo "IMAGE_VERSION='${IMAGE_VERSION}'"
-        # echo " REPO_VERSION='${REPO_VERSION}'"
-        # echo "IMAGE_REV='${IMAGE_REV}'"
-        # echo " REPO_REV='${REPO_REV}'"
-
-        # If there was no version label, it is an old image so rebuild it
-        if [[ -z ${IMAGE_VERSION} ]]; then
-            rebuild=1
-
+    elif [[ ${image_version} != "0.0" && ( ${image_rev} != ${repo_image_rev} || ${image_version} != ${repo_image_version} ) ]]; then
+        # Compare the changeset/version of the container image to the Dockerfile in the current repo
         # If the version is 0.0, it was a local build and we don't want to overwrite it
         # If the version is not 0.0, and the rev or version in the repo is newer, rebuild the image
-        elif [[ ${IMAGE_VERSION} != "0.0" && ( ${IMAGE_REV} != ${REPO_REV} || ${IMAGE_VERSION} != ${REPO_VERSION} ) ]]; then
-                rebuild=1
-        fi
+
+        # echo "     image_version='${image_version}'"
+        # echo "repo_image_version='${repo_image_version}'"
+        # echo "     image_rev='${image_rev}'"
+        # echo "repo_image_rev='${repo_image_rev}'"
+
+        rebuild=1
     fi
 
     # Build the container
     if [[ ${rebuild} -eq 1 ]]; then
         ./container-build
-        IMAGE_VERSION=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output .[0].Config.Labels.version || echo "")
-        IMAGE_REV=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["vcs-ref"]' || echo "")
+        image_version=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["org.opencontainers.image.version"]' || echo "")
+        image_rev=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["org.opencontainers.image.revision"]' || echo "")
+        image_date=$(${DOCKER_BINARY} image inspect ${SFAUTO_IMAGE_NAME} 2>/dev/null | jq --raw-output '.[0].Config.Labels | .["org.opencontainers.image.created"]' || echo "")
     fi
 fi
 
-
-# If the user did not supply a command to run, start the container with an interactive shell
-if [[ $# -le 0 ]]; then
-    echo
-    echo "======================================="
-    echo "     Entering SFAUTO docker container"
-    echo "Version ${IMAGE_VERSION}-${IMAGE_REV}"
-    if [[ ${IMAGE_VERSION} == "0.0" ]]; then
-        echo
-        echo "   * * * Running custom image * * *"
-        echo
-        echo "To return to standard image, exit this container, run 'docker image rm ${SFAUTO_IMAGE_NAME}' and re-run"
-    fi
-    echo "======================================="
-    echo
-
-    cmd="/bin/bash"
-
-# If the user specified a command, run that command in the container
-else
-    cmd="$*"
-fi
-
-# Get the host name and IP
-HOSTNAME=$(hostname -s)
-if [[ $(uname) == "Darwin" ]]; then
-    ORIGINAL_IFS=${IFS}
-    IFS=$'\n'
-    for service in $(/usr/sbin/networksetup -listnetworkserviceorder | grep '([0123456789])' | cut -d' ' -f2-); do
-        HOST_IP=$(/usr/sbin/networksetup -getinfo "${service}" | grep "^IP address" | cut -d' ' -f3 || true)
-        [[ -n ${HOST_IP} ]] && break
-    done
-    IFS=${ORIGINAL_IFS}
-else
-    for nicpath in /sys/class/net/*; do
-        [[ ! -e ${nicpath}/device ]] && continue
-        HOST_IP=$(/sbin/ifconfig $(basename ${nicpath}) | grep inet | awk '$1=="inet" {print $2}')
-    done
-fi
-
-# Find the volumes to mount into the container
-eval HOMEDIR="~"
-BASHRC="${HOMEDIR}/.bashrc"
-[[ -e ${BASHRC} ]] && BASHRC_VOLUME="--volume ${BASHRC}:/root/.bashrc" || BASHRC_VOLUME=""
-VIMRC="${HOMEDIR}/.vimrc"
-[[ -e ${VIMRC} ]] && VIMRC_VOLUME="--volume ${VIMRC}:/root/.vimrc" || VIMRC_VOLUME=""
-DOTSSH="${HOMEDIR}/.ssh"
-[[ -d ${DOTSSH} ]] && SSH_VOLUME="--volume ${DOTSSH}:/root/.ssh" || SSH_VOLUME=""
 
 # Save the SF* variables into a file to import them into the container
 envfile=$(mktemp -t docker-env.XXXX)
@@ -154,6 +119,29 @@ env | grep "^SF" | sort > ${envfile} || true
 # Find any other existing containers to give this one a unique name
 index=$("${DOCKER_BINARY}" container ls --all --format '{{.Names}}' | grep ${SFAUTO_CONTAINER_NAME} | cut -d- -f3 | sort | tail -n1 || echo 0)
 (( index++ )) || true
+
+# If the user did not supply a command to run, start the container with an interactive shell
+if [[ $# -le 0 ]]; then
+    echo
+    echo "===================================================="
+    echo "     Entering SFAUTO container"
+    echo "Version ${image_version}-${image_rev}"
+    echo "        ${image_date}"
+    if [[ ${image_version} == "0.0" ]]; then
+        echo
+        echo "   * * * Running custom image * * *"
+        echo
+        echo "To return to standard image, exit this container, use container-delete and re-run"
+    fi
+    echo "===================================================="
+    echo
+
+    cmd="/bin/bash"
+
+# If the user specified a command, run that command in the container
+else
+    cmd="$*"
+fi
 
 # Start the container.  To make it as seamless as possible:
 #   Run in privileged mode so the user has max power
@@ -167,13 +155,9 @@ exec "${DOCKER_BINARY}" container run \
   --tty \
   --privileged \
   --rm \
-  --env DOCKER_HOST_NAME=${HOSTNAME} \
-  --env DOCKER_HOST_IP=${HOST_IP:-} \
-  --env DOCKER_HOST_USER=${USER:-$(whoami)} \
   --env-file ${envfile} \
-  --volume ${SFAUTO_DIR}:/root \
-  --volume /var/run/docker.sock:/var/run/docker.sock \
-  --workdir /root \
+  --volume ${SFAUTO_DIR}:/sfauto \
+  --workdir /sfauto \
   --hostname ${SFAUTO_CONTAINER_NAME}${index} \
   --name ${SFAUTO_CONTAINER_NAME}${index} \
   ${SFAUTO_CONTAINER_RUN_OPTIONS} \
