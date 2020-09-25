@@ -76,7 +76,7 @@ def fake_socket(*args, **kwargs):
     """Fake a call to socket.socket()"""
     return FakeSocket(*args, **kwargs)
 
-class FakeSocket():
+class FakeSocket(object):
     """Fake a socket object"""
 
     def __init__(self, *args, **kwargs):

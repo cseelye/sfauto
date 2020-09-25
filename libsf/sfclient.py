@@ -33,7 +33,7 @@ def _prefix(logfn):
     return wrapped
 
 #pylint: disable=method-hidden,protected-access
-class SFClient:
+class SFClient(object):
     """Common interactions with a client"""
 
     def __init__(self, clientIP, clientUser, clientPass, clientTypeHint=None):

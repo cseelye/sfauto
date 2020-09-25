@@ -195,7 +195,7 @@ def threadwrapper(func):
 
     return wrapper
 
-class LockFile:
+class LockFile(object):
     def __init__(self, lockname):
         self.lockFile = "/var/tmp/{}.lockfile".format(lockname)
         self.fd = open(self.lockFile, "w")
