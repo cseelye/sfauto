@@ -89,7 +89,7 @@ def ModifyVolgroupLunAssignments(method='seq',
             lun_assignments.append({'volumeID' : volume_id, 'lun' : lun})
             lun -= 1
     elif method == 'rand':
-        luns = range(lun_min, lun_max+1)
+        luns = list(range(lun_min, lun_max+1))
         random.shuffle(luns)
         for i, volume_id in enumerate(volgroup.volumes):
             lun_assignments.append({'volumeID' : volume_id, 'lun' : luns[i]})
