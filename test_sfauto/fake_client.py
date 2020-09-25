@@ -388,7 +388,7 @@ class FakeClient(object):
             self.portal = RandomIP()
             volume_ids = RandomSequence(volumeCount)
             cluster_id = RandomString(4).lower()
-            for idx in xrange(1, volumeCount+1):
+            for idx in range(1, volumeCount+1):
                 iqn = "iqn.2010-01.com.solidfire:{}.v-{:0>5d}.{}".format(cluster_id, volume_ids[idx-1], volume_ids[idx-1])
 
                 device = self.GetNextDiskName()
@@ -409,7 +409,7 @@ class FakeClient(object):
         volume_ids = RandomSequence(volumeCount)
         cluster_id = RandomString(4).lower()
         if volumeCount > 0:
-            for idx in xrange(1, volumeCount+1):
+            for idx in range(1, volumeCount+1):
                 iqn = "iqn.2010-01.com.solidfire:{}.v-{:0>5d}.{}".format(cluster_id, volume_ids[idx-1], volume_ids[idx-1])
                 self.fakeDiscovery.append(iqn)
         globalconfig.clients.UpdateClient(self.ip, self)

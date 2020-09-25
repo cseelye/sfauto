@@ -4,7 +4,6 @@ SolidFire volume access group object and related data structures
 """
 from . import SolidFireClusterAPI, GetHighestAPIVersion, InvalidArgumentError, UnknownObjectError
 from .logutil import GetLogger
-import six
 
 def _refresh(fn):
     """Decorator to refresh the attributes of this object from the cluster"""

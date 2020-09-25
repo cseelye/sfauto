@@ -19,14 +19,14 @@ class TestAddClientsToVolgroup(object):
         from volgroup_add_clients import AddClientsToVolgroup
         with ClientCommandFailure("( [[ -e /etc/open-iscsi/initiatorname.iscsi ]] && cat /etc/open-iscsi/initiatorname.iscsi || cat /etc/iscsi/initiatorname.iscsi ) | grep -v '#' | cut -d'=' -f2",
                                   (1, "", "No such file or directory")):
-            assert not AddClientsToVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert not AddClientsToVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                             volgroup_id=volgroup_id,
                                             connection_type="iscsi")
 
     def test_negative_AddClientsToVolgroupNoGroup(self):
         print
         from volgroup_add_clients import AddClientsToVolgroup
-        assert not AddClientsToVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+        assert not AddClientsToVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                         volgroup_id=9999,
                                         connection_type="iscsi")
 
@@ -43,7 +43,7 @@ class TestAddClientsToVolgroup(object):
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_add_clients import AddClientsToVolgroup
         with APIFailure("ModifyVolumeAccessGroup"):
-            assert not AddClientsToVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert not AddClientsToVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                             volgroup_id=volgroup_id,
                                             connection_type="iscsi")
 
@@ -51,7 +51,7 @@ class TestAddClientsToVolgroup(object):
         print
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_add_clients import AddClientsToVolgroup
-        assert AddClientsToVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+        assert AddClientsToVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                     volgroup_id=volgroup_id,
                                     connection_type="iscsi")
 
@@ -62,13 +62,13 @@ class TestClientCreateAccount(object):
         print
         from client_create_account import ClientCreateAccount
         with APIFailure("GetClusterInfo"):
-            assert not ClientCreateAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+            assert not ClientCreateAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientCreateAccountListAccountsFailure(self):
         print
         from client_create_account import ClientCreateAccount
         with APIFailure("ListAccounts"):
-            assert not ClientCreateAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+            assert not ClientCreateAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientCreateAccountAccountExistsStrict(self):
         print
@@ -89,30 +89,30 @@ class TestClientCreateAccount(object):
         print
         from client_create_account import ClientCreateAccount
         with ClientConnectFailure():
-            assert not ClientCreateAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+            assert not ClientCreateAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_ClientCreateAccountNoCHAP(self):
         print
         from client_create_account import ClientCreateAccount
-        assert ClientCreateAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+        assert ClientCreateAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                        chap=False)
 
     def test_negative_ClientCreateAccountFailure(self):
         print
         from client_create_account import ClientCreateAccount
         with APIFailure("AddAccount"):
-            assert not ClientCreateAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+            assert not ClientCreateAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_ClientCreateAccount(self):
         print
         from client_create_account import ClientCreateAccount
-        assert ClientCreateAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+        assert ClientCreateAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_ClientCreateAccountSharedAccount(self):
         print
         from client_create_account import ClientCreateAccount
         with APIFailure("AddAccount", SolidFireAPIError("AddAccount", {}, "0.0.0.0", "https://0.0.0.0:443/json-rpc/0.0", "xDuplicateUsername", 500, "Fake unit test failure")):
-            assert ClientCreateAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert ClientCreateAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                            account_name=RandomString(random.randint(1, 64)),
                                            chap=False)
 
@@ -123,13 +123,13 @@ class TestClientCreateVolgroup(object):
         print
         from client_create_volgroup import ClientCreateVolgroup
         with APIFailure("ListVolumeAccessGroups"):
-            assert not ClientCreateVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+            assert not ClientCreateVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientCreateVolgroupConnectFailure(self):
         print
         from client_create_volgroup import ClientCreateVolgroup
         with ClientConnectFailure():
-            assert not ClientCreateVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+            assert not ClientCreateVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientCreateVolgroupGroupExistsStrict(self):
         print
@@ -150,12 +150,12 @@ class TestClientCreateVolgroup(object):
         print
         from client_create_volgroup import ClientCreateVolgroup
         with APIFailure("CreateVolumeAccessGroup"):
-            assert not ClientCreateVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+            assert not ClientCreateVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_ClientCreateVolgroup(self):
         print
         from client_create_volgroup import ClientCreateVolgroup
-        assert ClientCreateVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+        assert ClientCreateVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
 @pytest.mark.incremental
 @pytest.mark.usefixtures("fake_cluster_perclass")
@@ -176,7 +176,7 @@ class TestClientCreateVolumes(object):
                                                 gib=random.choice([True, False]),
                                                 create_single=random.choice([True, False]),
                                                 wait=random.choice([0, 1]),
-                                                client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+                                                client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientCreateVolumesVolumeSearchFailure(self):
         print
@@ -193,7 +193,7 @@ class TestClientCreateVolumes(object):
                                                 gib=random.choice([True, False]),
                                                 create_single=random.choice([True, False]),
                                                 wait=random.choice([0, 1]),
-                                                client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+                                                client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientCreateVolumesNoAccount(self):
         print
@@ -209,11 +209,11 @@ class TestClientCreateVolumes(object):
                                             gib=random.choice([True, False]),
                                             create_single=random.choice([True, False]),
                                             wait=random.choice([0, 1]),
-                                            client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+                                            client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientCreateVolumesVolumeCreateFailure(self):
         print
-        client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips=[RandomIP() for _ in range(random.randint(2, 6))]
 
         from client_create_account import ClientCreateAccount
         assert ClientCreateAccount(client_ips=client_ips)
@@ -235,7 +235,7 @@ class TestClientCreateVolumes(object):
 
     def test_ClientCreateVolumes(self):
         print
-        client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips=[RandomIP() for _ in range(random.randint(2, 6))]
 
         from client_create_account import ClientCreateAccount
         assert ClientCreateAccount(client_ips=client_ips)
@@ -257,7 +257,7 @@ class TestClientCreateVolumes(object):
     def test_ClientCreateVolumesExistingVolumes(self):
         print
         # Create accounts for some random clients
-        client_ips = [RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips = [RandomIP() for _ in range(random.randint(2, 6))]
         from client_create_account import ClientCreateAccount
         assert ClientCreateAccount(client_ips=client_ips)
 
@@ -300,18 +300,18 @@ class TestClientDeleteAccount(object):
         print
         from client_delete_account import ClientDeleteAccount
         with ClientConnectFailure():
-            assert not ClientDeleteAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+            assert not ClientDeleteAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientDeleteAccountNoAccountStrict(self):
         print
         from client_delete_account import ClientDeleteAccount
-        assert not ClientDeleteAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+        assert not ClientDeleteAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                            strict=True)
 
     def test_ClientDeleteAccountNoAccount(self):
         print
         from client_delete_account import ClientDeleteAccount
-        assert ClientDeleteAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+        assert ClientDeleteAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_negative_ClientDeleteAccountPurgeFailure(self):
         print
@@ -319,7 +319,7 @@ class TestClientDeleteAccount(object):
         account = random.choice([account for account in globalconfig.cluster.ListAccounts({})["accounts"] if len(account["volumes"]) > 0 and any([vid in deleted_volumes for vid in account["volumes"]])])
         from client_delete_account import ClientDeleteAccount
         with APIFailure("PurgeDeletedVolumes"):
-            assert not ClientDeleteAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert not ClientDeleteAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                                account_name=account["username"])
 
     def test_negative_ClientDeleteAccountFailure(self):
@@ -327,7 +327,7 @@ class TestClientDeleteAccount(object):
         account = random.choice([account for account in globalconfig.cluster.ListAccounts({})["accounts"] if len(account["volumes"]) <= 0])
         from client_delete_account import ClientDeleteAccount
         with APIFailure("RemoveAccount"):
-            assert not ClientDeleteAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert not ClientDeleteAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                                account_name=account["username"])
 
     def test_ClientDeleteAccountSharedAccount(self):
@@ -335,12 +335,12 @@ class TestClientDeleteAccount(object):
         account = random.choice([account for account in globalconfig.cluster.ListAccounts({})["accounts"] if len(account["volumes"]) <= 0])
         from client_delete_account import ClientDeleteAccount
         with APIFailure("RemoveAccount", SolidFireAPIError("RemoveAccount", {}, "0.0.0.0", "https://0.0.0.0:443/json-rpc/0.0", "xAccountIDDoesNotExist", 500, "Fake unit test failure")):
-            assert ClientDeleteAccount(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert ClientDeleteAccount(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                            account_name=account["username"])
 
     def test_ClientDeleteAccount(self):
         print
-        client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips=[RandomIP() for _ in range(random.randint(2, 6))]
 
         from client_create_account import ClientCreateAccount
         assert ClientCreateAccount(client_ips=client_ips)
@@ -355,25 +355,25 @@ class TestClientDeleteVolumes(object):
         print
         from client_delete_volumes import ClientDeleteVolumes
         with ClientConnectFailure():
-            assert not ClientDeleteVolumes(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert not ClientDeleteVolumes(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                                purge=random.choice([True, False]))
 
     def test_negative_DeleteVolumesforClientsNoAccount(self):
         print
         from client_delete_volumes import ClientDeleteVolumes
-        assert ClientDeleteVolumes(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+        assert ClientDeleteVolumes(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                            purge=random.choice([True, False]))
 
     def test_negative_DeleteVolumesforClientsVolumeSearchFailure(self):
         print
         from client_delete_volumes import ClientDeleteVolumes
         with APIFailure("ListActiveVolumes"):
-            assert not ClientDeleteVolumes(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert not ClientDeleteVolumes(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                                purge=random.choice([True, False]))
 
     def test_negative_DeleteVolumesforClientsAccountNoVolumes(self):
         print
-        client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips=[RandomIP() for _ in range(random.randint(2, 6))]
 
         from client_create_account import ClientCreateAccount
         assert ClientCreateAccount(client_ips=client_ips)
@@ -384,7 +384,7 @@ class TestClientDeleteVolumes(object):
 
     def test_negative_DeleteVolumesforClientsAccountDeleteFailure(self):
         print
-        client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips=[RandomIP() for _ in range(random.randint(2, 6))]
 
         from client_create_account import ClientCreateAccount
         assert ClientCreateAccount(client_ips=client_ips)
@@ -401,7 +401,7 @@ class TestClientDeleteVolumes(object):
 
     def test_DeleteVolumesforClients(self):
         print
-        client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips=[RandomIP() for _ in range(random.randint(2, 6))]
 
         from client_create_account import ClientCreateAccount
         assert ClientCreateAccount(client_ips=client_ips)
@@ -423,7 +423,7 @@ class TestClientRemoveFromVolgroup(object):
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from client_remove_from_volgroup import ClientRemoveFromVolgroup
         with ClientConnectFailure():
-            assert not ClientRemoveFromVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert not ClientRemoveFromVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                                  volgroup_id=volgroup_id,
                                                  connection_type="iscsi")
 
@@ -432,7 +432,7 @@ class TestClientRemoveFromVolgroup(object):
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from client_remove_from_volgroup import ClientRemoveFromVolgroup
         with ClientCommandFailure("cat /etc/iscsi/initiatorname.iscsi | grep -v '#' | cut -d'=' -f2", (1, "", "No such file or directory")):
-            assert not ClientRemoveFromVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+            assert not ClientRemoveFromVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                                  volgroup_id=volgroup_id,
                                                  connection_type="iscsi")
 
@@ -448,14 +448,14 @@ class TestClientRemoveFromVolgroup(object):
         print
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from client_remove_from_volgroup import ClientRemoveFromVolgroup
-        assert not ClientRemoveFromVolgroup(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))],
+        assert not ClientRemoveFromVolgroup(client_ips=[RandomIP() for _ in range(random.randint(2, 6))],
                                              volgroup_id=volgroup_id,
                                              connection_type="iscsi")
 
     def test_negative_ClientRemoveFromVolgroupFailure(self):
         print
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
-        client_ips = [RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips = [RandomIP() for _ in range(random.randint(2, 6))]
         from volgroup_add_clients import AddClientsToVolgroup
         assert AddClientsToVolgroup(client_ips=client_ips,
                                     volgroup_id=volgroup_id,
@@ -470,7 +470,7 @@ class TestClientRemoveFromVolgroup(object):
     def test_ClientRemoveFromVolgroup(self):
         print
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
-        client_ips = [RandomIP() for _ in xrange(random.randint(2, 6))]
+        client_ips = [RandomIP() for _ in range(random.randint(2, 6))]
         from volgroup_add_clients import AddClientsToVolgroup
         assert AddClientsToVolgroup(client_ips=client_ips,
                                     volgroup_id=volgroup_id,
@@ -487,7 +487,7 @@ class TestClientMountVolumes(object):
     def test_NoVolumes(self):
         print
         from client_mount_volumes import ClientMountVolumes
-        assert ClientMountVolumes(client_ips=[RandomIP() for _ in xrange(random.randint(2, 6))])
+        assert ClientMountVolumes(client_ips=[RandomIP() for _ in range(random.randint(2, 6))])
 
     def test_RandomVolumes(self):
         print
@@ -495,7 +495,7 @@ class TestClientMountVolumes(object):
 
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(volume_count)
             client_ips.append(client.ip)
@@ -507,7 +507,7 @@ class TestClientVerifyVolumeCount(object):
 
     def test_NoVolumes(self, capfd):
         print
-        client_ips = [RandomIP() for _ in xrange(random.randint(2, 5))]
+        client_ips = [RandomIP() for _ in range(random.randint(2, 5))]
 
         from client_verify_volume_count import ClientVerifyVolumeCount
         assert ClientVerifyVolumeCount(expected=0,
@@ -522,7 +522,7 @@ class TestClientVerifyVolumeCount(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(volume_count)
             client_ips.append(client.ip)
@@ -540,7 +540,7 @@ class TestClientVerifyVolumeCount(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(volume_count)
             client_ips.append(client.ip)
@@ -557,7 +557,7 @@ class TestClientVerifyVolumeCount(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(volume_count)
             client_ips.append(client.ip)
@@ -574,7 +574,7 @@ class TestClientVerifyVolumeCount(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(volume_count)
             client_ips.append(client.ip)
@@ -592,7 +592,7 @@ class TestClientVerifyVolumeCount(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(volume_count)
             client_ips.append(client.ip)
@@ -695,7 +695,7 @@ class TestClientCleanIscsi(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(volume_count)
             client_ips.append(client.ip)
@@ -712,7 +712,7 @@ class TestClientCleanIscsi(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(volume_count)
             client_ips.append(client.ip)
@@ -750,7 +750,7 @@ class TestClientLoginVolumes(object):
         volume_count = random.randint(10, 50)
         client_count = random.randint(2, 5)
         client_ips = []
-        for _ in xrange(client_count):
+        for _ in range(client_count):
             client = globalconfig.clients.CreateClient()
             globalconfig.cluster.AddAccount({"username":client.hostname})
             globalconfig.cluster.CreateRandomVolumes(volume_count, client.hostname)
@@ -771,7 +771,7 @@ class TestClientLoginVolumes(object):
         volume_count = random.randint(10, 50)
         client_count = random.randint(2, 5)
         client_ips = []
-        for _ in xrange(client_count):
+        for _ in range(client_count):
             client = globalconfig.clients.CreateClient()
             globalconfig.cluster.AddAccount({"username":client.hostname})
             globalconfig.cluster.CreateRandomVolumes(volume_count, client.hostname)
@@ -797,7 +797,7 @@ class TestClientLoginVolumes(object):
         globalconfig.cluster.CreateRandomVolumes(volume_count, account_name)
 
         client_ips = []
-        for _ in xrange(client_count):
+        for _ in range(client_count):
             client = globalconfig.clients.CreateClient()
             client_ips.append(client.ip)
 
@@ -818,7 +818,7 @@ class TestClientLoginVolumes(object):
         volume_count = random.randint(10, 50)
         client_count = random.randint(2, 5)
         client_ips = []
-        for _ in xrange(client_count):
+        for _ in range(client_count):
             client = globalconfig.clients.CreateClient()
             globalconfig.cluster.AddAccount({"username":client.hostname})
             globalconfig.cluster.CreateVolumeAccessGroup({"name":client.hostname, "initiators":[client.iqn]})
@@ -892,7 +892,7 @@ class TestClientLoginVolumes(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             globalconfig.cluster.AddAccount({"username":client.hostname})
             globalconfig.cluster.CreateRandomVolumes(volume_count, client.hostname)
@@ -929,7 +929,7 @@ class TestClientLogoutVolumes(object):
         print
         client_count = random.randint(2, 5)
         client_ips = []
-        for _ in xrange(client_count):
+        for _ in range(client_count):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(random.randint(10, 50))
             client_ips.append(client.ip)
@@ -947,7 +947,7 @@ class TestClientLogoutVolumes(object):
         print
         client_count = random.randint(2, 5)
         client_ips = []
-        for _ in xrange(client_count):
+        for _ in range(client_count):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(random.randint(10, 50))
             client_ips.append(client.ip)
@@ -966,7 +966,7 @@ class TestClientLogoutVolumes(object):
         print
         volume_count = random.randint(10, 100)
         client_ips = []
-        for idx in xrange(random.randint(2, 5)):
+        for idx in range(random.randint(2, 5)):
             client = globalconfig.clients.CreateClient()
             client.SetClientConnectedVolumes(random.randint(10, 50))
             client_ips.append(client.ip)

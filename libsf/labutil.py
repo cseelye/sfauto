@@ -5,7 +5,6 @@ import re
 import time
 from . import AutotestAPI, SolidFireError
 from .logutil import GetLogger
-import six
 
 # AT2 lookups are slow, so cache results and reuse them
 class AT2Resources(object):

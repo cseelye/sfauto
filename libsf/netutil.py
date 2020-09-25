@@ -256,7 +256,7 @@ def CIDRToNetmask(cidrMask):
         The dotted-quad string corresponding to the CIDR mask
     """
     bits = 0
-    for i in xrange(32 - cidrMask, 32):
+    for i in range(32 - cidrMask, 32):
         bits |= (1 << i)
     return socket.inet_ntoa(struct.pack('>I', bits))
 

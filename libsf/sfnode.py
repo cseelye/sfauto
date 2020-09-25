@@ -14,7 +14,6 @@ from . import SSHConnection, SolidFireClusterAPI, SolidFireBootstrapAPI, SolidFi
 from .shellutil import Shell
 from .logutil import GetLogger
 from .virtutil import VirtualMachine
-import six
 
 class NetworkInterfaceType(object):
     """Type of network interfaces in nodes"""

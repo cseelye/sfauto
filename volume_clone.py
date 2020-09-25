@@ -164,8 +164,8 @@ def VolumeClone(clone_count=1,
 
     queued_clones_pervol = 0
     # Queue up clones for each volume
-    for idx in xrange(1, clone_count+1, jobs_pervol):
-        for clone_num in xrange(idx, idx + jobs_pervol):
+    for idx in range(1, clone_count+1, jobs_pervol):
+        for clone_num in range(idx, idx + jobs_pervol):
             for vol in match_volumes.values():
                 # queue up a clone job for this volume
                 new_clone_name = clone_name or "{}{}{:05d}".format(vol["name"], clone_prefix, clone_num)

@@ -4,7 +4,6 @@ SolidFire cluster pair object and related data structures
 """
 from .logutil import GetLogger
 from . import SolidFireClusterAPI, InvalidArgumentError, UnknownObjectError
-import six
 
 def _refresh(fn):
     """Decorator to refresh the attributes of this object from the cluster"""

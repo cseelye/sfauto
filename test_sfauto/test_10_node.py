@@ -281,7 +281,7 @@ class TestNodePowerOff(object):
     def test_NodePowerOffBoulder192Subnet(self):
         print
         from node_power_off import NodePowerOff
-        assert NodePowerOff(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in xrange(random.randint(1, 5))])
+        assert NodePowerOff(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in range(random.randint(1, 5))])
 
     def test_negative_NodePowerOffFailure(self):
         print
@@ -321,7 +321,7 @@ class TestNodePowerOn(object):
     def test_NodePowerOnBoulder192Subnet(self):
         print
         from node_power_on import NodePowerOn
-        assert NodePowerOn(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in xrange(random.randint(1, 5))])
+        assert NodePowerOn(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in range(random.randint(1, 5))])
 
     def test_negative_NodePowerOnFailure(self):
         print
@@ -369,7 +369,7 @@ class TestNodePowerCycle(object):
     def test_NodePowerCycleBoulder192Subnet(self):
         print
         from node_power_cycle import NodePowerCycle
-        assert NodePowerCycle(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in xrange(random.randint(1, 5))],
+        assert NodePowerCycle(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in range(random.randint(1, 5))],
                                down_time=random.randint(1, 20))
 
     def test_negative_NodePowerCycleFailure(self):

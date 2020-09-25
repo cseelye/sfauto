@@ -635,7 +635,7 @@ class FakeCluster(object):
                 "services": [],
                 "slices" : []
             }
-            for idx in xrange(1, active_node_count+1):
+            for idx in range(1, active_node_count+1):
                 self.data[SLICE_REPORT_HEALTHY_PATH]["services"].append({
                     "health" : "good",
                     "ip" : str(idx + 100),
@@ -649,7 +649,7 @@ class FakeCluster(object):
                     "serviceID" : idx + 10
                 })
 
-            for idx in xrange(1, 101):
+            for idx in range(1, 101):
                 self.data[SLICE_REPORT_HEALTHY_PATH]["slices"].append({
                     "liveSecondaries" : [ random.randint(10, active_node_count + 10)]
                 })
@@ -659,7 +659,7 @@ class FakeCluster(object):
 
             self.data[BIN_REPORT_HEALTHY_PATH] = []
             self.data[BIN_REPORT_UNHEALTHY_PATH] = []
-            for idx in xrange(0, 10): # Only create the first few bins, it takes too long to make all of them and we don't need them
+            for idx in range(0, 10): # Only create the first few bins, it takes too long to make all of them and we don't need them
                 self.data[BIN_REPORT_HEALTHY_PATH].append({
                     "binID" : idx,
                     "services" : [
@@ -716,7 +716,7 @@ class FakeCluster(object):
 
         # Create active and available drives
         config[DRIVES_PATH] = {}
-        for idx in xrange(len(drive_ids)):
+        for idx in range(len(drive_ids)):
             drive_id = drive_ids[idx]
             config[DRIVES_PATH][drive_id] = {
                 "attributes": { },
@@ -821,9 +821,9 @@ class FakeCluster(object):
         # Create some packages before and after this version
         cluster_ver = SolidFireVersion(config[CLUSTER_VERSION_PATH])
         config[AVAILABLE_PACKAGES_PATH] = []
-        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major - idx, random.randint(0, 5), random.randint(0,1), random.randint(1000, 2000)) for idx in xrange(1, 4)])
-        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major, cluster_ver.minor + idx, random.randint(0,1), random.randint(1000, 2000)) for idx in xrange(1, 4)])
-        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major + idx, random.randint(0, 5), random.randint(0,1), random.randint(1000, 2000)) for idx in xrange(1, 4)])
+        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major - idx, random.randint(0, 5), random.randint(0,1), random.randint(1000, 2000)) for idx in range(1, 4)])
+        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major, cluster_ver.minor + idx, random.randint(0,1), random.randint(1000, 2000)) for idx in range(1, 4)])
+        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major + idx, random.randint(0, 5), random.randint(0,1), random.randint(1000, 2000)) for idx in range(1, 4)])
 
         # Startup flags for nodes
         config[STARTUP_FLAGS_PATH] = {}
@@ -939,7 +939,7 @@ class FakeCluster(object):
 
         # Make sure we have a bunch of small volumes
         volume_ids = []
-        for _ in xrange(random.randint(20, 40)):
+        for _ in range(random.randint(20, 40)):
             while True:
                 volume_id = random.randint(1, 40000)
                 if volume_id not in list(config[VOLUME_PATH].keys()) and volume_id not in list(config[DELETED_VOLUMES_PATH].keys()):
@@ -959,7 +959,7 @@ class FakeCluster(object):
 
         # Make sure we have one volume group where all the volumes have lower IDs
         volume_ids = []
-        for _ in xrange(random.randint(3, 15)):
+        for _ in range(random.randint(3, 15)):
             while True:
                 volume_id = random.randint(1, 8000)
                 if volume_id not in list(config[VOLUME_PATH].keys()) and volume_id not in list(config[DELETED_VOLUMES_PATH].keys()):
@@ -1962,7 +1962,7 @@ class FakeCluster(object):
 
                 # Create drives for the node
                 if node["platformInfo"]["nodeType"] != "FC0025":
-                    for idx in xrange(self.data[DRIVES_PER_NODE_PATH]):
+                    for idx in range(self.data[DRIVES_PER_NODE_PATH]):
                         drive_id = self._GetNextID()
                         drives[drive_id] = {
                             "attributes": { },
@@ -2075,7 +2075,7 @@ class FakeCluster(object):
         with self.dataLock:
             result = {}
             node_count = len(list(self.data[ACTIVE_NODES_PATH].keys()))
-            for idx in xrange(node_count):
+            for idx in range(node_count):
                 key = "service-{}".format(idx)
                 result[key] = {}
                 result[key]["scacheBytesInUse"] = 0
@@ -2087,7 +2087,7 @@ class FakeCluster(object):
             result = {}
             node_count = len(list(self.data[ACTIVE_NODES_PATH].keys()))
 
-            status = {idx : True for idx in xrange(node_count * self.data[DRIVES_PER_NODE_PATH])}
+            status = {idx : True for idx in range(node_count * self.data[DRIVES_PER_NODE_PATH])}
             return { "success" : status }
 
     def ListVolumeStatsByVolume(self, methodParams, ip="", endpoint="", apiVersion=""):

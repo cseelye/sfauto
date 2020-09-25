@@ -12,7 +12,6 @@ from libsf.util import ValidateArgs, IPv4AddressType, OptionalValueType, ItemLis
 from libsf import sfdefaults
 from libsf import threadutil
 from libsf import SolidFireError
-import six
 
 @logargs
 def VolumeModify(property_name,

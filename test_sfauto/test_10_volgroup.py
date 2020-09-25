@@ -21,7 +21,7 @@ class TestCreateVolgroup(object):
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volgroup_create import CreateVolumeGroup
         assert CreateVolumeGroup(RandomString(random.randint(1, 64)),
-                                 iqns=[RandomIQN() for _ in xrange(random.randint(1, 5))],
+                                 iqns=[RandomIQN() for _ in range(random.randint(1, 5))],
                                  volume_ids=volume_ids)
 
     def test_negative_CreateVolgroupVolumeSearchFailure(self):
@@ -77,7 +77,7 @@ class TestAddInitiatorsToVolgroup(object):
     def test_negative_AddInitiatorsToVolgroupNoGroup(self):
         print
         from volgroup_add_initiators import AddInitiatorsToVolgroup
-        assert not AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in xrange(random.randint(1, 5))],
+        assert not AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in range(random.randint(1, 5))],
                                            volgroup_id=9999)
 
     def test_negative_AddInitiatorsToVolgroupSearchFailure(self):
@@ -85,7 +85,7 @@ class TestAddInitiatorsToVolgroup(object):
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_add_initiators import AddInitiatorsToVolgroup
         with APIFailure("ListVolumeAccessGroups"):
-            assert not AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in xrange(random.randint(1, 5))],
+            assert not AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in range(random.randint(1, 5))],
                                                volgroup_id=1)
 
     def test_AddInitiatorsToVolgroupAlreadyIn(self):
@@ -108,14 +108,14 @@ class TestAddInitiatorsToVolgroup(object):
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_add_initiators import AddInitiatorsToVolgroup
         with APIFailure("ModifyVolumeAccessGroup"):
-            assert not AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in xrange(random.randint(1, 5))],
+            assert not AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in range(random.randint(1, 5))],
                                                volgroup_id=volgroup_id)
 
     def test_AddInitiatorsToVolgroup(self):
         print
         volgroup_name = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["name"]
         from volgroup_add_initiators import AddInitiatorsToVolgroup
-        assert AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in xrange(random.randint(1, 5))],
+        assert AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in range(random.randint(1, 5))],
                                        volgroup_name=volgroup_name)
 
 @pytest.mark.usefixtures("fake_cluster_perclass")

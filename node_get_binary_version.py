@@ -13,7 +13,6 @@ from libsf.util import ValidateAndDefault, IPv4AddressType, StrType
 from libsf import sfdefaults
 from libsf import threadutil
 from libsf import SolidFireError
-import six
 
 @logargs
 @ValidateAndDefault({

@@ -274,7 +274,7 @@ class MultiFormatter(logging.Formatter):
 
 class FormatOptions(object):
     """Enumerated list of formatting options"""
-    NONE, TIME, LEVEL = (2**x for x in xrange(3))
+    NONE, TIME, LEVEL = (2**x for x in range(3))
 
     # Map format enums to format strings
     formatMap = {
