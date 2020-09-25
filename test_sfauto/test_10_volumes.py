@@ -163,7 +163,7 @@ class TestVolumeDelete(object):
         print()
         volume_names = [vol["name"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
-        assert VolumeDelete(volume_names=volume_names[random.randint(0, len(volume_names))],
+        assert VolumeDelete(volume_names=volume_names[random.randint(0, len(volume_names)-1)],
                              purge=True)
 
     def test_VolumeDeleteNoPurge(self):
