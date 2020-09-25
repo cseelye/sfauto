@@ -188,8 +188,8 @@ def threadwrapper(func):
                 ex_val.originalTraceback = str_tb
                 raise
             log = GetLogger()
-            log.debug(_traceback.format_exc(ex_val))
-            raise SolidFireError, ("{}: {}".format(ex_type.__name__, ex_val), str_tb), ex_tb
+            log.debug(str_tb)
+            raise SolidFireError("{}: {}".format(ex_type.__name__, ex_val), str_tb)
         finally:
             _threading.current_thread().name = orig_name
 
