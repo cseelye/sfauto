@@ -1,6 +1,8 @@
 #!/usr/bin/env python2.7
 """Helpers for interacting with hypervisors and virtual machines"""
 
+from __future__ import absolute_import
+
 from . import sfdefaults
 from . import SolidFireError, UnauthorizedError, TimeoutError, UnknownObjectError, ClientConnectionError, ConnectionError
 from .logutil import GetLogger

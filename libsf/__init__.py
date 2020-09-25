@@ -3,7 +3,7 @@
 
 #pylint: disable=unidiomatic-typecheck,protected-access,global-statement
 
-from __future__ import print_function
+from __future__ import print_function, absolute_import
 import base64
 import six.moves.BaseHTTPServer
 import copy
