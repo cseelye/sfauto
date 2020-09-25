@@ -4,6 +4,7 @@ SolidFire volume access group object and related data structures
 """
 from . import SolidFireClusterAPI, GetHighestAPIVersion, InvalidArgumentError, UnknownObjectError
 from .logutil import GetLogger
+import six
 
 def _refresh(fn):
     """Decorator to refresh the attributes of this object from the cluster"""
@@ -131,7 +132,7 @@ class SFVolGroup(object):
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs

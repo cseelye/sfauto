@@ -73,7 +73,7 @@ def CreateVolumeGroup(volgroup_name,
         except SolidFireError as e:
             log.error(str(e))
             return False
-        add_volume_ids = found_volumes.keys()
+        add_volume_ids = list(found_volumes.keys())
         add_volume_names = [found_volumes[i]["name"] for i in add_volume_ids]
 
     # See if the group already exists

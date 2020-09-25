@@ -15,12 +15,13 @@ from pyVim import connect as connectVSphere
 # pylint: disable=no-name-in-module
 from pyVmomi import vim, vmodl
 # pylint: enable=no-name-in-module
-import Queue
+import six.moves.queue
 import requests
 import socket
 import sys
 import time
 from xml.etree import ElementTree
+import six
 
 # Fix late-model python not working with self signed certs out of the box
 try:
@@ -62,7 +63,7 @@ class VirtualMachine(object):
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs
@@ -131,7 +132,7 @@ class VMHost(object):
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs
@@ -1165,7 +1166,7 @@ class LibvirtConnect(object):
         try:
             self.exception = errq.get_nowait()
             return False
-        except Queue.Empty:
+        except six.moves.queue.Empty:
             self.exception = None
         return True
 

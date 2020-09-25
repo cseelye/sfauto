@@ -50,10 +50,10 @@ def GetVolumeIQN(volume_name=None,
     except SolidFireError as e:
         log.error("Failed to search for volume: {}".format(e))
         return False
-    if len(match.keys()) <= 0:
+    if len(list(match.keys())) <= 0:
         log.error("Could not find volume")
         return False
-    volume = match.values()[0]
+    volume = list(match.values())[0]
 
     # Display the list in the requested format
     if output_format and output_format == "bash":

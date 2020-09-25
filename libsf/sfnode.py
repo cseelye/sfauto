@@ -14,6 +14,7 @@ from . import SSHConnection, SolidFireClusterAPI, SolidFireBootstrapAPI, SolidFi
 from .shellutil import Shell
 from .logutil import GetLogger
 from .virtutil import VirtualMachine
+import six
 
 class NetworkInterfaceType(object):
     """Type of network interfaces in nodes"""
@@ -75,7 +76,7 @@ class SFNode(object):
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs

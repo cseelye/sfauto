@@ -275,7 +275,7 @@ class TestListVolgroups(object):
         print "captured = [{}]".format(out)
         import json
         groups = json.loads(out)
-        assert "volumeAccessGroups" in groups.keys()
+        assert "volumeAccessGroups" in list(groups.keys())
         assert len(groups["volumeAccessGroups"]) == len(group_names)
         assert all([name in groups["volumeAccessGroups"] for name in group_names])
 

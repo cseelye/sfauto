@@ -14,6 +14,7 @@ from libsf import SolidFireError
 import os
 import tarfile
 import time
+from io import open
 
 @logargs
 @ValidateAndDefault({

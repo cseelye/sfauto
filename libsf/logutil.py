@@ -11,8 +11,10 @@ import os
 import platform
 import re
 import socket
+import string
 import sys
 import threading
+import six
 
 class CustomLogLevels(object):
     """ Custom log levels that map to specific formatted and colorized output"""
@@ -188,7 +190,7 @@ class MultiFormatter(logging.Formatter):
 
     def format(self, record):
         # Trim any trailing whitespace
-        if isinstance(record.msg, basestring):
+        if isinstance(record.msg, six.string_types):
             record.msg = record.msg.rstrip()
             if not record.msg:
                 record.msg = "  <empty msg>"
@@ -262,7 +264,7 @@ class MultiFormatter(logging.Formatter):
         lines = []
         remain = str(message)
         while len(remain) > length:
-            index = str.rfind(remain, ' ', 0, length)
+            index = string.rfind(remain, ' ', 0, length)
             if index <= 0:
                 index = length - 1
             lines.append(remain[:index])
@@ -337,7 +339,7 @@ def logargs(func):
         if args and kwargs:
             msg += ", "
         if kwargs:
-            msg += ", ".join(["{}={}".format(name, val) for name, val in kwargs.iteritems()])
+            msg += ", ".join(["{}={}".format(name, val) for name, val in kwargs.items()])
         msg += ")"
         log.debug2(msg)
         return func(*args, **kwargs)
@@ -378,8 +380,8 @@ def GetLogger(name="sfauto", logConfig=None):
     if not logConfig:
         logConfig = defaultConfig
     else:
-        for key, value in defaultConfig.iteritems():
-            if key not in logConfig.keys():
+        for key, value in defaultConfig.items():
+            if key not in list(logConfig.keys()):
                 logConfig[key] = value
 
     logging.raiseExceptions = False
@@ -393,7 +395,7 @@ def GetLogger(name="sfauto", logConfig=None):
         return sflog
 
     # Add the custom log levels to the logger
-    for name, level in vars(CustomLogLevels).iteritems():
+    for name, level in vars(CustomLogLevels).items():
         if name.startswith("_"):
             continue
         logging.addLevelName(name, level)

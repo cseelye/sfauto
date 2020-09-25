@@ -87,8 +87,8 @@ def AccountMoveVolumes(account_name,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    already_in = list(set(account.volumes).intersection(match_volumes.keys()))
-    log.debug("{} total matches, {} volumes are already already in account".format(len(match_volumes.keys()), len(already_in)))
+    already_in = list(set(account.volumes).intersection(list(match_volumes.keys())))
+    log.debug("{} total matches, {} volumes are already already in account".format(len(list(match_volumes.keys())), len(already_in)))
 
     volumes_to_add = [match_volumes[vid] for vid in set(match_volumes.keys()).difference(account.volumes)]
 

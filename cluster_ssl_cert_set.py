@@ -11,6 +11,7 @@ from libsf.sfcluster import SFCluster
 from libsf.util import ValidateAndDefault, IPv4AddressType, StrType
 from libsf import sfdefaults
 from libsf import SolidFireError
+from io import open
 
 @logargs
 @ValidateAndDefault({

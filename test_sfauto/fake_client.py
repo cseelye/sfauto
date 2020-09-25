@@ -11,6 +11,7 @@ import random
 import re
 import string
 import threading
+import six
 
 def FakeShellCommand(command, timeout=1800):
     """Intercept local shell commands to inject responses"""
@@ -176,7 +177,7 @@ class FakeClientRegister(object):
 
     def GetClientIPs(self):
         with self.lock:
-            return copy.deepcopy(self.clients.keys())
+            return copy.deepcopy(list(self.clients.keys()))
 
     def CreateClient(self, hostname=None, ipAddress=None, osType=None, osDistro=None):
         with self.lock:
@@ -238,7 +239,7 @@ class FakeClientRegister(object):
         with self.lock:
             keys = [CLIENT_ALL, clientIP]
             for key in keys:
-                if key in self.commandErrors.keys():
+                if key in list(self.commandErrors.keys()):
                     for comm in self.commandErrors[key].keys():
                         if comm == command:
                             return self.commandErrors[key][comm]
@@ -511,7 +512,7 @@ class FakeClient(object):
         m = re.search(r"iscsiadm -m node -l -T (\S+)", command)
         if m:
             target_iqn = m.group(1)
-            for iqn in self.volumes.itervalues():
+            for iqn in six.itervalues(self.volumes):
                 if iqn == target_iqn:
                     return (0, "", "")
 
@@ -535,7 +536,7 @@ class FakeClient(object):
 
         idx = 1
         session_details = []
-        for device, iqn in self.volumes.iteritems():
+        for device, iqn in self.volumes.items():
             session_details.append("Target: {}".format(iqn))
             session_details.append("        Current Portal: {}:3260,1".format(self.portal))
             session_details.append("        Persistent Portal: {}:3260,1".format(self.portal))

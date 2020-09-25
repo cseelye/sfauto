@@ -12,6 +12,7 @@ from libsf.util import ValidateAndDefault, IPv4AddressType, ItemList, BoolType, 
 from libsf import sfdefaults
 from libsf import SolidFireError
 from libsf import threadutil
+from io import open
 
 
 @logargs

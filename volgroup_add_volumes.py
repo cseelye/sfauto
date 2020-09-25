@@ -79,8 +79,8 @@ def AddVolumesToVolgroup(volume_names=None,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    already_in = list(set(volgroup.volumes).intersection(match_volumes.keys()))
-    log.debug("{} total matches, {} volumes are already already in group".format(len(match_volumes.keys()), len(already_in)))
+    already_in = list(set(volgroup.volumes).intersection(list(match_volumes.keys())))
+    log.debug("{} total matches, {} volumes are already already in group".format(len(list(match_volumes.keys())), len(already_in)))
 
     volumes_to_add = list(set(match_volumes.keys()).difference(volgroup.volumes))
 

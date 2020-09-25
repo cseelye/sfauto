@@ -77,24 +77,24 @@ def VolumeDelete(volume_names=None,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    if len(match_volumes.keys()) <= 0:
+    if len(list(match_volumes.keys())) <= 0:
         log.warning("No matching volumes")
         return True
 
-    log.info("{} volumes will be deleted: {}".format(len(match_volumes.keys()), ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
+    log.info("{} volumes will be deleted: {}".format(len(list(match_volumes.keys())), ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
 
     if test:
         log.warning("Test option set; volumes will not be deleted")
         return True
 
-    log.info("Deleting {} volumes...".format(len(match_volumes.keys())))
+    log.info("Deleting {} volumes...".format(len(list(match_volumes.keys()))))
     try:
-        cluster.DeleteVolumes(volumeIDs=match_volumes.keys(), purge=purge)
+        cluster.DeleteVolumes(volumeIDs=list(match_volumes.keys()), purge=purge)
     except SolidFireError as e:
         log.error("Failed to delete volumes: {}".format(e))
         return False
 
-    log.passed("Successfully deleted {} volumes".format(len(match_volumes.keys())))
+    log.passed("Successfully deleted {} volumes".format(len(list(match_volumes.keys()))))
     return True
 
 if __name__ == '__main__':

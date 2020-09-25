@@ -102,6 +102,8 @@ from . import sfdefaults as _sfdefaults
 from .shellutil import GetConsoleSize
 from .util import ItemList, IPv4AddressType, PositiveIntegerType, PositiveNonZeroIntegerType, SolidFireIDType, VLANTagType, MACAddressType, RegexType, SolidFireBurstIOPSType, SolidFireMinIOPSType, SolidFireMaxIOPSType, StrType
 from . import InvalidArgumentError
+import six
+from io import open
 
 def _callable(obj):
     return hasattr(obj, '__call__') or hasattr(obj, '__bases__')
@@ -2040,7 +2042,7 @@ class SFArgumentParser(_AttributeHolder, _ActionsContainer):
                 # twice (which may fail) if the argument was given, but
                 # only if it was defined already in the namespace
                 if (action.default is not None and
-                        isinstance(action.default, basestring) and
+                        isinstance(action.default, six.string_types) and
                         hasattr(namespace, action.dest) and
                         action.default is getattr(namespace, action.dest)):
                     setattr(namespace, action.dest,
@@ -2282,7 +2284,7 @@ class SFArgumentParser(_AttributeHolder, _ActionsContainer):
                 setattr(parsed, extraArgsKey, extras)
         else:
             parsed = self.parse_args(args=args, namespace=namespace)
-        return { key : value for key, value in vars(parsed).iteritems() if value != None }
+        return { key : value for key, value in vars(parsed).items() if value != None }
 
     # ========================
     # Value conversion methods
@@ -2301,7 +2303,7 @@ class SFArgumentParser(_AttributeHolder, _ActionsContainer):
                 value = action.const
             else:
                 value = action.default
-            if isinstance(value, basestring):
+            if isinstance(value, six.string_types):
                 value = self._get_value(action, value)
                 self._check_value(action, value)
 

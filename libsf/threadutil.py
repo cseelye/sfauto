@@ -12,6 +12,7 @@ import multiprocessing.pool as _multiprocessing_pool
 import sys as _sys
 import threading as _threading
 import traceback as _traceback
+from io import open
 
 # Helpful multiprocessing debug for threadpools
 # from logging import DEBUG as _DEBUG_LEVEL

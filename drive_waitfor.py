@@ -18,7 +18,7 @@ import time
 @ValidateAndDefault({
     "expected" : (CountType(allowZero=True), None),
     "states" : (ItemList(SelectionType(sfdefaults.all_drive_states)), None),
-    "compare" : (SelectionType(sfdefaults.all_compare_ops.keys()), "ge"),
+    "compare" : (SelectionType(list(sfdefaults.all_compare_ops.keys())), "ge"),
     "timeout" : (PositiveIntegerType, sfdefaults.available_drives_timeout),
     "mvip" : (IPv4AddressType, sfdefaults.mvip),
     "username" : (StrType, sfdefaults.username),

@@ -5,6 +5,7 @@ import re
 import time
 from . import AutotestAPI, SolidFireError
 from .logutil import GetLogger
+import six
 
 # AT2 lookups are slow, so cache results and reuse them
 class AT2Resources(object):
@@ -55,7 +56,7 @@ def GetIPMIAddresses(managementIPs):
                 found_ips[res["oneGigIP"]] = res["iDRACIP"]
 
     # Make sure we have a value for every IP
-    for mip, ipmi_ip in found_ips.iteritems():
+    for mip, ipmi_ip in found_ips.items():
         if not ipmi_ip:
             # If we could not do the lookup in AT2, guess at the IP based on known subnets
         
@@ -106,7 +107,7 @@ def GetNetworkProfile(managementIPs):
             found[res["oneGigIP"]]["cip_gateway"] = res["networkProfile"]["gateway10G"]
             found[res["oneGigIP"]]["image_list"] = res["networkProfile"]["imageListing1G"]
 
-    if not all(v != None for k,v in found.iteritems()):
+    if not all(v != None for k,v in found.items()):
         raise SolidFireError("Could not find network info for all IPs")
 
     return found

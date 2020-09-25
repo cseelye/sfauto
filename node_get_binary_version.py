@@ -13,6 +13,7 @@ from libsf.util import ValidateAndDefault, IPv4AddressType, StrType
 from libsf import sfdefaults
 from libsf import threadutil
 from libsf import SolidFireError
+import six
 
 @logargs
 @ValidateAndDefault({
@@ -79,7 +80,7 @@ def _NodeThread(node_ip, username, password):
     node = SFNode(node_ip, clusterUsername=username, clusterPassword=password)
     ver = node.GetSfappVersion()
 
-    log.info(" ".join(["{}={}".format(key, value) for key, value in ver.iteritems()]))
+    log.info(" ".join(["{}={}".format(key, value) for key, value in ver.items()]))
 
 
 if __name__ == '__main__':

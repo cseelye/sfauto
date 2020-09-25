@@ -12,6 +12,7 @@ from libsf.util import ValidateArgs, IPv4AddressType, OptionalValueType, ItemLis
 from libsf import sfdefaults
 from libsf import threadutil
 from libsf import SolidFireError
+import six
 
 @logargs
 def VolumeModify(property_name,
@@ -90,7 +91,7 @@ def VolumeModify(property_name,
     if not match_volumes:
         log.passed("No matching volumes were found")
         return True
-    log.info("{} volumes selected: {}".format(len(match_volumes.keys()),
+    log.info("{} volumes selected: {}".format(len(list(match_volumes.keys())),
                                                    ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
     if test:
         log.warning("Test option set; no action will be taken")
@@ -129,7 +130,7 @@ def _APICallThread(mvip, username, password, volume_id, property_name, property_
 
     # Verify that the change was applied
     if isinstance(post_value, dict):
-        for key, value in post_value.iteritems():
+        for key, value in post_value.items():
             if str(vol[property_name][key]) != str(value):
                 raise SolidFireError("{} is not correct after modifying volume {} [expected={}, actual={}]".format(key, volume_id, value, vol[property_name][key]))
     else:

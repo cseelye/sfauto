@@ -61,8 +61,8 @@ def DriveAdd(node_ips,
         log.error("Failed to list nodes: {}".format(e))
         return False
     if not node_ips:
-        node_ips = nodeip2nodeid.keys()
-    if not all({ip: ip in nodeip2nodeid.keys() for ip in node_ips}.values()):
+        node_ips = list(nodeip2nodeid.keys())
+    if not all({ip: ip in list(nodeip2nodeid.keys()) for ip in node_ips}.values()):
         log.error("Could not find all node IPs in cluster")
         return False
 

@@ -79,7 +79,7 @@ def RemoveVolumesFromVolgroup(volgroup_name=None,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    if len(match_volumes.keys()) <= 0:
+    if len(list(match_volumes.keys())) <= 0:
         if strict:
             log.error("No matching volumes were found in group")
             return False
@@ -87,7 +87,7 @@ def RemoveVolumesFromVolgroup(volgroup_name=None,
             log.passed("No matching volumes were found in group")
             return True
 
-    log.info("{} volumes will be removed from group {}: {}".format(len(match_volumes.keys()), volgroup.name, ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
+    log.info("{} volumes will be removed from group {}: {}".format(len(list(match_volumes.keys())), volgroup.name, ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
 
     if test:
         log.warning("Test option set; volumes will not be removed")
@@ -96,7 +96,7 @@ def RemoveVolumesFromVolgroup(volgroup_name=None,
     # Remove the volumes
     log.info("Removing volumes from group")
     try:
-        volgroup.RemoveVolumes(match_volumes.keys())
+        volgroup.RemoveVolumes(list(match_volumes.keys()))
     except SolidFireError as e:
         log.error("Failed to modify group: " + str(e))
         return False

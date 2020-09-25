@@ -83,11 +83,11 @@ def VolumeSetAttribute(attribute_name,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    if len(match_volumes.keys()) <= 0:
+    if len(list(match_volumes.keys())) <= 0:
         log.warning("No matching volumes")
         return True
 
-    log.info("{} volumes will be modified: {}".format(len(match_volumes.keys()), ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
+    log.info("{} volumes will be modified: {}".format(len(list(match_volumes.keys())), ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
 
     if test:
         log.warning("Test option set; volumes will not be modified")

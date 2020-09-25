@@ -4,9 +4,9 @@
 #pylint: disable=unidiomatic-typecheck,protected-access,global-statement
 
 import base64
-import BaseHTTPServer
+import six.moves.BaseHTTPServer
 import copy
-import httplib
+import six.moves.http_client
 import inspect
 import json
 import os
@@ -17,9 +17,11 @@ import ssl
 import sys
 import time
 import urllib2
-import urlparse
+import six.moves.urllib.parse
 from .logutil import GetLogger
 from . import sfdefaults
+from io import open
+import six
 
 class SolidFireError(Exception):
     """Base class for SolidFire exceptions"""
@@ -34,7 +36,7 @@ class SolidFireError(Exception):
 
     def ToDict(self):
         """Convert this exception to a dictionary"""
-        return {k:copy.deepcopy(v) for k,v in vars(self).iteritems() if not k.startswith('_')}
+        return {k:copy.deepcopy(v) for k,v in vars(self).items() if not k.startswith('_')}
 
     def ToJSON(self):
         """Convert this exception to a JSON string"""
@@ -138,8 +140,8 @@ class ConnectionError(SolidFireError):
                 self.innerException = innerReason
 
             if type(self.innerException) == urllib2.HTTPError:
-                if self.innerException.code in BaseHTTPServer.BaseHTTPRequestHandler.responses:
-                    self.message = 'HTTP Error {}: {}'.format(self.innerException.code, BaseHTTPServer.BaseHTTPRequestHandler.responses[self.innerException.code])
+                if self.innerException.code in six.moves.BaseHTTPServer.BaseHTTPRequestHandler.responses:
+                    self.message = 'HTTP Error {}: {}'.format(self.innerException.code, six.moves.BaseHTTPServer.BaseHTTPRequestHandler.responses[self.innerException.code])
                     self.code = self.innerException.code
                 else:
                     self.message = 'HTTP Error {}: {}'.format(self.innerException.code, self.innerException.reason)
@@ -172,7 +174,7 @@ class ConnectionError(SolidFireError):
             elif type(self.innerException) == IOError:
                 self.message = 'IOError {}: {}'.format(self.innerException.errno, self.innerException.strerror)
                 self.code = self.innerException.errno
-            elif type(self.innerException) == httplib.BadStatusLine:
+            elif type(self.innerException) == six.moves.http_client.BadStatusLine:
                 self.message = 'Bad HTTP status'
                 self.retryable = True
             elif type(self.innerException) == ValueError:
@@ -337,7 +339,7 @@ class HTTPDownloader(object):
 
         context = None
         if useSSL:
-            endpoint = urlparse.urljoin('https://{}:{}/'.format(self.server, self.port), remotePath)
+            endpoint = six.moves.urllib.parse.urljoin('https://{}:{}/'.format(self.server, self.port), remotePath)
 
             try:
                 # pylint: disable=no-member
@@ -349,7 +351,7 @@ class HTTPDownloader(object):
                 pass
 
         else:
-            endpoint = urlparse.urljoin('http://{}:{}/'.format(self.server, self.port), remotePath)
+            endpoint = six.moves.urllib.parse.urljoin('http://{}:{}/'.format(self.server, self.port), remotePath)
 
         request = urllib2.Request(endpoint)
         if useAuth and self.username:
@@ -376,7 +378,7 @@ class HTTPDownloader(object):
             if type(ex.reason) == OSError:
                 raise ConnectionError(self.server, endpoint, ex.reason)
             raise ConnectionError(self.server, endpoint, ex)
-        except httplib.BadStatusLine as ex:
+        except six.moves.http_client.BadStatusLine as ex:
             raise ConnectionError(self.server, endpoint, ex)
 
         dl = response.read()
@@ -439,7 +441,7 @@ class HTTPDownloader(object):
             if type(ex.reason) == OSError:
                 raise ConnectionError(self.server, endpoint, ex.reason)
             raise ConnectionError(self.server, endpoint, ex)
-        except httplib.BadStatusLine as ex:
+        except six.moves.http_client.BadStatusLine as ex:
             raise ConnectionError(self.server, endpoint, ex)
 
         with open(localFile, 'w') as handle:
@@ -458,7 +460,7 @@ class HTTPDownloader(object):
 
     @staticmethod
     def DownloadURL(url, timeout=300):
-        pieces = urlparse.urlparse(url)
+        pieces = six.moves.urllib.parse.urlparse(url)
         downloader = HTTPDownloader(pieces.netloc,
                                     443 if pieces.scheme == "https" else 80,
                                     pieces.username,
@@ -504,7 +506,7 @@ class SolidFireAPI(object):
         self.errorLogRepeat = kwargs.pop('errorLogRepeat', 3)
         self.minApiVersion = kwargs.pop("minApiVersion", 1.0)
 
-        for key, value in kwargs.iteritems():
+        for key, value in kwargs.items():
             setattr(self, key, value)
 
         if self.errorLogRepeat <= 0:
@@ -608,7 +610,7 @@ class SolidFireAPI(object):
             if type(ex.reason) == OSError:
                 raise ConnectionError(self.server, endpoint, ex.reason, methodName, methodParams)
             raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
-        except httplib.BadStatusLine as ex:
+        except six.moves.http_client.BadStatusLine as ex:
             raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
 
         responseStr = apiResponse.read().decode('ascii')
@@ -973,7 +975,7 @@ class SolidFireNodeAPI(SolidFireAPI):
             remoteURL = result['details']['url'][0]
 
             # Get the path component of the URL
-            pieces = urlparse.urlparse(remoteURL)
+            pieces = six.moves.urllib.parse.urlparse(remoteURL)
             remotePath = pieces.path.lstrip('/')
 
             localFileName = os.path.join(localPath, remoteFileName)

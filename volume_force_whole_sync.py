@@ -84,7 +84,7 @@ def VolumeForceWholeSync(volume_names=None,
     if not match_volumes:
         log.passed("No matching volumes were found")
         return True
-    log.info("{} volumes selected: {}".format(len(match_volumes.keys()),
+    log.info("{} volumes selected: {}".format(len(list(match_volumes.keys())),
                                                    ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
     if test:
         log.warning("Test option set; no action will be taken")

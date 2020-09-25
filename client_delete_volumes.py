@@ -85,12 +85,12 @@ def _ClientThread(client_ip, client_user, client_pass, mvip, username, password,
         log.passed("Account is already deleted")
         return True
 
-    if len(match_volumes.keys()) <= 0:
+    if len(list(match_volumes.keys())) <= 0:
         log.passed("No volumes to delete")
         return True
 
-    log.info("Deleting {} volumes".format(len(match_volumes.keys())))
-    cluster.DeleteVolumes(volumeIDs=match_volumes.keys(), purge=purge)
+    log.info("Deleting {} volumes".format(len(list(match_volumes.keys()))))
+    cluster.DeleteVolumes(volumeIDs=list(match_volumes.keys()), purge=purge)
     log.passed("Successfully deleted volumes")
 
 if __name__ == '__main__':

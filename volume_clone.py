@@ -127,7 +127,7 @@ def VolumeClone(clone_count=1,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    msg = "{} clones per volume of {} volumes will be created".format(clone_count, len(match_volumes.keys()))
+    msg = "{} clones per volume of {} volumes will be created".format(clone_count, len(list(match_volumes.keys())))
     if dest_account:
         msg += " in account {}".format(dest_account.username)
     log.info(msg)
