@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 #pylint: skip-file
 
+from __future__ import print_function
 from .testutil import RandomString, RandomIP, RandomSequence
 from . import globalconfig
 from libsf import shellutil, netutil
@@ -454,9 +455,9 @@ class FakeClient(object):
 
     def set_chap_username(self, command):
         m = re.search(r"sed 's/#\*\\s\*discovery\\\.sendtargets\\\.auth\\\.username\\s\*=\.\*/discovery\\\.sendtargets\\\.auth\\\.username = (\S+)/g", command)
-        print "CALL TO SET CHAP USERNAME"
+        print("CALL TO SET CHAP USERNAME")
         if m:
-            print "SETTING CHAP USERNAME"
+            print("SETTING CHAP USERNAME")
             self.chapUsername = m.group(1)
             globalconfig.clients.UpdateClient(self.ip, self)
         return (0, "", "")

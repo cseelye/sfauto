@@ -4,6 +4,7 @@
 This action will get the active SSL certificate on the cluster
 """
 
+from __future__ import print_function
 from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
@@ -39,7 +40,7 @@ def ClusterGetSslCert(mvip,
         return False
 
     for key, value in certinfo.items():
-        print "{}: {}".format(key, value)
+        print("{}: {}".format(key, value))
 
     return True
 

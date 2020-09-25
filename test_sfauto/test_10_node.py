@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 #pylint: skip-file
 
+from __future__ import print_function
 import pytest
 import random
 from libsf import SolidFireAPIError, InvalidArgumentError
@@ -14,7 +15,7 @@ from .testutil import RandomString, RandomIP
 class TestNodeAdd10gRoute(object):
 
     def test_NodeAdd10gRoute(self):
-        print
+        print()
         node_ip = random.choice(globalconfig.cluster.ListActiveNodes({})["nodes"])["mip"]
         gateway = RandomIP()
         netmask = "255.255.255.0"
@@ -26,7 +27,7 @@ class TestNodeAdd10gRoute(object):
                                  gateway=gateway)
 
     def test_negative_NodeAdd10gRouteFailure(self):
-        print
+        print()
         node_ip = random.choice(globalconfig.cluster.ListActiveNodes({})["nodes"])["mip"]
         gateway = RandomIP()
         netmask = "255.255.255.0"
@@ -42,7 +43,7 @@ class TestNodeAdd10gRoute(object):
 class TestClusterAddNodes(object):
 
     def test_negative_ClusterAddNodesListNodesFailure(self):
-        print
+        print()
         pending_ips = [node["mip"] for node in globalconfig.cluster.ListPendingNodes({})["pendingNodes"]]
         from cluster_add_nodes import ClusterAddNodes
         with APIFailure("ListAllNodes"):
@@ -52,7 +53,7 @@ class TestClusterAddNodes(object):
                                 wait_for_sync=random.choice([True, False]))
 
     def test_negative_ClusterAddNodesFailure(self):
-        print
+        print()
         pending_ips = [node["mip"] for node in globalconfig.cluster.ListPendingNodes({})["pendingNodes"]]
         from cluster_add_nodes import ClusterAddNodes
         with APIFailure("AddNodes"):
@@ -62,7 +63,7 @@ class TestClusterAddNodes(object):
                                 wait_for_sync=random.choice([True, False]))
 
     def test_negative_ClusterAddNodesListActiveNodesFailure(self):
-        print
+        print()
         pending_ips = [node["mip"] for node in globalconfig.cluster.ListPendingNodes({})["pendingNodes"]]
         from cluster_add_nodes import ClusterAddNodes
         with APIFailure("ListActiveNodes"):
@@ -72,7 +73,7 @@ class TestClusterAddNodes(object):
                                 wait_for_sync=random.choice([True, False]))
 
     def test_negative_ClusterAddNodesGetDriveConfigFailure(self):
-        print
+        print()
         pending_ips = [node["mip"] for node in globalconfig.cluster.ListPendingNodes({})["pendingNodes"]]
         from cluster_add_nodes import ClusterAddNodes
         with APIFailure("GetDriveConfig"):
@@ -82,7 +83,7 @@ class TestClusterAddNodes(object):
                                 wait_for_sync=random.choice([True, False]))
 
     def test_negative_ClusterAddNodesListDrivesFailure(self):
-        print
+        print()
         pending_ips = [node["mip"] for node in globalconfig.cluster.ListPendingNodes({})["pendingNodes"]]
         from cluster_add_nodes import ClusterAddNodes
         with APIFailure("ListDrives"):
@@ -92,7 +93,7 @@ class TestClusterAddNodes(object):
                                 wait_for_sync=random.choice([True, False]))
 
     def test_negative_ClusterAddNodesAddDrivesFailure(self):
-        print
+        print()
         pending_ips = [node["mip"] for node in globalconfig.cluster.ListPendingNodes({})["pendingNodes"]]
         from cluster_add_nodes import ClusterAddNodes
         with APIFailure("AddDrives"):
@@ -102,7 +103,7 @@ class TestClusterAddNodes(object):
                                 wait_for_sync=random.choice([True, False]))
 
     def test_ClusterAddNodes(self):
-        print
+        print()
         pending_ips = [node["mip"] for node in globalconfig.cluster.ListPendingNodes({})["pendingNodes"]]
         from cluster_add_nodes import ClusterAddNodes
         assert ClusterAddNodes(node_ips=pending_ips,
@@ -111,7 +112,7 @@ class TestClusterAddNodes(object):
                         wait_for_sync=random.choice([True, False]))
 
     def test_ClusterAddNodesByNode(self):
-        print
+        print()
         pending_ips = [node["mip"] for node in globalconfig.cluster.ListPendingNodes({})["pendingNodes"]]
         from cluster_add_nodes import ClusterAddNodes
         assert ClusterAddNodes(node_ips=pending_ips,
@@ -123,38 +124,38 @@ class TestClusterAddNodes(object):
 class TestNodeGetDriveCount(object):
 
     def test_NodeGetDriveCount(self):
-        print
+        print()
         node_ip = random.choice(globalconfig.cluster.ListActiveNodes({})["nodes"])["mip"]
         from node_get_drive_count import NodeGetDriveCount
         assert NodeGetDriveCount(node_ip=node_ip)
 
     def test_negative_NodeGetDriveCountFailure(self):
-        print
+        print()
         node_ip = random.choice(globalconfig.cluster.ListActiveNodes({})["nodes"])["mip"]
         from node_get_drive_count import NodeGetDriveCount
         with APIFailure("GetDriveConfig"):
             assert not NodeGetDriveCount(node_ip=node_ip)
 
     def test_NodeGetDriveCountBash(self, capsys):
-        print
+        print()
         node = random.choice(globalconfig.cluster.ListActiveNodes({})["nodes"])
         expected = len([drive for drive in globalconfig.cluster.ListDrives({})["drives"] if drive["nodeID"] == node["nodeID"]])
         from node_get_drive_count import NodeGetDriveCount
         assert NodeGetDriveCount(node_ip=node["mip"],
                                  output_format="bash")
         out, _ = capsys.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         assert int(out.strip()) == expected
 
     def test_NodeGetDriveCountJSON(self, capsys):
-        print
+        print()
         node = random.choice(globalconfig.cluster.ListActiveNodes({})["nodes"])
         expected = len([drive for drive in globalconfig.cluster.ListDrives({})["drives"] if drive["nodeID"] == node["nodeID"]])
         from node_get_drive_count import NodeGetDriveCount
         assert NodeGetDriveCount(node_ip=node["mip"],
                                  output_format="json")
         out, _ = capsys.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         import json
         drives = json.loads(out)
         assert "driveCount" in drives
@@ -164,27 +165,27 @@ class TestNodeGetDriveCount(object):
 class TestClusterListNodes(object):
 
     def test_ActiveNodes(self, capfd):
-        print
+        print()
         node_mips = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from cluster_list_nodes import ClusterListNodes
         assert ClusterListNodes(node_state="active")
         
         out, _ = capfd.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         assert "{} active nodes in cluster".format(len(node_mips)) in out
 
     def test_PendingNodes(self, capfd):
-        print
+        print()
         node_mips = [node["mip"] for node in globalconfig.cluster.ListAllNodes({})["pendingNodes"]]
         from cluster_list_nodes import ClusterListNodes
         assert ClusterListNodes(node_state="pending")
         
         out, _ = capfd.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         assert "{} pending nodes in cluster".format(len(node_mips)) in out
 
     def test_AllNodes(self, capfd):
-        print
+        print()
         nodes = globalconfig.cluster.ListAllNodes({})
         nodes = nodes["nodes"] + nodes["pendingNodes"]
 
@@ -192,11 +193,11 @@ class TestClusterListNodes(object):
         assert ClusterListNodes(node_state="all")
 
         out, _ = capfd.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         assert "{} nodes in cluster".format(len(nodes)) in out
 
     def test_AllNodesDefault(self, capfd):
-        print
+        print()
         nodes = globalconfig.cluster.ListAllNodes({})
         nodes = nodes["nodes"] + nodes["pendingNodes"]
 
@@ -204,44 +205,44 @@ class TestClusterListNodes(object):
         assert ClusterListNodes()
 
         out, _ = capfd.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         assert "{} nodes in cluster".format(len(nodes)) in out
 
     def test_negative_ListAllNodesFailure(self, capsys):
-        print
+        print()
         node_mips = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from cluster_list_nodes import ClusterListNodes
         with APIFailure("ListAllNodes"):
             assert not ClusterListNodes(node_state="active")
 
     def test_ActiveNodesBash(self, capsys):
-        print
+        print()
         node_mips = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from cluster_list_nodes import ClusterListNodes
         assert ClusterListNodes(node_state="active",
                         output_format="bash")
 
         out, _ = capsys.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         assert len(out.split()) == len(node_mips)
         assert all(ip in node_mips for ip in out.split())
 
     def test_ActiveNodesJSON(self, capsys):
-        print
+        print()
         node_mips = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from cluster_list_nodes import ClusterListNodes
         assert ClusterListNodes(node_state="active",
                         output_format="json")
 
         out, _ = capsys.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         import json
         js = json.loads(out)
         assert len(js["nodes"]) == len(node_mips)
         assert all([ip in node_mips for ip in js["nodes"]])
 
     def test_ActiveNodesBashID(self, capsys):
-        print
+        print()
         node_ids = [str(node["nodeID"]) for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from cluster_list_nodes import ClusterListNodes
         assert ClusterListNodes(by_id=True,
@@ -249,20 +250,20 @@ class TestClusterListNodes(object):
                         output_format="bash")
         out, _ = capsys.readouterr()
         out = out.strip()
-        print "captured = [{}]".format(out)
-        print "node_ids = {}".format(node_ids)
+        print("captured = [{}]".format(out))
+        print("node_ids = {}".format(node_ids))
         assert len(out.split()) == len(node_ids)
         assert all(nid in node_ids for nid in out.split())
 
     def test_ActiveNodesJSONID(self, capsys):
-        print
+        print()
         node_ids = [node["nodeID"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from cluster_list_nodes import ClusterListNodes
         assert ClusterListNodes(by_id=True,
                         node_state="active",
                         output_format="json")
         out, _ = capsys.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         import json
         js = json.loads(out)
         assert len(js["nodes"]) == len(node_ids)
@@ -273,25 +274,25 @@ class TestClusterListNodes(object):
 class TestNodePowerOff(object):
 
     def test_NodePowerOff(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_off import NodePowerOff
         assert NodePowerOff(node_ips=random.sample(active_nodes, random.randint(1, len(active_nodes))))
 
     def test_NodePowerOffBoulder192Subnet(self):
-        print
+        print()
         from node_power_off import NodePowerOff
         assert NodePowerOff(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in range(random.randint(1, 5))])
 
     def test_negative_NodePowerOffFailure(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_off import NodePowerOff
         with ClientCommandFailure("ipmitool -Ilanplus -Uroot -Pcalvin -H"):
             assert not NodePowerOff(node_ips=random.sample(active_nodes, random.randint(1, len(active_nodes))))
 
     def test_negative_NodePowerOffBadIPMIaddressList(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         node_ips = random.sample(active_nodes, random.randint(1, len(active_nodes)))
         ipmi_ips = [ip for ip in node_ips]
@@ -306,32 +307,32 @@ class TestNodePowerOff(object):
 class TestNodePowerOn(object):
 
     def test_NodePowerOn(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_on import NodePowerOn
         assert NodePowerOn(node_ips=random.sample(active_nodes, random.randint(1, len(active_nodes))))
 
     def test_NodePowerOnNoWait(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_on import NodePowerOn
         assert NodePowerOn(node_ips=random.sample(active_nodes, random.randint(1, len(active_nodes))),
                             wait_for_up=False)
 
     def test_NodePowerOnBoulder192Subnet(self):
-        print
+        print()
         from node_power_on import NodePowerOn
         assert NodePowerOn(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in range(random.randint(1, 5))])
 
     def test_negative_NodePowerOnFailure(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_on import NodePowerOn
         with ClientCommandFailure("ipmitool -Ilanplus -Uroot -Pcalvin -H"):
             assert not NodePowerOn(node_ips=random.sample(active_nodes, random.randint(1, len(active_nodes))))
 
     def test_negative_NodePowerOnBadIPMIaddressList(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         node_ips = random.sample(active_nodes, random.randint(1, len(active_nodes)))
         ipmi_ips = [ip for ip in node_ips]
@@ -346,34 +347,34 @@ class TestNodePowerOn(object):
 class TestNodePowerCycle(object):
 
     def test_NodePowerCycle(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_cycle import NodePowerCycle
         assert NodePowerCycle(node_ips=random.sample(active_nodes, random.randint(1, len(active_nodes))),
                                down_time=random.randint(1, 20))
 
     def test_NodePowerCycleNoWait(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_cycle import NodePowerCycle
         assert NodePowerCycle(node_ips=random.sample(active_nodes, random.randint(1, len(active_nodes))),
                                wait_for_up=False)
 
     def test_NodePowerCycleNoDownTime(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_cycle import NodePowerCycle
         assert NodePowerCycle(node_ips=random.sample(active_nodes, random.randint(1, len(active_nodes))),
                                down_time=0)
 
     def test_NodePowerCycleBoulder192Subnet(self):
-        print
+        print()
         from node_power_cycle import NodePowerCycle
         assert NodePowerCycle(node_ips=["192.168.133.{}".format(random.randint(1, 100)) for _ in range(random.randint(1, 5))],
                                down_time=random.randint(1, 20))
 
     def test_negative_NodePowerCycleFailure(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         from node_power_cycle import NodePowerCycle
         with ClientCommandFailure("ipmitool -Ilanplus -Uroot -Pcalvin -H"):
@@ -381,7 +382,7 @@ class TestNodePowerCycle(object):
                                        down_time=random.randint(1, 20))
 
     def test_negative_NodePowerCycleBadIPMIaddressList(self):
-        print
+        print()
         active_nodes = [node["mip"] for node in globalconfig.cluster.ListActiveNodes({})["nodes"]]
         node_ips = random.sample(active_nodes, random.randint(1, len(active_nodes)))
         ipmi_ips = [ip for ip in node_ips]
@@ -395,18 +396,18 @@ class TestNodePowerCycle(object):
 class TestNodeGetBinaryVersion(object):
 
     def test_NodeGetBinaryVersion(self):
-        print
+        print()
         from node_get_binary_version import NodeGetBinaryVersion
         assert NodeGetBinaryVersion()
 
     def test_negative_ListActiveNodesFailure(self):
-        print
+        print()
         from node_get_binary_version import NodeGetBinaryVersion
         with APIFailure("ListAllNodes"):
             assert not NodeGetBinaryVersion()
 
     def test_negative_GetVersionInfoFailure(self):
-        print
+        print()
         from node_get_binary_version import NodeGetBinaryVersion
         with APIFailure("ListAllNodes"):
             assert not NodeGetBinaryVersion()

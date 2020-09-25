@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 #pylint: skip-file
 
+from __future__ import print_function
 import glob
 import logging
 import multiprocessing
@@ -70,7 +71,7 @@ def generate_fakes():
     globalconfig.cluster = FakeCluster()
     start = time.time()
     globalconfig.cluster.GenerateRandomConfig(globalconfig.random_seed)
-    print "\nGenerated cluster in {} seconds".format(time.time() - start)
+    print("\nGenerated cluster in {} seconds".format(time.time() - start))
 
 # Tear down the cluster so that it will be recreated in a pristine state
 def fake_cluster_teardown():
@@ -109,7 +110,7 @@ def fake_cluster_connected_clients(request):
 # ===============================================================================================
 # Add a timer to each test
 def timer_stop():
-    print "\n{} seconds".format(time.time() - startTime)
+    print("\n{} seconds".format(time.time() - startTime))
 
 startTime = 0
 @pytest.fixture(scope="function", autouse=True)

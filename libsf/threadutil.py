@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 """This module provides utility classes and functions for threading/multiprocessing"""
 
+from __future__ import print_function
 from .logutil import GetLogger
 from . import sfdefaults as _sfdefaults
 from . import SolidFireError, TimeoutError
@@ -175,7 +176,7 @@ def threadwrapper(func):
         try:
             return func(*args, **kwargs)
         except (KeyboardInterrupt, SystemExit):
-            print "KeyboardInterrupt/SystemExit in thread {}".format(_threading.current_thread().name)
+            print("KeyboardInterrupt/SystemExit in thread {}".format(_threading.current_thread().name))
             raise
         except:
             # For exceptions from child threads/processes, we want to extract and store the original traceback, otherwise it may

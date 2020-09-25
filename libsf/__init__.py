@@ -3,6 +3,7 @@
 
 #pylint: disable=unidiomatic-typecheck,protected-access,global-statement
 
+from __future__ import print_function
 import base64
 import six.moves.BaseHTTPServer
 import copy
@@ -188,7 +189,7 @@ class ConnectionError(SolidFireError):
                     self.retryable = False
             else:
                 import pprint
-                print "Unknown inner exception - {}".format(pprint.pformat(self.innerException))
+                print("Unknown inner exception - {}".format(pprint.pformat(self.innerException)))
                 self.message = str(self.innerException)
                 self.retryable = False
 

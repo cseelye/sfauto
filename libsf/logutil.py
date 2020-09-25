@@ -3,6 +3,7 @@
 
 #pylint: disable=protected-access
 
+from __future__ import print_function
 import functools
 import logging
 import logging.handlers
@@ -290,7 +291,7 @@ class PrintLogger(object):
     #pylint: disable=unused-argument
     def printer(self, *args, **kwargs):
         if args:
-            print args[0]
+            print(args[0])
     #pylint: enable=unused-argument
     def __getattr__(self, name):
         return self.printer

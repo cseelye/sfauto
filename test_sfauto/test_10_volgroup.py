@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 #pylint: skip-file
 
+from __future__ import print_function
 import pytest
 import random
 from libsf import InvalidArgumentError
@@ -12,12 +13,12 @@ from .testutil import RandomString, RandomIP, RandomIQN
 class TestCreateVolgroup(object):
 
     def test_CreateVolgroup(self):
-        print
+        print()
         from volgroup_create import CreateVolumeGroup
         assert CreateVolumeGroup(RandomString(random.randint(1, 64)))
 
     def test_CreateVolgroupWithVolumesAndInitiators(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volgroup_create import CreateVolumeGroup
         assert CreateVolumeGroup(RandomString(random.randint(1, 64)),
@@ -25,7 +26,7 @@ class TestCreateVolgroup(object):
                                  volume_ids=volume_ids)
 
     def test_negative_CreateVolgroupVolumeSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volgroup_create import CreateVolumeGroup
         with APIFailure("ListActiveVolumes"):
@@ -33,7 +34,7 @@ class TestCreateVolgroup(object):
                                          volume_ids=volume_ids)
 
     def test_negative_CreateVolgroupExistsStrict(self):
-        print
+        print()
         from volgroup_create import CreateVolumeGroup
         name = RandomString(random.randint(1, 64))
         assert CreateVolumeGroup(volgroup_name=name)
@@ -41,14 +42,14 @@ class TestCreateVolgroup(object):
                                      strict=True)
 
     def test_CreateVolgroupExists(self):
-        print
+        print()
         from volgroup_create import CreateVolumeGroup
         name = RandomString(random.randint(1, 64))
         assert CreateVolumeGroup(volgroup_name=name)
         assert CreateVolumeGroup(volgroup_name=name)
 
     def test_negative_CreateVolgroupSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volgroup_create import CreateVolumeGroup
         with APIFailure("ListVolumeAccessGroups"):
@@ -56,7 +57,7 @@ class TestCreateVolgroup(object):
                                          volume_ids=volume_ids)
 
     def test_CreateVolgroupTest(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volgroup_create import CreateVolumeGroup
         assert CreateVolumeGroup(volgroup_name=RandomString(random.randint(1, 64)),
@@ -64,7 +65,7 @@ class TestCreateVolgroup(object):
                                  test=True)
 
     def test_negative_CreateVolgroupFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volgroup_create import CreateVolumeGroup
         with APIFailure("CreateVolumeAccessGroup"):
@@ -75,13 +76,13 @@ class TestCreateVolgroup(object):
 class TestAddInitiatorsToVolgroup(object):
 
     def test_negative_AddInitiatorsToVolgroupNoGroup(self):
-        print
+        print()
         from volgroup_add_initiators import AddInitiatorsToVolgroup
         assert not AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in range(random.randint(1, 5))],
                                            volgroup_id=9999)
 
     def test_negative_AddInitiatorsToVolgroupSearchFailure(self):
-        print
+        print()
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_add_initiators import AddInitiatorsToVolgroup
         with APIFailure("ListVolumeAccessGroups"):
@@ -89,14 +90,14 @@ class TestAddInitiatorsToVolgroup(object):
                                                volgroup_id=1)
 
     def test_AddInitiatorsToVolgroupAlreadyIn(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["initiators"]) > 0])
         from volgroup_add_initiators import AddInitiatorsToVolgroup
         assert AddInitiatorsToVolgroup(initiators=volgroup["initiators"],
                                        volgroup_id=volgroup["volumeAccessGroupID"])
 
     def test_negative_AddInitiatorsToVolgroupAlreadyInStrict(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["initiators"]) > 0])
         from volgroup_add_initiators import AddInitiatorsToVolgroup
         assert not AddInitiatorsToVolgroup(initiators=volgroup["initiators"],
@@ -104,7 +105,7 @@ class TestAddInitiatorsToVolgroup(object):
                                            strict=True)
 
     def test_negative_AddInitiatorsToVolgroupFailure(self):
-        print
+        print()
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_add_initiators import AddInitiatorsToVolgroup
         with APIFailure("ModifyVolumeAccessGroup"):
@@ -112,7 +113,7 @@ class TestAddInitiatorsToVolgroup(object):
                                                volgroup_id=volgroup_id)
 
     def test_AddInitiatorsToVolgroup(self):
-        print
+        print()
         volgroup_name = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["name"]
         from volgroup_add_initiators import AddInitiatorsToVolgroup
         assert AddInitiatorsToVolgroup(initiators=[RandomIQN() for _ in range(random.randint(1, 5))],
@@ -122,14 +123,14 @@ class TestAddInitiatorsToVolgroup(object):
 class TestAddVolumesToVolgroup(object):
 
     def test_negative_AddVolumesToVolgroupNoGroup(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volgroup_add_volumes import AddVolumesToVolgroup
         assert not AddVolumesToVolgroup(volume_ids=volume_ids,
                                         volgroup_id=9999)
 
     def test_negative_AddVolumesToVolgroupSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         volgroup = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])
         from volgroup_add_volumes import AddVolumesToVolgroup
@@ -138,7 +139,7 @@ class TestAddVolumesToVolgroup(object):
                                             volgroup_id=volgroup["volumeAccessGroupID"])
 
     def test_negative_AddVolumesToVolgroupVolumeSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         volgroup = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])
         from volgroup_add_volumes import AddVolumesToVolgroup
@@ -147,7 +148,7 @@ class TestAddVolumesToVolgroup(object):
                                             volgroup_id=volgroup["volumeAccessGroupID"])
 
     def test_AddVolumesToVolgroupTest(self):
-        print
+        print()
         volgroup = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["volumeID"] not in volgroup["volumes"]], random.randint(2, 15))
         from volgroup_add_volumes import AddVolumesToVolgroup
@@ -156,7 +157,7 @@ class TestAddVolumesToVolgroup(object):
                                     test=True)
 
     def test_AddVolumesToVolgroupAlreadyIn(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 1])
         volume_ids = random.sample(volgroup["volumes"], random.randint(2, min(15, len(volgroup["volumes"]))))
         from volgroup_add_volumes import AddVolumesToVolgroup
@@ -164,7 +165,7 @@ class TestAddVolumesToVolgroup(object):
                                     volgroup_id=volgroup["volumeAccessGroupID"])
 
     def test_negative_AddVolumesToVolgroupAlreadyInStrict(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 1])
         volume_ids = random.sample(volgroup["volumes"], random.randint(2, min(15, len(volgroup["volumes"]))))
         from volgroup_add_volumes import AddVolumesToVolgroup
@@ -173,7 +174,7 @@ class TestAddVolumesToVolgroup(object):
                                         strict=True)
 
     def test_negative_AddVolumesToVolgroupFailure(self):
-        print
+        print()
         volgroup = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["volumeID"] not in volgroup["volumes"]], random.randint(2, 15))
         from volgroup_add_volumes import AddVolumesToVolgroup
@@ -182,7 +183,7 @@ class TestAddVolumesToVolgroup(object):
                                             volgroup_name=volgroup["name"])
 
     def test_AddVolumesToVolgroup(self):
-        print
+        print()
         volgroup = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["volumeID"] not in volgroup["volumes"]], random.randint(2, 15))
         from volgroup_add_volumes import AddVolumesToVolgroup
@@ -193,19 +194,19 @@ class TestAddVolumesToVolgroup(object):
 class TestDeleteAllVolgroups(object):
 
     def test_negative_DeleteAllVolgroupsSearchFailure(self):
-        print
+        print()
         from volgroup_delete_all import DeleteAllVolgroups
         with APIFailure("ListVolumeAccessGroups"):
             assert not DeleteAllVolgroups()
 
     def test_negative_DeleteAllVolgroupsFailure(self):
-        print
+        print()
         from volgroup_delete_all import DeleteAllVolgroups
         with APIFailure("DeleteVolumeAccessGroup"):
             assert not DeleteAllVolgroups()
 
     def test_DeleteAllVolgroups(self):
-        print
+        print()
         from volgroup_delete_all import DeleteAllVolgroups
         assert DeleteAllVolgroups()
 
@@ -213,32 +214,32 @@ class TestDeleteAllVolgroups(object):
 class TestDeleteVolgroup(object):
 
     def test_negative_DeleteVolgroupNoGroupStrict(self):
-        print
+        print()
         from volgroup_delete import DeleteVolgroup
         assert not DeleteVolgroup(volgroup_id=9999,
                                   strict=True)
 
     def test_DeleteVolgroupNoGroup(self):
-        print
+        print()
         from volgroup_delete import DeleteVolgroup
         assert DeleteVolgroup(volgroup_id=9999)
 
     def test_negative_DeleteVolgroupsSearchFailure(self):
-        print
+        print()
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_delete import DeleteVolgroup
         with APIFailure("ListVolumeAccessGroups"):
             assert not DeleteVolgroup(volgroup_id=volgroup_id)
 
     def test_negative_DeleteVolgroupsFailure(self):
-        print
+        print()
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_delete import DeleteVolgroup
         with APIFailure("DeleteVolumeAccessGroup"):
             assert not DeleteVolgroup(volgroup_id=volgroup_id)
 
     def test_DeleteVolgroup(self):
-        print
+        print()
         volgroup_id = random.choice(globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"])["volumeAccessGroupID"]
         from volgroup_delete import DeleteVolgroup
         assert DeleteVolgroup(volgroup_id=volgroup_id)
@@ -247,32 +248,32 @@ class TestDeleteVolgroup(object):
 class TestListVolgroups(object):
 
     def test_ListVolgroups(self):
-        print
+        print()
         from volgroup_list import ListVolgroups
         assert ListVolgroups()
 
     def test_negative_ListVolumesForVolgroupSearchFailure(self):
-        print
+        print()
         from volgroup_list import ListVolgroups
         with APIFailure("ListVolumeAccessGroups"):
             assert not ListVolgroups()
 
     def test_ListVolgroupsBash(self, capsys):
-        print
+        print()
         group_names = [group["name"] for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"]]
         from volgroup_list import ListVolgroups
         assert ListVolgroups(output_format="bash")
         out, _ = capsys.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         assert out.strip() == " ".join(group_names)
 
     def test_ListVolgroupsJSON(self, capsys):
-        print
+        print()
         group_names = [group["name"] for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"]]
         from volgroup_list import ListVolgroups
         assert ListVolgroups(output_format="json")
         out, _ = capsys.readouterr()
-        print "captured = [{}]".format(out)
+        print("captured = [{}]".format(out))
         import json
         groups = json.loads(out)
         assert "volumeAccessGroups" in list(groups.keys())
@@ -283,7 +284,7 @@ class TestListVolgroups(object):
 class TestModifyVolgroupLunAssignments(object):
 
     def test_negative_ModifyVolgroupLunAssignmentsNoGroup(self):
-        print
+        print()
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         assert not ModifyVolgroupLunAssignments(method="seq",
                                             lun_min=random.randint(0, 8193),
@@ -291,7 +292,7 @@ class TestModifyVolgroupLunAssignments(object):
                                             volgroup_id=9999)
 
     def test_negative_ModifyVolgroupLunAssignmentsSearchFailure(self):
-        print
+        print()
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         with APIFailure("ListVolumeAccessGroups"):
             assert not ModifyVolgroupLunAssignments(method="seq",
@@ -300,7 +301,7 @@ class TestModifyVolgroupLunAssignments(object):
                                                 volgroup_id=9999)
 
     def test_negative_ModifyVolgroupLunAssignmentsMinGtMax(self):
-        print
+        print()
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         with pytest.raises(InvalidArgumentError):
             ModifyVolgroupLunAssignments(method="seq",
@@ -309,7 +310,7 @@ class TestModifyVolgroupLunAssignments(object):
                                          volgroup_id=9999)
 
     def test_ModifyVolgroupLunAssignmentsSeq(self):
-        print
+        print()
         volgroup_id = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])["volumeAccessGroupID"]
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         assert ModifyVolgroupLunAssignments(method="seq",
@@ -318,7 +319,7 @@ class TestModifyVolgroupLunAssignments(object):
                                             volgroup_id=volgroup_id)
 
     def test_negative_ModifyVolgroupLunAssignmentsSeqFailure(self):
-        print
+        print()
         volgroup_id = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])["volumeAccessGroupID"]
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         with APIFailure("ModifyVolumeAccessGroupLunAssignments"):
@@ -328,7 +329,7 @@ class TestModifyVolgroupLunAssignments(object):
                                                     volgroup_id=volgroup_id)
 
     def test_negative_ModifyVolgroupLunAssignmentsSeqMinTooHigh(self):
-        print
+        print()
         volgroup_id = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 2])["volumeAccessGroupID"]
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         assert not ModifyVolgroupLunAssignments(method="seq",
@@ -337,7 +338,7 @@ class TestModifyVolgroupLunAssignments(object):
                                                 volgroup_id=volgroup_id)
 
     def test_ModifyVolgroupLunAssignmentsRev(self):
-        print
+        print()
         volgroup_id = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])["volumeAccessGroupID"]
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         assert ModifyVolgroupLunAssignments(method="rev",
@@ -346,7 +347,7 @@ class TestModifyVolgroupLunAssignments(object):
                                             volgroup_id=volgroup_id)
 
     def test_negative_ModifyVolgroupLunAssignmentsRevMaxTooLow(self):
-        print
+        print()
         volgroup_id = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 3])["volumeAccessGroupID"]
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         assert not ModifyVolgroupLunAssignments(method="rev",
@@ -355,7 +356,7 @@ class TestModifyVolgroupLunAssignments(object):
                                                 volgroup_id=volgroup_id)
 
     def test_ModifyVolgroupLunAssignmentsRand(self):
-        print
+        print()
         volgroup_id = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])["volumeAccessGroupID"]
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
         assert ModifyVolgroupLunAssignments(method="rand",
@@ -364,7 +365,7 @@ class TestModifyVolgroupLunAssignments(object):
                                             volgroup_id=volgroup_id)
 
     def test_negative_ModifyVolgroupLunAssignmentsRandRangeTooSmall(self):
-        print
+        print()
         volgroup_id = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 3])["volumeAccessGroupID"]
         lun_min = random.randint(0, 16380)
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
@@ -374,7 +375,7 @@ class TestModifyVolgroupLunAssignments(object):
                                                 volgroup_id=volgroup_id)
 
     def test_ModifyVolgroupLunAssignmentsVol(self):
-        print
+        print()
         groups = [group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0 and max(group["volumes"]) < 16382 - len(group["volumes"])]
         volgroup_id = random.choice(groups)["volumeAccessGroupID"]
         from volgroup_modify_lun_assignments import ModifyVolgroupLunAssignments
@@ -385,13 +386,13 @@ class TestModifyVolgroupLunAssignments(object):
 class TestRemoveInitiatorsFromVolgroup(object):
 
     def test_negative_RemoveInitiatorsFromVolgroupNoGroup(self):
-        print
+        print()
         from volgroup_remove_initiators import RemoveInitiatorsFromVolgroup
         assert not RemoveInitiatorsFromVolgroup(initiators=[RandomIQN()],
                                                 volgroup_id=9999)
 
     def test_negative_RemoveInitiatorsFromVolgroupSearchFailure(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["initiators"]) > 0])
         from volgroup_remove_initiators import RemoveInitiatorsFromVolgroup
         with APIFailure("ListVolumeAccessGroups"):
@@ -399,14 +400,14 @@ class TestRemoveInitiatorsFromVolgroup(object):
                                                     volgroup_id=volgroup["volumeAccessGroupID"])
 
     def test_RemoveInitiatorsFromVolgroupAlreadyOut(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["initiators"]) <= 0])
         from volgroup_remove_initiators import RemoveInitiatorsFromVolgroup
         assert RemoveInitiatorsFromVolgroup(initiators=[RandomIQN()],
                                             volgroup_id=volgroup["volumeAccessGroupID"])
 
     def test_negative_RemoveInitiatorsFromVolgroupAlreadyOutStrict(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["initiators"]) <= 0])
         from volgroup_remove_initiators import RemoveInitiatorsFromVolgroup
         assert not RemoveInitiatorsFromVolgroup(initiators=[RandomIQN()],
@@ -414,7 +415,7 @@ class TestRemoveInitiatorsFromVolgroup(object):
                                                 strict=True)
 
     def test_negative_RemoveInitiatorsFromVolgroupFailure(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["initiators"]) > 0])
         from volgroup_remove_initiators import RemoveInitiatorsFromVolgroup
         with APIFailure("ModifyVolumeAccessGroup"):
@@ -422,7 +423,7 @@ class TestRemoveInitiatorsFromVolgroup(object):
                                                     volgroup_id=volgroup["volumeAccessGroupID"])
 
     def test_RemoveInitiatorsFromVolgroup(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["initiators"]) > 0])
         from volgroup_remove_initiators import RemoveInitiatorsFromVolgroup
         assert RemoveInitiatorsFromVolgroup(initiators=random.sample(volgroup["initiators"], random.randint(1, min(5, len(volgroup["initiators"])))),
@@ -432,20 +433,20 @@ class TestRemoveInitiatorsFromVolgroup(object):
 class TestRemoveVolumesFromVolgroup(object):
 
     def test_negative_RemoveVolumesFromVolgroupNoGroup(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
         assert not RemoveVolumesFromVolgroup(volume_ids=volume_ids,
                                              volgroup_id=9999)
 
     def test_negative_RemoveVolumesFromVolgroupNoVolumes(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) <= 0])
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
         assert not RemoveVolumesFromVolgroup(volgroup_id=volgroup["volumeAccessGroupID"])
 
     def test_negative_RemoveVolumesFromVolgroupSearchFailure(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])
         volume_ids=random.sample(volgroup["volumes"], random.randint(1, min(5, len(volgroup["volumes"]))))
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
@@ -454,7 +455,7 @@ class TestRemoveVolumesFromVolgroup(object):
                                                  volgroup_name=volgroup["name"])
 
     def test_negative_RemoveVolumesFromVolgroupVolumeSearchFailure(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])
         volume_ids=random.sample(volgroup["volumes"], random.randint(1, min(5, len(volgroup["volumes"]))))
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
@@ -463,7 +464,7 @@ class TestRemoveVolumesFromVolgroup(object):
                                                  volgroup_name=volgroup["name"])
 
     def test_RemoveVolumesFromVolgroupTest(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])
         volume_ids=random.sample(volgroup["volumes"], random.randint(1, min(5, len(volgroup["volumes"]))))
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
@@ -472,7 +473,7 @@ class TestRemoveVolumesFromVolgroup(object):
                                          test=True)
 
     def test_RemoveVolumesFromVolgroupAlreadyOut(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) <= 0])
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["volumeID"] not in volgroup["volumes"]], random.randint(2, 15))
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
@@ -480,7 +481,7 @@ class TestRemoveVolumesFromVolgroup(object):
                                          volgroup_name=volgroup["name"])
 
     def test_negative_RemoveVolumesFromVolgroupAlreadyOutStrict(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) <= 0])
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["volumeID"] not in volgroup["volumes"]], random.randint(2, 15))
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
@@ -489,7 +490,7 @@ class TestRemoveVolumesFromVolgroup(object):
                                              strict=True)
 
     def test_negative_RemoveVolumesFromVolgroupFailure(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])
         volume_ids=random.sample(volgroup["volumes"], random.randint(1, min(5, len(volgroup["volumes"]))))
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
@@ -498,7 +499,7 @@ class TestRemoveVolumesFromVolgroup(object):
                                                  volgroup_name=volgroup["name"])
 
     def test_RemoveVolumesFromVolgroup(self):
-        print
+        print()
         volgroup = random.choice([group for group in globalconfig.cluster.ListVolumeAccessGroups({})["volumeAccessGroups"] if len(group["volumes"]) > 0])
         volume_ids=random.sample(volgroup["volumes"], random.randint(1, min(5, len(volgroup["volumes"]))))
         from volgroup_remove_volumes import RemoveVolumesFromVolgroup
