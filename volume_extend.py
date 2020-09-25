@@ -79,7 +79,7 @@ def VolumeExtend(new_size,
     new_size = new_size * multiplier
     post_value = new_size
     if new_size % 4096 != 0:
-        post_value = (new_size/4096 + 1) * 4096
+        post_value = int((new_size // 4096 + 1) * 4096)
 
     return VolumeModify(property_name="totalSize",
                          property_value=new_size,

@@ -725,7 +725,7 @@ class FakeCluster(object):
                 "attributes": { },
                 "capacity": 300069052416,
                 "driveID": drive_id,
-                "nodeID": node_ids[idx / config[DRIVES_PER_NODE_PATH]],
+                "nodeID": node_ids[idx // config[DRIVES_PER_NODE_PATH]],
                 "serial": "scsi-SATA_INTEL_SSD{}".format(random.randint(10000000,99999999)),
                 "slot": -1 if idx % config[DRIVES_PER_NODE_PATH] == 0 else idx % config[DRIVES_PER_NODE_PATH] - 1,
                 "status": "active" if idx < config[DRIVES_PER_NODE_PATH] * (active_node_count-1) else "available",
@@ -1528,7 +1528,7 @@ class FakeCluster(object):
                 if newsize < volume["totalSize"]:
                     raise SolidFireApiError("ModifyVolume", methodParams, ip, endpoint, "xVolumeShrinkProhibited", 500, "Lowering a volume size is not allowed.")
                 if newsize % 4096 != 0:
-                    newsize = (newsize/4096 + 1) * 4096
+                    newsize = (newsize // 4096 + 1) * 4096
                 assert newsize % 4096 == 0
                 volume["totalSize"] = newsize
 
