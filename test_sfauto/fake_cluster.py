@@ -16,7 +16,6 @@ import socket
 import string
 import threading
 import time
-import urllib2
 from six.moves.urllib.parse import urlparse
 import uuid
 
@@ -30,7 +29,7 @@ from io import open
 import six
 
 def fake_urlopen(request, *args, **kwargs):
-    """Fake out urllib2.urlopen and return fake but consistent results as if they came from a SF endpoint"""
+    """Fake out urllib.urlopen and return fake but consistent results as if they came from a SF endpoint"""
 
     username = None
     password = None
@@ -39,10 +38,14 @@ def fake_urlopen(request, *args, **kwargs):
         if authType == "Basic":
             username, password = base64.b64decode(authHash).split(":")
 
+    # Patch for python2
+    if not hasattr(request, "data"):
+        setattr(request, "data", request.get_data())
+
     # JSON API call
-    if "json-rpc" in request.get_selector():
+    if "json-rpc" in request.get_full_url():
         url = urlparse(request.get_full_url())
-        req = json.loads(request.get_data())
+        req = json.loads(request.data)
         api_version = float(url.path.split("/")[-1])
         method_name = req["method"]
         method_params = req["params"]
@@ -57,7 +60,7 @@ def fake_urlopen(request, *args, **kwargs):
 
     # Regular download
     else:
-        response = globalconfig.cluster.HttpDownload(request.get_selector())
+        response = globalconfig.cluster.HttpDownload(request.get_full_url())
         return FakeResponse(response)
 
 class FakeResponse(object):

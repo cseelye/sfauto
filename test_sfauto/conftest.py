@@ -9,7 +9,7 @@ import os
 import paramiko
 import pytest
 import time
-import urllib2
+import six.moves.urllib.request
 
 from libsf import sfdefaults, shellutil, logutil
 from .fake_client import FakeClientRegister, FakeShellCommand, FakeParamikoSSHClient
@@ -30,6 +30,7 @@ def pytest_configure(config):
 
     # Turn up logging level
     logutil.GetLogger().ShowDebug(10)
+    logutil.GetLogger().TruncateMessages(False)
 
     # Set the random seed
     user_seed = config.getoption("--seed")
@@ -39,7 +40,7 @@ def pytest_configure(config):
         globalconfig.random_seed = str(int(round(time.time() * 1000)))
 
     # Redirect urllib2.urlopen function so we can capture SF API calls (to simulate cluster/nodes)
-    urllib2.urlopen = fake_urlopen
+    six.moves.urllib.request.urlopen = fake_urlopen
 
     # Redirect Shell function so we can capture commands like winexe, ping, etc (to simulate Windows clients, network operations, etc)
     shellutil.Shell_original = shellutil.Shell

@@ -9,6 +9,7 @@ import six.moves.BaseHTTPServer
 import copy
 import six.moves.http_client
 import inspect
+from io import open
 import json
 import os
 import paramiko
@@ -17,12 +18,12 @@ import socket
 import ssl
 import sys
 import time
-import urllib2
 import six.moves.urllib.parse
+import six.moves.urllib.error
+import six.moves.urllib.request
+
 from .logutil import GetLogger
 from . import sfdefaults
-from io import open
-import six
 
 class SolidFireError(Exception):
     """Base class for SolidFire exceptions"""
@@ -140,7 +141,7 @@ class ConnectionError(SolidFireError):
             if innerReason and isinstance(innerReason, Exception):
                 self.innerException = innerReason
 
-            if type(self.innerException) == urllib2.HTTPError:
+            if type(self.innerException) == six.moves.urllib.error.HTTPError:
                 if self.innerException.code in six.moves.BaseHTTPServer.BaseHTTPRequestHandler.responses:
                     self.message = 'HTTP Error {}: {}'.format(self.innerException.code, six.moves.BaseHTTPServer.BaseHTTPRequestHandler.responses[self.innerException.code])
                     self.code = self.innerException.code
@@ -151,7 +152,7 @@ class ConnectionError(SolidFireError):
                 # 404 - not found
                 if self.code not in [401, 404]:
                     self.retryable = True
-            elif type(self.innerException) == urllib2.URLError:
+            elif type(self.innerException) == six.moves.urllib.error.URLError:
                 self.message = '{}'.format(self.innerException.reason)
                 self.retryable = True
             elif type(self.innerException) == socket.timeout:
@@ -354,26 +355,26 @@ class HTTPDownloader(object):
         else:
             endpoint = six.moves.urllib.parse.urljoin('http://{}:{}/'.format(self.server, self.port), remotePath)
 
-        request = urllib2.Request(endpoint)
+        request = six.moves.urllib.request.Request(endpoint)
         if useAuth and self.username:
-            request.add_header('Authorization', "Basic " + base64.encodestring('{}:{}'.format(self.username, self.password)).strip())
+            request.add_header('Authorization', b"Basic " + base64.b64encode('{}:{}'.format(self.username, self.password).encode()).strip())
 
         self.log.debug2('Downloading {}'.format(endpoint))
         try:
             if context:
                 # pylint: disable=unexpected-keyword-arg
-                response = urllib2.urlopen(request, timeout=timeout, context=context)
+                response = six.moves.urllib.request.urlopen(request, timeout=timeout, context=context)
                 # pylint: enable=unexpected-keyword-arg
             else:
-                response = urllib2.urlopen(request, timeout=timeout)
+                response = six.moves.urllib.request.urlopen(request, timeout=timeout)
         except (socket.timeout, socket.error, socket.herror, socket.gaierror) as ex:
             raise ConnectionError(self.server, endpoint, ex)
-        except urllib2.HTTPError as ex:
+        except six.moves.urllib.error.HTTPError as ex:
             if ex.code == 401:
                 raise UnauthorizedError.IPContext(endpoint)
             else:
                 raise ConnectionError(self.server, endpoint, ex)
-        except urllib2.URLError as ex:
+        except six.moves.urllib.error.URLError as ex:
             if type(ex.reason) in [socket.timeout, socket.error, socket.herror, socket.gaierror]:
                 raise ConnectionError(self.server, endpoint, ex.reason)
             if type(ex.reason) == OSError:
@@ -417,26 +418,26 @@ class HTTPDownloader(object):
         else:
             endpoint = 'http://{}:{}/{}'.format(self.server, self.port, remotePath)
 
-        request = urllib2.Request(endpoint)
+        request = six.moves.urllib.request.Request(endpoint)
         if useAuth and self.username:
-            request.add_header('Authorization', "Basic " + base64.encodestring('{}:{}'.format(self.username, self.password)).strip())
+            request.add_header('Authorization', b"Basic " + base64.b64encode('{}:{}'.format(self.username, self.password).encode()).strip())
 
         self.log.debug('Downloading {}'.format(endpoint))
         try:
             if context:
                 # pylint: disable=unexpected-keyword-arg
-                response = urllib2.urlopen(request, timeout=timeout, context=context)
+                response = six.moves.urllib.request.urlopen(request, timeout=timeout, context=context)
                 # pylint: enable=unexpected-keyword-arg
             else:
-                response = urllib2.urlopen(request, timeout=timeout)
+                response = six.moves.urllib.request.urlopen(request, timeout=timeout)
         except (socket.timeout, socket.error, socket.herror, socket.gaierror) as ex:
             raise ConnectionError(self.server, endpoint, ex)
-        except urllib2.HTTPError as ex:
+        except six.moves.urllib.error.HTTPError as ex:
             if ex.code == 401:
                 raise UnauthorizedError.IPContext(endpoint)
             else:
                 raise ConnectionError(self.server, endpoint, ex)
-        except urllib2.URLError as ex:
+        except six.moves.urllib.error.URLError as ex:
             if type(ex.reason) in [socket.timeout, socket.error, socket.herror, socket.gaierror]:
                 raise ConnectionError(self.server, endpoint, ex.reason)
             if type(ex.reason) == OSError:
@@ -581,31 +582,31 @@ class SolidFireAPI(object):
             pass
 
         api_call = json.dumps({'method': methodName, 'params': methodParams, 'id': self._GetReqid()})
-        request = urllib2.Request(endpoint, api_call)
+        request = six.moves.urllib.request.Request(endpoint, api_call)
         request.add_header('Content-Type', 'application/json-rpc')
-        request.add_header('Authorization', "Basic " + base64.encodestring('{}:{}'.format(self.username, self.password)).strip())
+        request.add_header('Authorization', b"Basic " + base64.b64encode('{}:{}'.format(self.username, self.password).encode()).strip())
 
         self.log.debug('API call {} on {}'.format(api_call, endpoint))
         try:
             if context:
                 try:
                     # pylint: disable=unexpected-keyword-arg
-                    apiResponse = urllib2.urlopen(request, timeout=timeout, context=context)
+                    apiResponse = six.moves.urllib.request.urlopen(request, timeout=timeout, context=context)
                     # pylint: enable=unexpected-keyword-arg
                 except TypeError:
-                    apiResponse = urllib2.urlopen(request, timeout=timeout)
+                    apiResponse = six.moves.urllib.request.urlopen(request, timeout=timeout)
             else:
-                apiResponse = urllib2.urlopen(request, timeout=timeout)
+                apiResponse = six.moves.urllib.request.urlopen(request, timeout=timeout)
         except (socket.timeout, socket.error, socket.herror, socket.gaierror) as ex:
             raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
-        except urllib2.HTTPError as ex:
+        except six.moves.urllib.error.HTTPError as ex:
             if ex.code == 401:
                 raise UnauthorizedError.APIContext(methodName, methodParams, self.server, endpoint)
             elif ex.code == 404:
                 raise SolidFireAPIError(methodName, methodParams, self.server, endpoint, 'xUnknownAPIVersion', 500, 'HTTP Error 404: Not Found - url=[{}]'.format(endpoint))
             else:
                 raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
-        except urllib2.URLError as ex:
+        except six.moves.urllib.error.URLError as ex:
             if type(ex.reason) in [socket.timeout, socket.error, socket.herror, socket.gaierror]:
                 raise ConnectionError(self.server, endpoint, ex.reason, methodName, methodParams)
             if type(ex.reason) == OSError:
@@ -614,7 +615,7 @@ class SolidFireAPI(object):
         except six.moves.http_client.BadStatusLine as ex:
             raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
 
-        responseStr = apiResponse.read().decode('ascii')
+        responseStr = apiResponse.read()
         self.log.debug2('API response {}'.format(responseStr))
         try:
             responseJson = json.loads(responseStr)
