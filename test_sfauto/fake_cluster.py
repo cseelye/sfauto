@@ -1525,6 +1525,8 @@ class FakeCluster(object):
             # Increase the size of the volume
             if "totalSize" in methodParams and methodParams["totalSize"] != volume["totalSize"]:
                 newsize = methodParams["totalSize"]
+                assert isinstance(newsize, int) and not isinstance(newsize, bool)
+
                 if newsize < volume["totalSize"]:
                     raise SolidFireApiError("ModifyVolume", methodParams, ip, endpoint, "xVolumeShrinkProhibited", 500, "Lowering a volume size is not allowed.")
                 if newsize % 4096 != 0:
@@ -1573,6 +1575,7 @@ class FakeCluster(object):
             account = self.data[ACCOUNT_PATH][account_id]
 
             size = methodParams.get("newSize", volume["totalSize"])
+            assert isinstance(size, int) and not isinstance(size, bool)
             access = methodParams.get("access", "readWrite")
 
             clone_id = self._GetNextIDUnlocked()
@@ -1625,6 +1628,7 @@ class FakeCluster(object):
         size = methodParams.get("totalSize", None)
         if not size:
             raise SolidFireApiError("CreateVolume", methodParams, ip, endpoint, "xMissingParameter", 500, "Missing member=[totalSize]")
+        assert isinstance(size, int) and not isinstance(size, bool)
         enable512e = methodParams.get("enable512e", False)
         qos = methodParams.get("qos", {})
         min_iops = qos.get("minIOPS", 50)
@@ -1662,6 +1666,7 @@ class FakeCluster(object):
         size = methodParams.get("totalSize", None)
         if not size:
             raise SolidFireApiError("CreateMultipleVolumes", methodParams, ip, endpoint, "xMissingParameter", 500, "Missing member=[totalSize]")
+        assert isinstance(size, int) and not isinstance(size, bool)
         enable512e = methodParams.get("enable512e", False)
         qos = methodParams.get("qos", {})
         min_iops = qos.get("minIOPS", 50)
