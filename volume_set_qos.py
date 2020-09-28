@@ -7,27 +7,44 @@ This action will set QoS on a list of volumes
 from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import logargs
-from libsf.util import ValidateArgs, IPv4AddressType, OptionalValueType, ItemList, SolidFireIDType, PositiveIntegerType, BoolType, SolidFireBurstIOPSType, SolidFireMaxIOPSType, SolidFireMinIOPSType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SolidFireIDType, PositiveIntegerType, BoolType, SolidFireBurstIOPSType, SolidFireMaxIOPSType, SolidFireMinIOPSType, StrType
 from libsf import sfdefaults
 import copy
 from volume_modify import VolumeModify
 
 @logargs
-def VolumeSetQos(min_iops=100,
-                 max_iops=15000,
-                 burst_iops=15000,
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "min_iops" : (SolidFireMinIOPSType, sfdefaults.min_iops),
+    "max_iops" : (SolidFireMaxIOPSType, sfdefaults.max_iops),
+    "burst_iops" : (SolidFireBurstIOPSType, sfdefaults.burst_iops),
+    "volume_names" : (OptionalValueType(ItemList(StrType, allowEmpty=True)), None),
+    "volume_ids" : (OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)), None),
+    "volume_prefix" : (OptionalValueType(StrType), None),
+    "volume_regex" : (OptionalValueType(StrType), None),
+    "volume_count" : (OptionalValueType(PositiveIntegerType), None),
+    "source_account" : (OptionalValueType(StrType), None),
+    "source_account_id" : (OptionalValueType(SolidFireIDType), None),
+    "test" : (BoolType, False),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
+def VolumeSetQos(min_iops,
+                 max_iops,
+                 burst_iops,
 #pylint: disable=unused-argument
-                 volume_names=None,
-                 volume_ids=None,
-                 volume_prefix=None,
-                 volume_regex=None,
-                 volume_count=0,
-                 source_account=None,
-                 source_account_id=None,
-                 test=False,
-                 mvip=sfdefaults.mvip,
-                 username=sfdefaults.username,
-                 password=sfdefaults.password):
+                 volume_names,
+                 volume_ids,
+                 volume_prefix,
+                 volume_regex,
+                 volume_count,
+                 source_account,
+                 source_account_id,
+                 test,
+                 mvip,
+                 username,
+                 password):
 #pylint: enable=unused-argument
     """
     Set QoS on a list of volumes
@@ -49,30 +66,7 @@ def VolumeSetQos(min_iops=100,
         password:           the admin password of the cluster
     """
 
-    # Validate args
-    allargs = ValidateArgs(locals(), {
-        "min_iops" : SolidFireMinIOPSType,
-        "max_iops" : SolidFireMaxIOPSType,
-        "burst_iops" : SolidFireBurstIOPSType,
-        "volume_names" : OptionalValueType(ItemList(str, allowEmpty=True)),
-        "volume_ids" : OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)),
-        "volume_prefix" : OptionalValueType(str),
-        "volume_regex" : OptionalValueType(str),
-        "volume_count" : OptionalValueType(PositiveIntegerType),
-        "source_account" : OptionalValueType(str),
-        "source_account_id" : OptionalValueType(SolidFireIDType),
-        "test" : BoolType,
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
-    # Update locals now that they are validated and typed
-    for argname in allargs.keys():
-        #pylint: disable=exec-used
-        exec("{argname} = allargs['{argname}']".format(argname=argname)) in globals(), locals()
-        #pylint: enable=exec-used
-
-    options = copy.deepcopy(allargs)
+    options = copy.deepcopy(locals())
     for key in ["min_iops", "max_iops", "burst_iops"]:
         options.pop(key, None)
 

@@ -7,26 +7,42 @@ This action will increase the size of a list of volumes
 from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import logargs
-from libsf.util import ValidateArgs, IPv4AddressType, SolidFireVolumeSizeType, OptionalValueType, ItemList, SolidFireIDType, PositiveIntegerType, BoolType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SolidFireIDType, PositiveIntegerType, PositiveNonZeroIntegerType, BoolType, RegexType, StrType, SolidFireVolumeSizeType
 from libsf import sfdefaults
 import copy
 from volume_modify import VolumeModify
 
 @logargs
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "new_size" : (PositiveNonZeroIntegerType, None),
+    "gib" : (BoolType, False),
+    "volume_names" : (OptionalValueType(ItemList(StrType, allowEmpty=True)), None),
+    "volume_ids" : (OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)), None),
+    "volume_prefix" : (OptionalValueType(StrType), None),
+    "volume_regex" : (OptionalValueType(RegexType), None),
+    "volume_count" : (OptionalValueType(PositiveIntegerType), None),
+    "source_account" : (OptionalValueType(StrType), None),
+    "source_account_id" : (OptionalValueType(SolidFireIDType), None),
+    "test" : (BoolType, False),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
 def VolumeExtend(new_size,
-                 gib=False,
+                 gib,
 #pylint: disable=unused-argument
-                 volume_names=None,
-                 volume_ids=None,
-                 volume_prefix=None,
-                 volume_regex=None,
-                 volume_count=0,
-                 source_account=None,
-                 source_account_id=None,
-                 test=False,
-                 mvip=sfdefaults.mvip,
-                 username=sfdefaults.username,
-                 password=sfdefaults.password):
+                 volume_names,
+                 volume_ids,
+                 volume_prefix,
+                 volume_regex,
+                 volume_count,
+                 source_account,
+                 source_account_id,
+                 test,
+                 mvip,
+                 username,
+                 password):
 #pylint: enable=unused-argument
     """
     Increase the size of a list of volumes
@@ -49,27 +65,6 @@ def VolumeExtend(new_size,
     options = copy.deepcopy(locals())
     options.pop("new_size", None)
     options.pop("gib", None)
-
-    # Validate args
-    allargs = ValidateArgs(locals(), {
-        "new_size" : SolidFireVolumeSizeType(gib),
-        "volume_names" : OptionalValueType(ItemList(str, allowEmpty=True)),
-        "volume_ids" : OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)),
-        "volume_prefix" : OptionalValueType(str),
-        "volume_regex" : OptionalValueType(str),
-        "volume_count" : OptionalValueType(PositiveIntegerType),
-        "source_account" : OptionalValueType(str),
-        "source_account_id" : OptionalValueType(SolidFireIDType),
-        "test" : BoolType,
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
-    # Update locals now that they are validated and typed
-    for argname in allargs.keys():
-        #pylint: disable=exec-used
-        exec("{argname} = allargs['{argname}']".format(argname=argname)) in globals(), locals()
-        #pylint: enable=exec-used
 
     if gib:
         multiplier = 1024 * 1024 * 1024

@@ -12,33 +12,56 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType, PositiveNonZeroIntegerType, SelectionType, OptionalValueType, ItemList, PositiveIntegerType, SolidFireIDType, BoolType
+from libsf.util import ValidateAndDefault, StrType, IPv4AddressType, PositiveNonZeroIntegerType, PositiveIntegerType, OptionalValueType, ItemList, BoolType, SolidFireIDType, SelectionType
 from libsf import sfdefaults
 from libsf import SolidFireError, UnknownObjectError
 from libsf import threadutil
 import time
 
 @logargs
-def VolumeClone(clone_count=1,
-                clone_prefix="-c",
-                clone_name=None,
-                access="readWrite",
-                clone_size=None,
-                total_job_count=12,
-                volume_job_count=None,
-                dest_account_name=None,
-                dest_account_id=None,
-                volume_names=None,
-                volume_ids=None,
-                volume_prefix=None,
-                volume_regex=None,
-                volume_count=0,
-                source_account=None,
-                source_account_id=None,
-                test=False,
-                mvip=sfdefaults.mvip,
-                username=sfdefaults.username,
-                password=sfdefaults.password):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "clone_count" : (PositiveNonZeroIntegerType, None),
+    "clone_prefix" : (StrType, "-c"),
+    "clone_name" : (OptionalValueType(StrType), None),
+    "access" : (SelectionType(sfdefaults.all_volume_access_levels), sfdefaults.volume_access),
+    "clone_size" : (OptionalValueType(PositiveNonZeroIntegerType), None),
+    "total_job_count" : (PositiveNonZeroIntegerType, 12),
+    "volume_job_count" : (OptionalValueType(PositiveNonZeroIntegerType), None),
+    "dest_account_name" : (OptionalValueType(StrType), None),
+    "dest_account_id" : (OptionalValueType(SolidFireIDType), None),
+    "volume_names" : (OptionalValueType(ItemList(StrType, allowEmpty=True)), None),
+    "volume_ids" : (OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)), None),
+    "volume_prefix" : (OptionalValueType(StrType), None),
+    "volume_regex" : (OptionalValueType(StrType), None),
+    "volume_count" : (OptionalValueType(PositiveIntegerType), None),
+    "source_account" : (OptionalValueType(StrType), None),
+    "source_account_id" : (OptionalValueType(SolidFireIDType), None),
+    "test" : (BoolType, False),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
+def VolumeClone(clone_count,
+                clone_prefix,
+                clone_name,
+                access,
+                clone_size,
+                total_job_count,
+                volume_job_count,
+                dest_account_name,
+                dest_account_id,
+                volume_names,
+                volume_ids,
+                volume_prefix,
+                volume_regex,
+                volume_count,
+                source_account,
+                source_account_id,
+                test,
+                mvip,
+                username,
+                password):
     """
     Clone a list of volumes
 
@@ -66,35 +89,6 @@ def VolumeClone(clone_count=1,
     """
 
     log = GetLogger()
-
-    # Validate args
-    allargs = ValidateArgs(locals(), {
-        "clone_count" : PositiveNonZeroIntegerType,
-        "clone_prefix" : str,
-        "clone_name" : OptionalValueType(str),
-        "access" : SelectionType(sfdefaults.all_volume_access_levels),
-        "clone_size" : OptionalValueType(PositiveNonZeroIntegerType),
-        "total_job_count" : PositiveNonZeroIntegerType,
-        "volume_job_count" : OptionalValueType(PositiveNonZeroIntegerType),
-        "dest_account_name" : OptionalValueType(ItemList(allowEmpty=True)),
-        "dest_account_id" : OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)),
-        "volume_names" : OptionalValueType(ItemList(allowEmpty=True)),
-        "volume_ids" : OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)),
-        "volume_prefix" : OptionalValueType(str),
-        "volume_regex" : OptionalValueType(str),
-        "volume_count" : OptionalValueType(PositiveIntegerType),
-        "source_account" : OptionalValueType(str),
-        "source_account_id" : OptionalValueType(SolidFireIDType),
-        "test" : BoolType,
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
-    # Update locals now that they are validated and typed
-    for argname in allargs.keys():
-        #pylint: disable=exec-used
-        exec("{argname} = allargs['{argname}']".format(argname=argname)) in globals(), locals()
-        #pylint: enable=exec-used
 
     cluster = SFCluster(mvip, username, password)
 

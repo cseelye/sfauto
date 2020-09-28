@@ -6,15 +6,21 @@ This action will purge the deleted volumes on the cluster
 from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
+from libsf.util import ValidateAndDefault, IPv4AddressType, StrType
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType
 from libsf import sfdefaults
 from libsf import SolidFireError
 
 @logargs
-def VolumePurge(mvip=sfdefaults.mvip,
-                        username=sfdefaults.username,
-                        password=sfdefaults.password):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
+def VolumePurge(mvip,
+                username,
+                password):
     """
     Purge the deleted volumes from the cluster
 
@@ -24,18 +30,6 @@ def VolumePurge(mvip=sfdefaults.mvip,
         password:           the admin password of the cluster
     """
     log = GetLogger()
-
-    # Validate args
-    allargs = ValidateArgs(locals(), {
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
-    # Update locals now that they are validated and typed
-    for argname in allargs.keys():
-        #pylint: disable=exec-used
-        exec("{argname} = allargs['{argname}']".format(argname=argname)) in globals(), locals()
-        #pylint: enable=exec-used
 
     cluster = SFCluster(mvip, username, password)
     log.info("Searching for volumes")
