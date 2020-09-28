@@ -8,17 +8,24 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType, SelectionType, OptionalValueType
+from libsf.util import ValidateAndDefault, IPv4AddressType, SelectionType, OptionalValueType, StrType
 from libsf import sfdefaults
 from libsf import SolidFireError
 import sys
 import json
 
 @logargs
-def ListVolgroups(mvip=sfdefaults.mvip,
-                    username=sfdefaults.username,
-                    password=sfdefaults.password,
-                    output_format=None):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+    "output_format" : (OptionalValueType(SelectionType(sfdefaults.all_output_formats)), None),
+})
+def ListVolgroups(mvip,
+                  username,
+                  password,
+                  output_format):
     """
     Get the list of volume groups
     
@@ -29,14 +36,6 @@ def ListVolgroups(mvip=sfdefaults.mvip,
         password:   the admin password of the cluster
     """
     log = GetLogger()
-
-    # Validate args
-    ValidateArgs(locals(), {
-        "output_format" : OptionalValueType(SelectionType(sfdefaults.all_output_formats)),
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
 
     # Get the list of groups
     log.info("Searching for volume groups")

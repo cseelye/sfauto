@@ -8,25 +8,42 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, ItemList, IPv4AddressType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SolidFireIDType, PositiveIntegerType, BoolType, StrType
 from libsf import sfdefaults
 from libsf import SolidFireError, UnknownObjectError
 
 @logargs
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "volgroup_name" : (StrType, None),
+    "iqns" : (OptionalValueType(ItemList(StrType, allowEmpty=True)), None),
+    "volume_names" : (OptionalValueType(ItemList(StrType, allowEmpty=True)), None),
+    "volume_ids" : (OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)), None),
+    "volume_prefix" : (OptionalValueType(StrType), None),
+    "volume_regex" : (OptionalValueType(StrType), None),
+    "volume_count" : (OptionalValueType(PositiveIntegerType), None),
+    "source_account" : (OptionalValueType(StrType), None),
+    "source_account_id" : (OptionalValueType(SolidFireIDType), None),
+    "test" : (BoolType, False),
+    "strict" : (BoolType, False),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
 def CreateVolumeGroup(volgroup_name,
-                      iqns=None,
-                      volume_names=None,
-                      volume_ids=None,
-                      volume_prefix=None,
-                      volume_regex=None,
-                      volume_count=0,
-                      source_account=None,
-                      source_account_id=None,
-                      test=False,
-                      strict=False,
-                      mvip=sfdefaults.mvip,
-                      username=sfdefaults.username,
-                      password=sfdefaults.password):
+                      iqns,
+                      volume_names,
+                      volume_ids,
+                      volume_prefix,
+                      volume_regex,
+                      volume_count,
+                      source_account,
+                      source_account_id,
+                      test,
+                      strict,
+                      mvip,
+                      username,
+                      password):
     """
     Create a volume access group
 
@@ -47,14 +64,6 @@ def CreateVolumeGroup(volgroup_name,
         password:           the admin password of the cluster
     """
     log = GetLogger()
-
-    # Validate args
-    ValidateArgs(locals(), {
-        "volgroup_name" : None,
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
 
     cluster = SFCluster(mvip, username, password)
 

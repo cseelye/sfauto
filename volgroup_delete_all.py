@@ -8,25 +8,24 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType
+from libsf.util import ValidateAndDefault, IPv4AddressType, StrType
 from libsf import sfdefaults
 from libsf import SolidFireError
 
 @logargs
-def DeleteAllVolgroups(mvip=sfdefaults.mvip,
-                       username=sfdefaults.username,
-                       password=sfdefaults.password):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
+def DeleteAllVolgroups(mvip,
+                       username,
+                       password):
     """
     Delete all volume access groups
     """
     log = GetLogger()
-
-    # Validate args
-    ValidateArgs(locals(), {
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
 
     cluster = SFCluster(mvip, username, password)
 
