@@ -124,6 +124,9 @@ class ValidateAndDefault(object):
                         errors.append("invalid value for {} - {}".format(arg_name, ex))
                 elif user_val is None or user_val == "":
                     errors.append("{} must have a value".format(arg_name))
+                else:
+                    log.debug2("  Skipping validation for {}".format(arg_name))
+                    valid_args[arg_name] = user_val
 
             # Look for any "extra" args that were passed in
             for arg_name in user_args.keys():
@@ -186,7 +189,7 @@ class SelectionType(object):
         try:
             sel = self.itemType(string)
         except (TypeError, ValueError):
-            raise InvalidArgumentError("'{}' is not a valid {}".format(string, self.itemType.__name__))
+            raise InvalidArgumentError("'{}' is not a valid {}".format(string, GetPrettiestTypeName(self.itemType)))
 
         if sel not in self.choices:
             raise InvalidArgumentError("'{}' is not a valid choice".format(string))
@@ -199,9 +202,9 @@ class SelectionType(object):
 class ItemList(object):
     """Type for making a list of things"""
 
-    def __init__(self, itemType=str, allowEmpty=False):
-        if not callable(itemType):
-            raise ValueError("type must be callable")
+    def __init__(self, itemType=StrType, allowEmpty=False):
+        if not callable(itemType) and itemType is not None:
+            raise ValueError("type must be callable or None")
         self.itemType = itemType
         self.allowEmpty = allowEmpty
 
@@ -220,9 +223,10 @@ class ItemList(object):
 
         # Validate each item is the correct type
         try:
-            items = [self.itemType(i) for i in items]
+            if self.itemType is not None:
+                items = [self.itemType(i) for i in items]
         except (TypeError, ValueError):
-            raise InvalidArgumentError("Invalid {} value".format(self.itemType.__name__))
+            raise InvalidArgumentError("Invalid {} value".format(GetPrettiestTypeName(self.itemType)))
 
         # Validate the list is not empty
         if not self.allowEmpty and not items:
@@ -236,9 +240,9 @@ class ItemList(object):
 class OptionalValueType(object):
     """Type for validating an optional"""
 
-    def __init__(self, itemType=str):
-        if not callable(itemType):
-            raise ValueError("type must be callable")
+    def __init__(self, itemType=StrType):
+        if not callable(itemType) and itemType is not None:
+            raise ValueError("type must be callable or None")
         self.itemType = itemType
 
     def __call__(self, string):
@@ -246,9 +250,12 @@ class OptionalValueType(object):
             return None
 
         try:
-            item = self.itemType(string)
+            if self.itemType is None:
+                item = string
+            else:
+                item = self.itemType(string)
         except (TypeError, ValueError):
-            raise InvalidArgumentError("{} is not a valid {}".format(string, self.itemType.__name__))
+            raise InvalidArgumentError("{} is not a valid {}".format(string, GetPrettiestTypeName(self.itemType)))
         return item
 
     def __repr__(self):
@@ -498,6 +505,8 @@ def RegexType(string):
 
 def GetPrettiestTypeName(typeToName):
     """Get the best human representation of a type"""
+    if typeToName is None:
+        return "Any"
     typename = repr(typeToName)
     # Hacky
     if typename.startswith("<"):
