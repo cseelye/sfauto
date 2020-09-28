@@ -123,10 +123,10 @@ def timer(request):
 
 def pytest_generate_tests(metafunc):
     if "scriptfiles_parametrize" in metafunc.fixturenames:
-        script_files = [os.path.join(pytest.sfauto_dir, f) for f in os.listdir(pytest.sfauto_dir) if os.path.isfile(os.path.join(pytest.sfauto_dir, f)) and f.endswith("py") and f != "test.py" and f != "esx_configure.py"]
+        script_files = sorted([os.path.join(pytest.sfauto_dir, f) for f in os.listdir(pytest.sfauto_dir) if os.path.isfile(os.path.join(pytest.sfauto_dir, f)) and f.endswith("py") and f != "test.py" and f != "esx_configure.py"])
         metafunc.parametrize("scriptfiles_parametrize", script_files)
     if "libfiles_parametrize" in metafunc.fixturenames:
-        script_files = [os.path.join(pytest.sfauto_lib_dir, f) for f in os.listdir(pytest.sfauto_lib_dir) if os.path.isfile(os.path.join(pytest.sfauto_lib_dir, f)) and f.endswith("py")]
+        script_files = sorted([os.path.join(pytest.sfauto_lib_dir, f) for f in os.listdir(pytest.sfauto_lib_dir) if os.path.isfile(os.path.join(pytest.sfauto_lib_dir, f)) and f.endswith("py")])
         metafunc.parametrize("libfiles_parametrize", script_files)
 
 
