@@ -1,9 +1,15 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """This module provides classes for connecting to SolidFire nodes/clusters via SSH and HTTP endpoints"""
 
 #pylint: disable=unidiomatic-typecheck,protected-access,global-statement
 
 from __future__ import print_function, absolute_import
+
+# Suppress warnings in python2 to hide deprecation messages in imports
+import sys
+if sys.version[0] == '2':
+    import warnings
+    warnings.filterwarnings('ignore')
 import base64
 import six.moves.BaseHTTPServer
 import copy
@@ -16,11 +22,11 @@ import paramiko
 import random
 import socket
 import ssl
-import sys
 import time
 import six.moves.urllib.parse
 import six.moves.urllib.error
-import six.moves.urllib.request
+# For some reason pylint 1.9 in python2.7 chokes on this import line
+import six.moves.urllib.request #pylint: disable=import-error
 
 from .logutil import GetLogger
 from . import sfdefaults
@@ -53,7 +59,7 @@ class UnknownObjectError(SolidFireError):
 class UnknownNodeError(UnknownObjectError):
     """Exception raised when making a per-node API call to a non-existent nodeID"""
 
-class TimeoutError(SolidFireError):
+class SFTimeoutError(SolidFireError):
     """Exception raised when a timeout expires"""
 
 class SolidFireAPIError(SolidFireError):
@@ -103,7 +109,7 @@ class SolidFireAPIError(SolidFireError):
             'xUnknownRPCMethod'
         ]
 
-class ConnectionError(SolidFireError):
+class SFConnectionError(SolidFireError):
     """Exception raised when there is a network/connection issue communicating with the SolidFire endpoint"""
 
     def __init__(self, ip, endpoint, innerException, method=None, params=None, message=None, code=None):
@@ -122,7 +128,7 @@ class ConnectionError(SolidFireError):
                                 code automatically based on innerException
         """
 
-        super(ConnectionError, self).__init__(message, innerException=innerException)
+        super(SFConnectionError, self).__init__(message, innerException=innerException)
         self.args = (ip, endpoint, innerException, method, params, message, code)
         self.method = method
         self.params = params
@@ -159,7 +165,7 @@ class ConnectionError(SolidFireError):
                 self.message = 'Socket error 110: connection timed out'
                 self.code = 110
                 self.retryable = True
-            elif type(self.innerException) in [socket.error, socket.herror, socket.gaierror]:
+            elif type(self.innerException) in [socket.herror, socket.gaierror]:
                 self.message = 'Socket error {}: {}'.format(self.innerException.args[0], self.innerException.args[1])
                 self.code = self.innerException.args[0]
                 #  54  - connection reset by peer
@@ -309,6 +315,9 @@ class ClientConnectionError(ClientError):
 
 
 class HTTPDownloader(object):
+    """
+    Download content from a URL
+    """
     def __init__(self, server, port=443, username=None, password=None):
         """
         Args:
@@ -367,21 +376,21 @@ class HTTPDownloader(object):
                 # pylint: enable=unexpected-keyword-arg
             else:
                 response = six.moves.urllib.request.urlopen(request, timeout=timeout)
-        except (socket.timeout, socket.error, socket.herror, socket.gaierror) as ex:
-            raise ConnectionError(self.server, endpoint, ex)
+        except (socket.timeout, socket.herror, socket.gaierror) as ex:
+            raise SFConnectionError(self.server, endpoint, ex)
         except six.moves.urllib.error.HTTPError as ex:
             if ex.code == 401:
                 raise UnauthorizedError.IPContext(endpoint)
             else:
-                raise ConnectionError(self.server, endpoint, ex)
+                raise SFConnectionError(self.server, endpoint, ex)
         except six.moves.urllib.error.URLError as ex:
-            if type(ex.reason) in [socket.timeout, socket.error, socket.herror, socket.gaierror]:
-                raise ConnectionError(self.server, endpoint, ex.reason)
+            if type(ex.reason) in [socket.timeout, socket.herror, socket.gaierror]:
+                raise SFConnectionError(self.server, endpoint, ex.reason)
             if type(ex.reason) == OSError:
-                raise ConnectionError(self.server, endpoint, ex.reason)
-            raise ConnectionError(self.server, endpoint, ex)
+                raise SFConnectionError(self.server, endpoint, ex.reason)
+            raise SFConnectionError(self.server, endpoint, ex)
         except six.moves.http_client.BadStatusLine as ex:
-            raise ConnectionError(self.server, endpoint, ex)
+            raise SFConnectionError(self.server, endpoint, ex)
 
         dl = response.read()
         response.close()
@@ -430,28 +439,28 @@ class HTTPDownloader(object):
                 # pylint: enable=unexpected-keyword-arg
             else:
                 response = six.moves.urllib.request.urlopen(request, timeout=timeout)
-        except (socket.timeout, socket.error, socket.herror, socket.gaierror) as ex:
-            raise ConnectionError(self.server, endpoint, ex)
+        except (socket.timeout, socket.herror, socket.gaierror) as ex:
+            raise SFConnectionError(self.server, endpoint, ex)
         except six.moves.urllib.error.HTTPError as ex:
             if ex.code == 401:
                 raise UnauthorizedError.IPContext(endpoint)
             else:
-                raise ConnectionError(self.server, endpoint, ex)
+                raise SFConnectionError(self.server, endpoint, ex)
         except six.moves.urllib.error.URLError as ex:
-            if type(ex.reason) in [socket.timeout, socket.error, socket.herror, socket.gaierror]:
-                raise ConnectionError(self.server, endpoint, ex.reason)
+            if type(ex.reason) in [socket.timeout, socket.herror, socket.gaierror]:
+                raise SFConnectionError(self.server, endpoint, ex.reason)
             if type(ex.reason) == OSError:
-                raise ConnectionError(self.server, endpoint, ex.reason)
-            raise ConnectionError(self.server, endpoint, ex)
+                raise SFConnectionError(self.server, endpoint, ex.reason)
+            raise SFConnectionError(self.server, endpoint, ex)
         except six.moves.http_client.BadStatusLine as ex:
-            raise ConnectionError(self.server, endpoint, ex)
+            raise SFConnectionError(self.server, endpoint, ex)
 
         with open(localFile, 'w') as handle:
             while True:
                 try:
                     chunk = response.read(16 * 1024)
-                except (socket.timeout, socket.error, socket.herror, socket.gaierror) as ex:
-                    raise ConnectionError(self.server, endpoint, ex)
+                except (socket.timeout, socket.herror, socket.gaierror) as ex:
+                    raise SFConnectionError(self.server, endpoint, ex)
 
                 if not chunk:
                     break
@@ -462,6 +471,7 @@ class HTTPDownloader(object):
 
     @staticmethod
     def DownloadURL(url, timeout=300):
+        """Convenience function for downloading a single URL"""
         pieces = six.moves.urllib.parse.urlparse(url)
         downloader = HTTPDownloader(pieces.netloc,
                                     443 if pieces.scheme == "https" else 80,
@@ -597,30 +607,30 @@ class SolidFireAPI(object):
                     apiResponse = six.moves.urllib.request.urlopen(request, timeout=timeout)
             else:
                 apiResponse = six.moves.urllib.request.urlopen(request, timeout=timeout)
-        except (socket.timeout, socket.error, socket.herror, socket.gaierror) as ex:
-            raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
+        except (socket.timeout, socket.herror, socket.gaierror) as ex:
+            raise SFConnectionError(self.server, endpoint, ex, methodName, methodParams)
         except six.moves.urllib.error.HTTPError as ex:
             if ex.code == 401:
                 raise UnauthorizedError.APIContext(methodName, methodParams, self.server, endpoint)
             elif ex.code == 404:
                 raise SolidFireAPIError(methodName, methodParams, self.server, endpoint, 'xUnknownAPIVersion', 500, 'HTTP Error 404: Not Found - url=[{}]'.format(endpoint))
             else:
-                raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
+                raise SFConnectionError(self.server, endpoint, ex, methodName, methodParams)
         except six.moves.urllib.error.URLError as ex:
-            if type(ex.reason) in [socket.timeout, socket.error, socket.herror, socket.gaierror]:
-                raise ConnectionError(self.server, endpoint, ex.reason, methodName, methodParams)
+            if type(ex.reason) in [socket.timeout, socket.herror, socket.gaierror]:
+                raise SFConnectionError(self.server, endpoint, ex.reason, methodName, methodParams)
             if type(ex.reason) == OSError:
-                raise ConnectionError(self.server, endpoint, ex.reason, methodName, methodParams)
-            raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
+                raise SFConnectionError(self.server, endpoint, ex.reason, methodName, methodParams)
+            raise SFConnectionError(self.server, endpoint, ex, methodName, methodParams)
         except six.moves.http_client.BadStatusLine as ex:
-            raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
+            raise SFConnectionError(self.server, endpoint, ex, methodName, methodParams)
 
         responseStr = apiResponse.read()
         self.log.debug2('API response {}'.format(responseStr))
         try:
             responseJson = json.loads(responseStr)
         except ValueError as ex:
-            raise ConnectionError(self.server, endpoint, ex, methodName, methodParams)
+            raise SFConnectionError(self.server, endpoint, ex, methodName, methodParams)
 
         if 'error' in responseJson:
             raise SolidFireAPIError(methodName,
@@ -1050,7 +1060,7 @@ class SSHConnection(object):
         except paramiko.SSHException as e:
             raise SolidFireError("SSH error connecting to {}: {}".format(self.ipAddress, e))
         except socket.error as e:
-            raise ConnectionError(self.ipAddress, self.ipAddress, e, message="Could not connect")
+            raise SFConnectionError(self.ipAddress, self.ipAddress, e, message="Could not connect")
 
     def IsAlive(self):
         """

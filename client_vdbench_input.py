@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will create a vdbench input file for clients
@@ -130,7 +130,7 @@ def ClientVdbenchInput(client_ips,
                 outfile.write("wd=wd0,{},sd=sd*\n".format(workload))
             else:
                 for client_idx, client_ip in enumerate(client_ips):
-                    outfile.write("wd=wd{},host=hd{},{},sd=sd*\n".format(client_idx, client_idx, workload))
+                    outfile.write("wd=wd{client_idx},host=hd{client_idx},{workload},sd=sd*\n".format(client_idx=client_idx, workload=workload))
                     outfile.flush()
         else:
             outfile.write("wd=wd1,{},sd=sd*".format(workload))

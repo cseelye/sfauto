@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """Ready to use logging"""
 
 #pylint: disable=protected-access
@@ -11,11 +11,10 @@ import multiprocessing
 import os
 import platform
 import re
+import six
 import socket
-import string
 import sys
 import threading
-import six
 
 class CustomLogLevels(object):
     """ Custom log levels that map to specific formatted and colorized output"""
@@ -265,7 +264,7 @@ class MultiFormatter(logging.Formatter):
         lines = []
         remain = str(message)
         while len(remain) > length:
-            index = string.rfind(remain, ' ', 0, length)
+            index = remain.rfind(' ', 0, length)
             if index <= 0:
                 index = length - 1
             lines.append(remain[:index])

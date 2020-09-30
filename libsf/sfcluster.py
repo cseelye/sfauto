@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 SolidFire cluster objects and data structures
 """
@@ -9,7 +9,7 @@ import re
 import time
 from . import sfdefaults
 from . import util
-from . import SolidFireClusterAPI, GetHighestAPIVersion, SolidFireError, TimeoutError, UnknownObjectError
+from . import SolidFireClusterAPI, GetHighestAPIVersion, SolidFireError, SFTimeoutError, UnknownObjectError
 from .sfvolgroup import SFVolGroup
 from .sfaccount import SFAccount
 from .sfnode import DriveType, SFNode
@@ -241,7 +241,7 @@ class SFCluster(object):
         while not started:
             time.sleep(sfdefaults.TIME_SECOND * 3)
             if time.time() - wait_start > 120:
-                raise TimeoutError("Timeout waiting for GC to start")
+                raise SFTimeoutError("Timeout waiting for GC to start")
 
             event_list = self.api.CallWithRetry('ListEvents', {})
             for event in event_list["events"]:
@@ -276,7 +276,7 @@ class SFCluster(object):
                     continue
                 elif gc_info.EndTime <= 0:
                     if time.time() - gc_info.StartTime > 60 * timeout:
-                        raise TimeoutError("Timeout waiting for GC to finish")
+                        raise SFTimeoutError("Timeout waiting for GC to finish")
                     break
                 else:
                     return gc_info
@@ -833,7 +833,7 @@ class SFCluster(object):
                 break
 
             if time.time() - start_time >= timeout:
-                raise TimeoutError("Timed out waiting for available drives [timeout={}s]".format(timeout))
+                raise SFTimeoutError("Timed out waiting for available drives [timeout={}s]".format(timeout))
 
             time.sleep(sfdefaults.TIME_SECOND * 10)
 
@@ -1297,7 +1297,7 @@ class SFCluster(object):
                     break
                 time.sleep(sfdefaults.TIME_SECOND)
                 if time.time() - start_time > timeout:
-                    raise TimeoutError("Timeout waiting for syncing on volume {}".format(volumeID))
+                    raise SFTimeoutError("Timeout waiting for syncing on volume {}".format(volumeID))
 
     def CreateVLAN(self, tag, addressStart, addressCount, netmask, svip, namespace=False):
         """

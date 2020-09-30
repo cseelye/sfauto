@@ -1,10 +1,10 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """This module provides utility classes and functions for threading/multiprocessing"""
 
 from __future__ import print_function
 from .logutil import GetLogger
 from . import sfdefaults as _sfdefaults
-from . import SolidFireError, TimeoutError
+from . import SolidFireError, SFTimeoutError
 
 import fcntl as _fcntl
 import functools as _functools
@@ -78,7 +78,7 @@ class AsyncResult(object):
         try:
             return self.result.get(timeout)
         except _multiprocessing.TimeoutError as e:
-            raise TimeoutError("Timeout waiting for thread to complete", innerException=e)
+            SFTimeoutError("Timeout waiting for thread to complete", innerException=e)
 
     def Wait(self, timeout):
         """

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """Helpers for creating simple command line applications"""
 
 import atexit

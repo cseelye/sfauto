@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """ Global data for all tests"""
 
 random_seed = None                  # Holds the random seed used to seed UTs

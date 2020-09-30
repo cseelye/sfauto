@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will RTFI a list of nodes
@@ -12,7 +12,7 @@ from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, I
 from libsf.util import GetFilename, SolidFireVersion, ParseTimestamp, PrettyJSON, EnsureKeys
 from libsf.netutil import CalculateNetwork, IPInNetwork
 from libsf import sfdefaults, threadutil, pxeutil, labutil, netutil
-from libsf import SolidFireError, ConnectionError, InvalidArgumentError, TimeoutError, HTTPDownloader
+from libsf import SolidFireError, SFConnectionError, InvalidArgumentError, SFTimeoutError, HTTPDownloader
 import json
 import random
 import re
@@ -430,7 +430,7 @@ def _NodeThread(rtfi_type, image_type, repo, version, configure_network, fail, t
             else:
                 log.warning("RTFI status monitoring not implemented for this Element version")
                 return False
-        except TimeoutError as ex:
+        except SFTimeoutError as ex:
             log.error(str(ex))
 
             # Try to save the RTFI log
@@ -518,7 +518,7 @@ def _monitor_legacy(node, timeout=3600):
 
         # Timeout if the total time has been too long
         if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to complete")
+            raise SFTimeoutError("Timeout waiting for RTFI to complete")
 
 def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
     """
@@ -538,14 +538,14 @@ def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
     while True:
         try:
             status = node.GetAllRTFIStatus()
-        except ConnectionError as ex:
+        except SFConnectionError as ex:
             if not ex.IsRetryable() and ex.code not in RETRYABLE_RTFI_STATUS_ERRORS:
                 log.warning(str(ex))
             status = None
 
         # Timeout if we haven't gotten any status within the startTimeout period
         if not previous_status and time.time() - start_time > startTimeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to start")
+            raise SFTimeoutError("Timeout waiting for RTFI to start")
 
         # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
         if rtfiType == "pxe" and not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
@@ -610,11 +610,11 @@ def _monitor_v80(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
 
         # Timeout if the current state has lasted too long
         if state_start_time > 0 and time.time() - state_start_time > state_timeout:
-            raise TimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
+            raise SFTimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
 
         # Timeout if the total time has been too long
         if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to complete")
+            raise SFTimeoutError("Timeout waiting for RTFI to complete")
 
 def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
     """
@@ -636,14 +636,14 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
         time.sleep(1)
         try:
             status = node.GetAllRTFIStatus()
-        except ConnectionError as ex:
+        except SFConnectionError as ex:
             if not ex.IsRetryable() and ex.code not in RETRYABLE_RTFI_STATUS_ERRORS:
                 log.warning(str(ex))
             status = None
 
         # Timeout if we haven't gotten any status within the startTimeout period
         if not previous_status and time.time() - start_time > startTimeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to start")
+            raise SFTimeoutError("Timeout waiting for RTFI to start")
 
         # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
         if rtfiType == "pxe" and not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
@@ -705,11 +705,11 @@ def _monitor_v90(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_time
 
         # Timeout if the current state has lasted too long
         if state_start_time > 0 and time.time() - state_start_time > state_timeout:
-            raise TimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
+            raise SFTimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
 
         # Timeout if the total time has been too long
         if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to complete")
+            raise SFTimeoutError("Timeout waiting for RTFI to complete")
 
 def _monitor_v102(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_timeout, timeout=3600, agentID=None, configureNetworking="keep"):
     """
@@ -750,14 +750,14 @@ def _monitor_v102(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_tim
 
         try:
             status = node.GetAllRTFIStatus()
-        except ConnectionError as ex:
+        except SFConnectionError as ex:
             if not ex.IsRetryable() and ex.code not in RETRYABLE_RTFI_STATUS_ERRORS:
                 log.warning(str(ex))
             status = None
 
         # Timeout if we haven't gotten any status within the startTimeout period
         if not previous_status and time.time() - start_time > startTimeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to start")
+            raise SFTimeoutError("Timeout waiting for RTFI to start")
 
         # If we never got any status, never caught the node powering off, and the node is back up, it probably never PXE booted
         if rtfiType == "pxe" and not previous_status and time.time() - last_api_check > 20 * sfdefaults.TIME_SECOND:
@@ -823,11 +823,11 @@ def _monitor_v102(rtfiType, node, netInfo, startTimeout=sfdefaults.node_boot_tim
 
         # Timeout if the current state has lasted too long
         if state_start_time > 0 and time.time() - state_start_time > state_timeout:
-            raise TimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
+            raise SFTimeoutError("Timeout in {} RTFI state".format(previous_status[-1]["state"]))
 
         # Timeout if the total time has been too long
         if time.time() - start_time > timeout * sfdefaults.TIME_SECOND:
-            raise TimeoutError("Timeout waiting for RTFI to complete")
+            raise SFTimeoutError("Timeout waiting for RTFI to complete")
 
 
 def _handle_coldboot(node, netInfo, configureNetworking, upTimeout=600, waitForWakup=True):
@@ -856,7 +856,7 @@ def _handle_coldboot(node, netInfo, configureNetworking, upTimeout=600, waitForW
         log.info("Waiting for node to power on")
         try:
             node.WaitForOn(timeout=330)
-        except TimeoutError:
+        except SFTimeoutError:
             log.warning("Node failed to auto wakeup")
             node.PowerOn(waitForUp=False)
 

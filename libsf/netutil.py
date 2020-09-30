@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 Helpers for network related
 """
@@ -22,11 +22,9 @@ LOCAL_SYS = platform.system()
 
 class HostNotFoundError(SolidFireError):
     """Exception for NXDOMAIN errors that is rooted in the SolidFire exception hierarchy"""
-    pass
 
 class ServfailError(SolidFireError):
     """Exception for SERVFAIL errors"""
-    pass
 
 def Ping(address):
     """
@@ -354,7 +352,7 @@ class IPAddress(object):
         self.raw = ipString
 
     def __add__(self, other):
-        pieces = map(int, self.raw.split("."))
+        pieces = [int(octet) for octet in self.raw.split(".")]
         for i in (3, 2, 1, 0):
             if pieces[i] + other > 255:
                 pieces[i] = 0 + other - 1
@@ -365,7 +363,7 @@ class IPAddress(object):
         return IPAddress(".".join(map(str, pieces)))
 
     def __sub__(self, other):
-        pieces = map(int, self.raw.split("."))
+        pieces = [int(octet) for octet in self.raw.split(".")]
         for i in (3, 2, 1, 0):
             if pieces[i] - other < 0:
                 pieces[i] = 255 - other + 1
@@ -376,16 +374,16 @@ class IPAddress(object):
         return IPAddress(".".join(map(str, pieces)))
 
     def __eq__(self, other):
-        pieces = map(int, self.raw.split("."))
-        other_pieces = map(int, other.raw.split("."))
+        pieces = [int(octet) for octet in self.raw.split(".")]
+        other_pieces = [int(octet) for octet in other.split(".")]
         return all([pieces[idx] == other_pieces[idx] for idx in (0, 1, 2, 3)])
 
     def __ne__(self, other):
         return not (self == other)
 
     def __lt__(self, other):
-        pieces = map(int, self.raw.split("."))
-        other_pieces = map(int, other.raw.split("."))
+        pieces = [int(octet) for octet in self.raw.split(".")]
+        other_pieces = [int(octet) for octet in other.split(".")]
         for idx in (0, 1, 2, 3):
             if pieces[idx] < other_pieces[idx]:
                 return True

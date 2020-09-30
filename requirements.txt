@@ -3,8 +3,12 @@
 # If you are on macOS, you will need to install some additional binary packages:
 #   brew install libvirt pkg-config ipmitool
 
-dnspython==1.15.0
-libvirt-python<=4.0.0
-paramiko==1.16.0
-pyvmomi==5.5.0.2014.1.1
-requests==2.11.1
+dnspython==1.16.0
+future==0.18.2
+paramiko==2.7.2
+pyvmomi==7.0
+requests==2.24.0
+
+libvirt-python==5.10.0 ; python_version < '3.5'
+
+libvirt-python ; python_version >= '3.5'

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """This module provides various utility classes and functions"""
 
 import calendar as _calendar
@@ -78,7 +78,7 @@ class ValidateAndDefault(object):
         def wrapper(*args, **kwargs):
             log = GetLogger()
             # Build a dictionary of arg name => default value from the function spec
-            spec = _inspect.getargspec(func)
+            spec = _inspect.getargspec(func) #pylint: disable=deprecated-method
             arg_names = list(spec.args)
             if spec.defaults:
                 arg_defaults = list(spec.defaults)

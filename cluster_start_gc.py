@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will start GC on the cluster
@@ -10,7 +10,7 @@ from libsf.sfcluster import SFCluster
 from libsf.util import ValidateAndDefault, IPv4AddressType, PositiveNonZeroIntegerType, BoolType, StrType
 from libsf.util import TimestampToStr, HumanizeBytes, SecondsToElapsedStr
 from libsf import sfdefaults
-from libsf import SolidFireError, TimeoutError
+from libsf import SolidFireError, SFTimeoutError
 
 @logargs
 @ValidateAndDefault({
@@ -52,7 +52,7 @@ def StartGC(force,
         log.info("Waiting for GC to finish")
         try:
             gc_info = cluster.WaitForGC(gc_timeout)
-        except TimeoutError:
+        except SFTimeoutError:
             log.error("Timeout waiting for GC to finish")
             return False
         except SolidFireError as ex:

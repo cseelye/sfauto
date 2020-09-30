@@ -1,10 +1,9 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """Helpers for interacting with hypervisors and virtual machines"""
 
 from __future__ import absolute_import
-
 from . import sfdefaults
-from . import SolidFireError, UnauthorizedError, TimeoutError, UnknownObjectError, ClientConnectionError, ConnectionError
+from . import SolidFireError, UnauthorizedError, SFTimeoutError, UnknownObjectError, ClientConnectionError, SFConnectionError
 from .logutil import GetLogger
 from .sfclient import SFClient, OSType
 from copy import deepcopy
@@ -14,9 +13,7 @@ import libvirt
 import libvirt_qemu
 import multiprocessing
 from pyVim import connect as connectVSphere
-# pylint: disable=no-name-in-module
-from pyVmomi import vim, vmodl
-# pylint: enable=no-name-in-module
+from pyVmomi import vim, vmodl # pylint: disable=no-name-in-module
 import six.moves.queue
 import requests
 import socket
@@ -32,9 +29,7 @@ except AttributeError:
     pass
 try:
     import ssl
-    #pylint: disable=protected-access
-    ssl._create_default_https_context = ssl._create_unverified_context
-    #pylint: enable=protected-access
+    ssl._create_default_https_context = ssl._create_unverified_context  #pylint: disable=protected-access
 except AttributeError:
     pass
 
@@ -46,7 +41,6 @@ libvirt.registerErrorHandler(f=libvirt_callback, ctx=None)
 
 class VirtualizationError(SolidFireError):
     """Parent exception for virtualization errors"""
-    pass
 
 class VirtualMachine(object):
     """
@@ -112,7 +106,7 @@ class VirtualMachine(object):
             log.debug2("Trying {} for VM {}".format(classname, vmName))
             try:
                 return classdef(vmName, mgmtServer, mgmtUsername, mgmtPassword)
-            except (VirtualizationError, TimeoutError) as ex:
+            except (VirtualizationError, SFTimeoutError) as ex:
                 log.debug2(str(ex))
 
         raise VirtualizationError("Could not create VM object; check connection to management server and VM exists on server")
@@ -174,7 +168,7 @@ class VMHost(object):
             log.debug2("Trying {} for VMHost {}".format(classname, vmhostName))
             try:
                 return classdef(vmhostName, mgmtServer, mgmtUsername, mgmtPassword)
-            except (VirtualizationError, TimeoutError, ConnectionError, ClientConnectionError, UnauthorizedError) as ex:
+            except (VirtualizationError, SFTimeoutError, SFConnectionError, ClientConnectionError, UnauthorizedError) as ex:
                 log.debug2(str(ex))
 
         raise VirtualizationError("Could not create VMhost object; check connection to management server and host exists on server")
@@ -193,7 +187,11 @@ def VMwareConnect(server, username, password):
     """
     log = GetLogger()
     log.debug2("Trying to connect to VMware on {}".format(server))
+    # Save the default timeout
+    socket_timeout = socket.getdefaulttimeout()
     try:
+        # Set a short timeout because SmartConnect can hang for a very long time on unresponsive/nonexistant servers
+        socket.setdefaulttimeout(10)
         service = connectVSphere.SmartConnect(host=server, user=username, pwd=password)
     except vim.fault.InvalidLogin:
         raise UnauthorizedError.IPContext(ip=server)
@@ -205,6 +203,9 @@ def VMwareConnect(server, username, password):
         raise VirtualizationError("Could not connect: " + str(e), e)
     except (socket.timeout, socket.error, socket.gaierror, socket.herror) as e:
         raise VirtualizationError("Could not connect: " + str(e), e)
+    finally:
+        # Restore the default timeout
+        socket.setdefaulttimeout(socket_timeout)
     return service
 
 def VMwareDisconnect(connection):
@@ -358,21 +359,6 @@ def VMwareWaitForTasks(connection, tasks):
     finally:
         if task_filter:
             task_filter.Destroy()
-
-def SetVMwareTimeout(mo, timeout):
-    """
-    Set the low level connection timeout for a managed object
-    """
-    # Override HTTPSConnectionWrapper.__init__ in pyVmomi.SoapAdapter
-    # The new init calls the old init, then sets the timeout value
-    from pyVmomi.SoapAdapter import HTTPSConnectionWrapper
-    oldinit = HTTPSConnectionWrapper.__init__
-    def newinit(self, *args, **kwargs):
-        oldinit(self, *args, **kwargs)
-        self._wrapped.timeout = timeout
-    HTTPSConnectionWrapper.__init__ = newinit
-    # Drop all connections from the pool so they are forced to reconnect with the new __init__ we just created
-    mo._GetStub().DropConnections()
 
 class VirtualMachineVMware(VirtualMachine):
     """
@@ -530,7 +516,7 @@ class VirtualMachineVMware(VirtualMachine):
                 self.log.info("VM is powered on")
                 break
             if timeout > 0 and time.time() - start_time > timeout:
-                raise TimeoutError("Timeout waiting for VM to power on")
+                raise SFTimeoutError("Timeout waiting for VM to power on")
             time.sleep(2)
 
         self.log.info("Waiting for VMware tools")
@@ -545,7 +531,7 @@ class VirtualMachineVMware(VirtualMachine):
                 self.log.info("VMware tools are running")
                 break
             if timeout > 0 and time.time() - start_time > timeout:
-                raise TimeoutError("Timeout waiting for VMware tools to start")
+                raise SFTimeoutError("Timeout waiting for VMware tools to start")
             time.sleep(2)
 
         # Wait for VM heartbeat to be green
@@ -556,7 +542,7 @@ class VirtualMachineVMware(VirtualMachine):
                 self.log.info("VM guest heartbeat is green")
                 break
             if timeout > 0 and time.time() - start_time > timeout:
-                raise TimeoutError("Timeout waiting for guest heartbeat")
+                raise SFTimeoutError("Timeout waiting for guest heartbeat")
             time.sleep(2)
 
     @_vsphere_session
@@ -1163,7 +1149,7 @@ class LibvirtConnect(object):
 
         proc.join(timeout)
         if proc.is_alive():
-            raise TimeoutError("Could not connect to libvirt on {}".format(self.server))
+            raise SFTimeoutError("Could not connect to libvirt on {}".format(self.server))
 
         try:
             self.exception = errq.get_nowait()
@@ -1246,7 +1232,7 @@ def LibvirtFindVM(connection, vmName):
     try:
         vm = connection.lookupByName(vmName)
     except libvirt.libvirtError as ex:
-        raise VirtualizationError("Could not find VM {}: {}".format(vmName, ex.message), ex)
+        raise VirtualizationError("Could not find VM {}: {}".format(vmName, ex.get_error_message()), ex)
     if not vm:
         raise UnknownObjectError("Could not find VM {}".format(vmName))
     return vm
@@ -1277,7 +1263,7 @@ class VirtualMachineKVM(VirtualMachine):
             try:
                 vm.create()
             except libvirt.libvirtError as ex:
-                raise VirtualizationError("Failed to power on {}: {}".format(self.vmName, ex.message), ex)
+                raise VirtualizationError("Failed to power on {}: {}".format(self.vmName, ex.get_error_message()), ex)
 
     def PowerOff(self):
         """
@@ -1291,9 +1277,9 @@ class VirtualMachineKVM(VirtualMachine):
             try:
                 vm.destroy()
             except libvirt.libvirtError as ex:
-                if ("domain is not running" in ex.message):
+                if "domain is not running" in ex.get_error_message():
                     return
-                raise VirtualizationError("Failed to power off {}: {}".format(self.vmName, ex.message), ex)
+                raise VirtualizationError("Failed to power off {}: {}".format(self.vmName, ex.get_error_message()), ex)
 
     def GetPowerState(self):
         """
@@ -1413,14 +1399,14 @@ class VirtualMachineKVM(VirtualMachine):
                     self.log.info("VM is powered on")
                     break
                 if timeout > 0 and time.time() - start_time > timeout:
-                    raise TimeoutError("Timeout waiting for VM to power on")
+                    raise SFTimeoutError("Timeout waiting for VM to power on")
                 time.sleep(2)
 
             # Wait for qemu agent
             self.log.info("Waiting for guest agent")
             while True:
                 if timeout > 0 and time.time() - start_time > timeout:
-                    raise TimeoutError("Timeout waiting for VM guest agent to start")
+                    raise SFTimeoutError("Timeout waiting for VM guest agent to start")
                 time.sleep(1)
                 try:
                     libvirt_qemu.qemuAgentCommand(vm, '{"execute":"guest-ping"}', 10, 0)

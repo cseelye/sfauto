@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #pylint: skip-file
 
 from __future__ import print_function
@@ -470,7 +470,7 @@ class FakeClient(object):
         return (0, "", "")
 
     def iscsiadm_discovery(self, command):
-        m = re.search("iscsiadm -m discovery -t sendtargets -p (\S+)", command)
+        m = re.search(r"iscsiadm -m discovery -t sendtargets -p (\S+)", command)
         if m:
             self.portal = m.group(1)
             self.discoveredTargets = []

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 Client objects and data structures
 """
@@ -686,7 +686,7 @@ class SFClient(object):
 
                 # Back up old config file
                 self._debug("Backing up old ifcfg file")
-                self.ExecuteCommand("cp {} {}.bak".format(interface_conf_file, interface_conf_file))
+                self.ExecuteCommand("cp {interface_conf_file} {interface_conf_file}.bak".format(interface_conf_file=interface_conf_file))
 
                 # Copy the file locally to work on.  If something goes wrong, we can raise an exception and bail without leaving a partially configured file around
                 self.ExecuteCommand("cp {} ifcfg".format(interface_conf_file))
@@ -775,7 +775,7 @@ class SFClient(object):
             self.ExecuteCommand("svcadm restart svc:/system/identity:node")
 
             # make sure hosts file is correct
-            self.ExecuteCommand("echo -e \"::1 {} localhost\\n127.0.0.1 {} localhost loghost\" > /etc/inet/hosts".format(newHostname, newHostname))
+            self.ExecuteCommand("echo -e \"::1 {newHostname} localhost\\n127.0.0.1 {newHostname} localhost loghost\" > /etc/inet/hosts".format(newHostname=newHostname))
 
         elif self.remoteOS == OSType.Linux:
             self._info("Setting hostname to {}".format(newHostname))

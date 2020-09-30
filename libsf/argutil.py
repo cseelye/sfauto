@@ -180,7 +180,7 @@ class HelpFormatter(object):
             try:
                 width = int(_os.environ['COLUMNS'])
             except (KeyError, ValueError):
-                width = min(120, GetConsoleSize())
+                width = min(120, GetConsoleSize()[0])
             width -= 2
 
         self._prog = prog
@@ -2579,7 +2579,7 @@ def GetFirstLine(text):
         if not sentence:
             continue
         break
-    if line and len(line) < sentence:
+    if line and len(line) < len(sentence):
         return line
     if sentence:
         return sentence

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will add a list of initiator IDs (IQN or WWN) to a volume access group

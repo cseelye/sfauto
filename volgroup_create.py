@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will create a volume access group. Optionally add IQNs and volumes to the group while creating
