@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 SolidFire account object and related data structures
 """
@@ -86,7 +86,7 @@ class SFAccount(object):
             try:
                 accountID = int(accountID)
             except ValueError:
-                raise InvalidArgumentError("Please specify an integer for accountID")
+                raise InvalidArgumentError("Please specify an integer for accountID") #pylint: disable=raise-missing-from
             if accountID <= 0:
                 raise InvalidArgumentError("Please specify a positive non-zero integer for accountID")
             for account in account_list["accounts"]:
@@ -129,7 +129,7 @@ class SFAccount(object):
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs

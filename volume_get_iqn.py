@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will print the IQN of a volume
@@ -8,21 +8,30 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType, SelectionType, OptionalValueType, NameOrID
+from libsf.util import ValidateAndDefault, NameOrID, IPv4AddressType, OptionalValueType, SelectionType, SolidFireIDType, StrType
 from libsf import sfdefaults
 from libsf import SolidFireError, UnknownObjectError
 import sys
 
 @logargs
-def GetVolumeIQN(volume_name=None,
-                 volume_id=0,
-                 mvip=sfdefaults.mvip,
-                 username=sfdefaults.username,
-                 password=sfdefaults.password,
-                 output_format=None):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "volume_name" : (OptionalValueType(StrType), None),
+    "volume_id" : (OptionalValueType(SolidFireIDType), None),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+    "output_format" : (OptionalValueType(SelectionType(sfdefaults.all_output_formats)), None),
+})
+def GetVolumeIQN(volume_name,
+                 volume_id,
+                 mvip,
+                 username,
+                 password,
+                 output_format):
     """
     Print the volume IQN
-    
+
     Args:
         volume_name:    the name of the volume
         volume_id:      the ID of the volume
@@ -31,16 +40,8 @@ def GetVolumeIQN(volume_name=None,
         password:       the admin password of the cluster
     """
     log = GetLogger()
-
-    # Validate args
     NameOrID(volume_name, volume_id, "volume")
-    ValidateArgs(locals(), {
-        "output_format" : OptionalValueType(SelectionType(sfdefaults.all_output_formats)),
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
-    
+
     log.info("Searching for volume")
     try:
         match = SFCluster(mvip, username, password).SearchForVolumes(volumeID=volume_id, volumeName=volume_name)
@@ -50,10 +51,10 @@ def GetVolumeIQN(volume_name=None,
     except SolidFireError as e:
         log.error("Failed to search for volume: {}".format(e))
         return False
-    if len(match.keys()) <= 0:
+    if len(list(match.keys())) <= 0:
         log.error("Could not find volume")
         return False
-    volume = match.values()[0]
+    volume = list(match.values())[0]
 
     # Display the list in the requested format
     if output_format and output_format == "bash":

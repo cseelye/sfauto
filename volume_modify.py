@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will modify a property of a list of volumes
@@ -8,26 +8,43 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType, OptionalValueType, ItemList, SolidFireIDType, PositiveIntegerType, BoolType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, IsSet, SolidFireIDType, PositiveIntegerType, BoolType, RegexType, StrType
 from libsf import sfdefaults
 from libsf import threadutil
 from libsf import SolidFireError
 
 @logargs
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "property_name" : (StrType, None),
+    "property_value" : (IsSet, None),
+    "post_value" : (OptionalValueType(None), None),
+    "volume_names" : (OptionalValueType(ItemList(StrType, allowEmpty=True)), None),
+    "volume_ids" : (OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)), None),
+    "volume_prefix" : (OptionalValueType(StrType), None),
+    "volume_regex" : (OptionalValueType(RegexType), None),
+    "volume_count" : (OptionalValueType(PositiveIntegerType), None),
+    "source_account" : (OptionalValueType(StrType), None),
+    "source_account_id" : (OptionalValueType(SolidFireIDType), None),
+    "test" : (BoolType, False),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
 def VolumeModify(property_name,
-                  property_value,
-                  post_value=None,
-                  volume_names=None,
-                  volume_ids=None,
-                  volume_prefix=None,
-                  volume_regex=None,
-                  volume_count=0,
-                  source_account=None,
-                  source_account_id=None,
-                  test=False,
-                  mvip=sfdefaults.mvip,
-                  username=sfdefaults.username,
-                  password=sfdefaults.password):
+                 property_value,
+                 post_value,
+                 volume_names,
+                 volume_ids,
+                 volume_prefix,
+                 volume_regex,
+                 volume_count,
+                 source_account,
+                 source_account_id,
+                 test,
+                 mvip,
+                 username,
+                 password):
     """
     Modify a property on a list of volumes
 
@@ -50,28 +67,6 @@ def VolumeModify(property_name,
     post_value = post_value or property_value
     log = GetLogger()
 
-    # Validate args
-    allargs = ValidateArgs(locals(), {
-        "property_name" : None,
-        "property_value" : None,
-        "volume_names" : OptionalValueType(ItemList(str, allowEmpty=True)),
-        "volume_ids" : OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)),
-        "volume_prefix" : OptionalValueType(str),
-        "volume_regex" : OptionalValueType(str),
-        "volume_count" : OptionalValueType(PositiveIntegerType),
-        "source_account" : OptionalValueType(str),
-        "source_account_id" : OptionalValueType(SolidFireIDType),
-        "test" : BoolType,
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
-    # Update locals now that they are validated and typed
-    for argname in allargs.keys():
-        #pylint: disable=exec-used
-        exec("{argname} = allargs['{argname}']".format(argname=argname)) in globals(), locals()
-        #pylint: enable=exec-used
-
     cluster = SFCluster(mvip, username, password)
 
     log.info("Searching for volumes")
@@ -90,7 +85,7 @@ def VolumeModify(property_name,
     if not match_volumes:
         log.passed("No matching volumes were found")
         return True
-    log.info("{} volumes selected: {}".format(len(match_volumes.keys()),
+    log.info("{} volumes selected: {}".format(len(list(match_volumes.keys())),
                                                    ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
     if test:
         log.warning("Test option set; no action will be taken")
@@ -129,7 +124,7 @@ def _APICallThread(mvip, username, password, volume_id, property_name, property_
 
     # Verify that the change was applied
     if isinstance(post_value, dict):
-        for key, value in post_value.iteritems():
+        for key, value in post_value.items():
             if str(vol[property_name][key]) != str(value):
                 raise SolidFireError("{} is not correct after modifying volume {} [expected={}, actual={}]".format(key, volume_id, value, vol[property_name][key]))
     else:

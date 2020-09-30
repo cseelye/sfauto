@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """This module provides various utility classes and functions"""
 
 import calendar as _calendar
@@ -13,6 +13,7 @@ import time as _time
 
 from .logutil import GetLogger
 from . import InvalidArgumentError
+import six
 
 # ===================================================================================================
 #  Types and type checking, compatible with argparse
@@ -54,8 +55,8 @@ def ValidateArgs(args, validators):
     if errors:
         raise InvalidArgumentError("\n".join(errors))
 
-    for argname, argvalue in args.iteritems():
-        if argname not in validated.keys():
+    for argname, argvalue in args.items():
+        if argname not in list(validated.keys()):
             validated[argname] = argvalue
 
     return validated
@@ -67,7 +68,7 @@ class ValidateAndDefault(object):
     def __init__(self, argValidators):
         self.validators = {}
         self.defaults = {}
-        for arg_name, (arg_type, arg_default) in argValidators.iteritems():
+        for arg_name, (arg_type, arg_default) in argValidators.items():
             self.validators[arg_name] = arg_type
             self.defaults[arg_name] = arg_default
 
@@ -77,7 +78,7 @@ class ValidateAndDefault(object):
         def wrapper(*args, **kwargs):
             log = GetLogger()
             # Build a dictionary of arg name => default value from the function spec
-            spec = _inspect.getargspec(func)
+            spec = _inspect.getargspec(func) #pylint: disable=deprecated-method
             arg_names = list(spec.args)
             if spec.defaults:
                 arg_defaults = list(spec.defaults)
@@ -88,7 +89,7 @@ class ValidateAndDefault(object):
             default_args = dict(zip(arg_names, arg_defaults))
             # Replace any defaults with the ones supplied to this decorator
             if self.defaults:
-                for arg_name, arg_default in self.defaults.iteritems():
+                for arg_name, arg_default in self.defaults.items():
                     default_args[arg_name] = arg_default
 
             # Combine args and kwargs into a single dictionary of arg name => user supplied value
@@ -96,11 +97,11 @@ class ValidateAndDefault(object):
             for idx, user_val in enumerate(args):
                 arg_name = arg_names[idx]
                 user_args[arg_name] = user_val
-            for arg_name, user_val in kwargs.iteritems():
+            for arg_name, user_val in kwargs.items():
                 user_args[arg_name] = user_val
 
             # Fill in and log the default values being used
-            for arg_name, validator in self.validators.iteritems():
+            for arg_name, validator in self.validators.items():
                 if arg_name not in user_args or user_args[arg_name] == None:
                     log.debug2("  Using default value {}={}".format(arg_name, default_args[arg_name]))
                     user_args[arg_name] = default_args[arg_name]
@@ -108,7 +109,7 @@ class ValidateAndDefault(object):
             # Run each validator against the user input
             errors = []
             valid_args = {}
-            for arg_name, validator in self.validators.iteritems():
+            for arg_name, validator in self.validators.items():
                 if arg_name not in user_args:
                     errors.append("{} must have a value".format(arg_name))
                     continue
@@ -123,10 +124,13 @@ class ValidateAndDefault(object):
                         errors.append("invalid value for {} - {}".format(arg_name, ex))
                 elif user_val is None or user_val == "":
                     errors.append("{} must have a value".format(arg_name))
+                else:
+                    log.debug2("  Skipping validation for {}".format(arg_name))
+                    valid_args[arg_name] = user_val
 
             # Look for any "extra" args that were passed in
             for arg_name in user_args.keys():
-                if arg_name not in self.validators.keys():
+                if arg_name not in list(self.validators.keys()):
                     errors.append("Unknown argument {}".format(arg_name))
 
             if errors:
@@ -185,7 +189,7 @@ class SelectionType(object):
         try:
             sel = self.itemType(string)
         except (TypeError, ValueError):
-            raise InvalidArgumentError("'{}' is not a valid {}".format(string, self.itemType.__name__))
+            raise InvalidArgumentError("'{}' is not a valid {}".format(string, GetPrettiestTypeName(self.itemType)))
 
         if sel not in self.choices:
             raise InvalidArgumentError("'{}' is not a valid choice".format(string))
@@ -198,9 +202,9 @@ class SelectionType(object):
 class ItemList(object):
     """Type for making a list of things"""
 
-    def __init__(self, itemType=str, allowEmpty=False):
-        if not callable(itemType):
-            raise ValueError("type must be callable")
+    def __init__(self, itemType=StrType, allowEmpty=False):
+        if not callable(itemType) and itemType is not None:
+            raise ValueError("type must be callable or None")
         self.itemType = itemType
         self.allowEmpty = allowEmpty
 
@@ -208,7 +212,7 @@ class ItemList(object):
         # Split into individual items
         if string is None:
             items = []
-        elif isinstance(string, basestring):
+        elif isinstance(string, six.string_types):
             items = [i for i in _re.split(r"[,\s]+", string) if i]
         else:
             try:
@@ -219,9 +223,10 @@ class ItemList(object):
 
         # Validate each item is the correct type
         try:
-            items = [self.itemType(i) for i in items]
+            if self.itemType is not None:
+                items = [self.itemType(i) for i in items]
         except (TypeError, ValueError):
-            raise InvalidArgumentError("Invalid {} value".format(self.itemType.__name__))
+            raise InvalidArgumentError("Invalid {} value".format(GetPrettiestTypeName(self.itemType)))
 
         # Validate the list is not empty
         if not self.allowEmpty and not items:
@@ -235,9 +240,9 @@ class ItemList(object):
 class OptionalValueType(object):
     """Type for validating an optional"""
 
-    def __init__(self, itemType=str):
-        if not callable(itemType):
-            raise ValueError("type must be callable")
+    def __init__(self, itemType=StrType):
+        if not callable(itemType) and itemType is not None:
+            raise ValueError("type must be callable or None")
         self.itemType = itemType
 
     def __call__(self, string):
@@ -245,9 +250,12 @@ class OptionalValueType(object):
             return None
 
         try:
-            item = self.itemType(string)
+            if self.itemType is None:
+                item = string
+            else:
+                item = self.itemType(string)
         except (TypeError, ValueError):
-            raise InvalidArgumentError("{} is not a valid {}".format(string, self.itemType.__name__))
+            raise InvalidArgumentError("{} is not a valid {}".format(string, GetPrettiestTypeName(self.itemType)))
         return item
 
     def __repr__(self):
@@ -256,7 +264,7 @@ class OptionalValueType(object):
 def AtLeastOneOf(**kwargs):
     """Validate that one or more of the list of items has a value"""
     if not any(kwargs.values()):
-        raise InvalidArgumentError("At least one of [{}] must have a value".format(",".join(kwargs.keys())))
+        raise InvalidArgumentError("At least one of [{}] must have a value".format(",".join(list(kwargs.keys()))))
 
 def BoolType(string, name=None):
     """Type for validating boolean"""
@@ -497,6 +505,8 @@ def RegexType(string):
 
 def GetPrettiestTypeName(typeToName):
     """Get the best human representation of a type"""
+    if typeToName is None:
+        return "Any"
     typename = repr(typeToName)
     # Hacky
     if typename.startswith("<"):
@@ -647,7 +657,7 @@ def SecondsToElapsedStr(seconds):
     Returns:
         A formatted elapsed time (str)
     """
-    if isinstance(seconds, basestring):
+    if isinstance(seconds, six.string_types):
         return seconds
 
     delta = _datetime.timedelta(seconds=seconds)

@@ -1,6 +1,7 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #pylint: skip-file
 
+from __future__ import print_function
 import glob
 import logging
 import multiprocessing
@@ -8,7 +9,7 @@ import os
 import paramiko
 import pytest
 import time
-import urllib2
+import six.moves.urllib.request
 
 from libsf import sfdefaults, shellutil, logutil
 from .fake_client import FakeClientRegister, FakeShellCommand, FakeParamikoSSHClient
@@ -29,6 +30,7 @@ def pytest_configure(config):
 
     # Turn up logging level
     logutil.GetLogger().ShowDebug(10)
+    logutil.GetLogger().TruncateMessages(False)
 
     # Set the random seed
     user_seed = config.getoption("--seed")
@@ -38,7 +40,7 @@ def pytest_configure(config):
         globalconfig.random_seed = str(int(round(time.time() * 1000)))
 
     # Redirect urllib2.urlopen function so we can capture SF API calls (to simulate cluster/nodes)
-    urllib2.urlopen = fake_urlopen
+    six.moves.urllib.request.urlopen = fake_urlopen
 
     # Redirect Shell function so we can capture commands like winexe, ping, etc (to simulate Windows clients, network operations, etc)
     shellutil.Shell_original = shellutil.Shell
@@ -70,7 +72,7 @@ def generate_fakes():
     globalconfig.cluster = FakeCluster()
     start = time.time()
     globalconfig.cluster.GenerateRandomConfig(globalconfig.random_seed)
-    print "\nGenerated cluster in {} seconds".format(time.time() - start)
+    print("\nGenerated cluster in {} seconds".format(time.time() - start))
 
 # Tear down the cluster so that it will be recreated in a pristine state
 def fake_cluster_teardown():
@@ -109,7 +111,7 @@ def fake_cluster_connected_clients(request):
 # ===============================================================================================
 # Add a timer to each test
 def timer_stop():
-    print "\n{} seconds".format(time.time() - startTime)
+    print("\n{} seconds".format(time.time() - startTime))
 
 startTime = 0
 @pytest.fixture(scope="function", autouse=True)
@@ -121,10 +123,10 @@ def timer(request):
 
 def pytest_generate_tests(metafunc):
     if "scriptfiles_parametrize" in metafunc.fixturenames:
-        script_files = [os.path.join(pytest.sfauto_dir, f) for f in os.listdir(pytest.sfauto_dir) if os.path.isfile(os.path.join(pytest.sfauto_dir, f)) and f.endswith("py") and f != "test.py" and f != "esx_configure.py"]
+        script_files = sorted([os.path.join(pytest.sfauto_dir, f) for f in os.listdir(pytest.sfauto_dir) if os.path.isfile(os.path.join(pytest.sfauto_dir, f)) and f.endswith("py") and f != "test.py" and f != "esx_configure.py"])
         metafunc.parametrize("scriptfiles_parametrize", script_files)
     if "libfiles_parametrize" in metafunc.fixturenames:
-        script_files = [os.path.join(pytest.sfauto_lib_dir, f) for f in os.listdir(pytest.sfauto_lib_dir) if os.path.isfile(os.path.join(pytest.sfauto_lib_dir, f)) and f.endswith("py")]
+        script_files = sorted([os.path.join(pytest.sfauto_lib_dir, f) for f in os.listdir(pytest.sfauto_lib_dir) if os.path.isfile(os.path.join(pytest.sfauto_lib_dir, f)) and f.endswith("py")])
         metafunc.parametrize("libfiles_parametrize", script_files)
 
 

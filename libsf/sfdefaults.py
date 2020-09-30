@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 Default values for all actions to use
 
@@ -16,6 +16,7 @@ DO NOT USE AN EMPTY LIST [] OR EMPTY DICT {} FOR ANY OF THESE VALUES!!!!!
 # =============================================================================
 # Default Behaviors
 
+from __future__ import print_function
 stop_on_error = False               # Behavior when an error occurs
 use_multiprocessing = False         # Use multiprocessing instead of multithreading
 all_api_versions = [                # All known endpoint versions
@@ -320,4 +321,4 @@ def PrintDefaults():
     """
     defaults = GetDefaults()
     for name in sorted(defaults.keys()):
-        print "%20s" % name + "  =>  " + str(defaults[name])
+        print("%20s" % name + "  =>  " + str(defaults[name]))

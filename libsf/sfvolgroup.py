@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 SolidFire volume access group object and related data structures
 """
@@ -131,7 +131,7 @@ class SFVolGroup(object):
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs

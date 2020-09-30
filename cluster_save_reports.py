@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will force a whole file sync on the given volumes
@@ -14,6 +14,7 @@ from libsf import SolidFireError
 import os
 import tarfile
 import time
+from io import open
 
 @logargs
 @ValidateAndDefault({

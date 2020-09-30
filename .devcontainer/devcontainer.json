@@ -1,0 +1,11 @@
+{
+	"name": "sfauto dev/runtime container",
+	"context": "..",
+	"dockerFile": "../Dockerfile",
+	"settings": {
+		"terminal.integrated.shell.linux": null
+	},
+	"extensions": [
+		"ms-python.python"
+	]
+}

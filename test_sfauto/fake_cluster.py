@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 Fake cluster API
 """
@@ -16,8 +16,7 @@ import socket
 import string
 import threading
 import time
-import urllib2
-from urlparse import urlparse
+from six.moves.urllib.parse import urlparse
 import uuid
 
 from . import globalconfig
@@ -26,9 +25,11 @@ from libsf import SolidFireAPIError as SolidFireApiError # compat with sfinstall
 from libsf import SolidFireError
 from libsf.logutil import GetLogger
 from libsf.util import TimestampToStr, UTCTimezone
+from io import open
+import six
 
 def fake_urlopen(request, *args, **kwargs):
-    """Fake out urllib2.urlopen and return fake but consistent results as if they came from a SF endpoint"""
+    """Fake out urllib.urlopen and return fake but consistent results as if they came from a SF endpoint"""
 
     username = None
     password = None
@@ -37,10 +38,14 @@ def fake_urlopen(request, *args, **kwargs):
         if authType == "Basic":
             username, password = base64.b64decode(authHash).split(":")
 
+    # Patch for python2
+    if not hasattr(request, "data"):
+        setattr(request, "data", request.get_data())
+
     # JSON API call
-    if "json-rpc" in request.get_selector():
+    if "json-rpc" in request.get_full_url():
         url = urlparse(request.get_full_url())
-        req = json.loads(request.get_data())
+        req = json.loads(request.data)
         api_version = float(url.path.split("/")[-1])
         method_name = req["method"]
         method_params = req["params"]
@@ -55,7 +60,7 @@ def fake_urlopen(request, *args, **kwargs):
 
     # Regular download
     else:
-        response = globalconfig.cluster.HttpDownload(request.get_selector())
+        response = globalconfig.cluster.HttpDownload(request.get_full_url())
         return FakeResponse(response)
 
 class FakeResponse(object):
@@ -74,7 +79,7 @@ def fake_socket(*args, **kwargs):
     """Fake a call to socket.socket()"""
     return FakeSocket(*args, **kwargs)
 
-class FakeSocket():
+class FakeSocket(object):
     """Fake a socket object"""
 
     def __init__(self, *args, **kwargs):
@@ -622,7 +627,7 @@ class FakeCluster(object):
                 else:
                     self.data[path] = {}
 
-            active_node_count = len(self.data[ACTIVE_NODES_PATH].keys())
+            active_node_count = len(list(self.data[ACTIVE_NODES_PATH].keys()))
 
             # Create slice and bin reports
             self.data[SLICE_REPORT_HEALTHY_PATH] = {
@@ -633,7 +638,7 @@ class FakeCluster(object):
                 "services": [],
                 "slices" : []
             }
-            for idx in xrange(1, active_node_count+1):
+            for idx in range(1, active_node_count+1):
                 self.data[SLICE_REPORT_HEALTHY_PATH]["services"].append({
                     "health" : "good",
                     "ip" : str(idx + 100),
@@ -647,7 +652,7 @@ class FakeCluster(object):
                     "serviceID" : idx + 10
                 })
 
-            for idx in xrange(1, 101):
+            for idx in range(1, 101):
                 self.data[SLICE_REPORT_HEALTHY_PATH]["slices"].append({
                     "liveSecondaries" : [ random.randint(10, active_node_count + 10)]
                 })
@@ -657,7 +662,7 @@ class FakeCluster(object):
 
             self.data[BIN_REPORT_HEALTHY_PATH] = []
             self.data[BIN_REPORT_UNHEALTHY_PATH] = []
-            for idx in xrange(0, 10): # Only create the first few bins, it takes too long to make all of them and we don't need them
+            for idx in range(0, 10): # Only create the first few bins, it takes too long to make all of them and we don't need them
                 self.data[BIN_REPORT_HEALTHY_PATH].append({
                     "binID" : idx,
                     "services" : [
@@ -714,13 +719,13 @@ class FakeCluster(object):
 
         # Create active and available drives
         config[DRIVES_PATH] = {}
-        for idx in xrange(len(drive_ids)):
+        for idx in range(len(drive_ids)):
             drive_id = drive_ids[idx]
             config[DRIVES_PATH][drive_id] = {
                 "attributes": { },
                 "capacity": 300069052416,
                 "driveID": drive_id,
-                "nodeID": node_ids[idx / config[DRIVES_PER_NODE_PATH]],
+                "nodeID": node_ids[idx // config[DRIVES_PER_NODE_PATH]],
                 "serial": "scsi-SATA_INTEL_SSD{}".format(random.randint(10000000,99999999)),
                 "slot": -1 if idx % config[DRIVES_PER_NODE_PATH] == 0 else idx % config[DRIVES_PER_NODE_PATH] - 1,
                 "status": "active" if idx < config[DRIVES_PER_NODE_PATH] * (active_node_count-1) else "available",
@@ -741,7 +746,7 @@ class FakeCluster(object):
                     "mipi": "Bond1G",
                     "name": RandomString(8),
                     "nodeID": node_id,
-                    "platformInfo": random.choice(ISCSI_NODE_TYPES.values()),
+                    "platformInfo": random.choice(list(ISCSI_NODE_TYPES.values())),
                     "sip": RandomIP(),
                     "sipi": "Bond10G",
                     "softwareVersion": config[CLUSTER_VERSION_PATH],
@@ -763,7 +768,7 @@ class FakeCluster(object):
                         "mipi": "Bond1G",
                         "name": RandomString(8),
                         "nodeID": node_id,
-                        "platformInfo": random.choice(FC_NODE_TYPES.values()),
+                        "platformInfo": random.choice(list(FC_NODE_TYPES.values())),
                         "sip": RandomIP(),
                         "sipi": "Bond10G",
                         "softwareVersion": config[CLUSTER_VERSION_PATH],
@@ -783,7 +788,7 @@ class FakeCluster(object):
                 "mipi": "Bond1G",
                 "name": RandomString(8),
                 "pendingNodeID": node_id,
-                "platformInfo": random.choice(ISCSI_NODE_TYPES.values()),
+                "platformInfo": random.choice(list(ISCSI_NODE_TYPES.values())),
                 "sip": RandomIP(),
                 "sipi": "Bond10G",
                 "softwareVersion": config[CLUSTER_VERSION_PATH],
@@ -819,9 +824,9 @@ class FakeCluster(object):
         # Create some packages before and after this version
         cluster_ver = SolidFireVersion(config[CLUSTER_VERSION_PATH])
         config[AVAILABLE_PACKAGES_PATH] = []
-        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major - idx, random.randint(0, 5), random.randint(0,1), random.randint(1000, 2000)) for idx in xrange(1, 4)])
-        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major, cluster_ver.minor + idx, random.randint(0,1), random.randint(1000, 2000)) for idx in xrange(1, 4)])
-        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major + idx, random.randint(0, 5), random.randint(0,1), random.randint(1000, 2000)) for idx in xrange(1, 4)])
+        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major - idx, random.randint(0, 5), random.randint(0,1), random.randint(1000, 2000)) for idx in range(1, 4)])
+        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major, cluster_ver.minor + idx, random.randint(0,1), random.randint(1000, 2000)) for idx in range(1, 4)])
+        config[AVAILABLE_PACKAGES_PATH].extend(["solidfire-san-unobtanium-{}.{}.{}.{}".format(cluster_ver.major + idx, random.randint(0, 5), random.randint(0,1), random.randint(1000, 2000)) for idx in range(1, 4)])
 
         # Startup flags for nodes
         config[STARTUP_FLAGS_PATH] = {}
@@ -906,7 +911,7 @@ class FakeCluster(object):
                 "name" : RandomString(random.randint(6, 64)),
                 "initiators" : [],
                 "initiatorIDs" : [],
-                "volumes" : random.sample(config[VOLUME_PATH].keys(), random.randint(1, 5)),
+                "volumes" : random.sample(list(config[VOLUME_PATH].keys()), random.randint(1, 5)),
                 "deletedVolumes" : [],
                 "attributes" : {},
                 "volumeAccessGroupID" : volgroup_id
@@ -937,14 +942,14 @@ class FakeCluster(object):
 
         # Make sure we have a bunch of small volumes
         volume_ids = []
-        for _ in xrange(random.randint(20, 40)):
+        for _ in range(random.randint(20, 40)):
             while True:
                 volume_id = random.randint(1, 40000)
-                if volume_id not in config[VOLUME_PATH].keys() and volume_id not in config[DELETED_VOLUMES_PATH].keys():
+                if volume_id not in list(config[VOLUME_PATH].keys()) and volume_id not in list(config[DELETED_VOLUMES_PATH].keys()):
                     volume_ids.append(volume_id)
                     break
         for volume_id in volume_ids:
-            account_id = random.choice(config[ACCOUNT_PATH].keys())
+            account_id = random.choice(list(config[ACCOUNT_PATH].keys()))
             config[VOLUME_PATH][volume_id] = self._NewVolumeJSON(clusterID=config[CLUSTER_ID_PATH],
                                                                  accountID=account_id,
                                                                  volumeName=RandomString(random.randint(6, 64)),
@@ -957,14 +962,14 @@ class FakeCluster(object):
 
         # Make sure we have one volume group where all the volumes have lower IDs
         volume_ids = []
-        for _ in xrange(random.randint(3, 15)):
+        for _ in range(random.randint(3, 15)):
             while True:
                 volume_id = random.randint(1, 8000)
-                if volume_id not in config[VOLUME_PATH].keys() and volume_id not in config[DELETED_VOLUMES_PATH].keys():
+                if volume_id not in list(config[VOLUME_PATH].keys()) and volume_id not in list(config[DELETED_VOLUMES_PATH].keys()):
                     volume_ids.append(volume_id)
                     break
         for volume_id in volume_ids:
-            account_id = random.choice(config[ACCOUNT_PATH].keys())
+            account_id = random.choice(list(config[ACCOUNT_PATH].keys()))
             config[VOLUME_PATH][volume_id] = self._NewVolumeJSON(clusterID=config[CLUSTER_ID_PATH],
                                                                  accountID=account_id,
                                                                  volumeName=RandomString(random.randint(6, 64)),
@@ -974,7 +979,7 @@ class FakeCluster(object):
                                                                  access=random.choice(["readWrite", "readOnly", "locked", "replicationTarget"]),
                                                                  status="active")
             config[ACCOUNT_PATH][account_id]["volumes"].append(volume_id)
-        volgroup_ids = RandomSequence(1, config[VOLGROUP_PATH].keys())
+        volgroup_ids = RandomSequence(1, list(config[VOLGROUP_PATH].keys()))
         for volgroup_id in volgroup_ids:
             config[VOLGROUP_PATH][volgroup_id] = {
                 "name" : RandomString(random.randint(6, 64)),
@@ -988,7 +993,7 @@ class FakeCluster(object):
 
 
         # Make sure we have some empty accounts
-        account_ids = RandomSequence(3, config[ACCOUNT_PATH].keys())
+        account_ids = RandomSequence(3, list(config[ACCOUNT_PATH].keys()))
         for account_id in account_ids:
             config[ACCOUNT_PATH][account_id] = {
                 "accountID": account_id,
@@ -1032,7 +1037,7 @@ class FakeCluster(object):
                 self.data[INSTALLED_PACKAGES_PATH][node_id].append(package_name)
 
             # Install some of the nodes
-            installed_nodes = random.sample(self.data[ACTIVE_NODES_PATH].keys(), random.randint(1, len(self.data[ACTIVE_NODES_PATH].keys())/2))
+            installed_nodes = random.sample(list(self.data[ACTIVE_NODES_PATH].keys()), random.randint(1, len(list(self.data[ACTIVE_NODES_PATH].keys()))/2))
             for node_id in installed_nodes:
                 self.data[NODE_VERSION_PATH][node_id] = version
 
@@ -1049,7 +1054,7 @@ class FakeCluster(object):
             self.data[VERSION_INFO_PATH]["startTime"] = TimestampToStr(time.time() - 60, formatString="%Y-%m-%dT%H:%M:%SZ", timeZone=UTCTimezone())
 
             # Stage some of the nodes
-            for node_id in random.sample(self.data[ACTIVE_NODES_PATH].keys(), random.randint(1, len(self.data[ACTIVE_NODES_PATH].keys())/2)):
+            for node_id in random.sample(list(self.data[ACTIVE_NODES_PATH].keys()), random.randint(1, len(list(self.data[ACTIVE_NODES_PATH].keys()))/2)):
                 self.data[INSTALLED_PACKAGES_PATH][node_id].append(package_name)
 
     def SetClusterInstallFullyStaged(self):
@@ -1094,7 +1099,7 @@ class FakeCluster(object):
             if not account_id:
                 raise SolidFireError("Could not find account {}".format(accountName))
 
-            volume_ids = RandomSequence(volumeCount, self.data[VOLUME_PATH].keys())
+            volume_ids = RandomSequence(volumeCount, list(self.data[VOLUME_PATH].keys()))
             for volume_id in volume_ids:
                 self.data[VOLUME_PATH][volume_id] = self._NewVolumeJSON(clusterID=self.data[CLUSTER_ID_PATH],
                                                                      accountID=account_id,
@@ -1168,7 +1173,7 @@ class FakeCluster(object):
     def _GetOrAddInitiatorID(self, initiator):
         with self.dataLock:
             initiators = self.data[INITIATORS_PATH]
-            for init_id, init_str in initiators.iteritems():
+            for init_id, init_str in initiators.items():
                 if init_str == initiator:
                     return init_id
             init_id = self._GetNextIDUnlocked()
@@ -1190,7 +1195,7 @@ class FakeCluster(object):
     def _ThrowIfAnyVolumeDoesNotExist(self, volumeIDList, ex):
         with self.dataLock:
             existing_volumes = self.data[VOLUME_PATH]
-            unknown = set(volumeIDList).difference(existing_volumes.keys())
+            unknown = set(volumeIDList).difference(list(existing_volumes.keys()))
             if unknown:
                 raise ex
 
@@ -1311,12 +1316,12 @@ class FakeCluster(object):
 
     def ListActiveVolumes(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
-            volumes = copy.deepcopy(self.data[VOLUME_PATH].values())
+            volumes = copy.deepcopy(list(self.data[VOLUME_PATH].values()))
             return { "volumes" : volumes }
 
     def ListVolumeAccessGroups(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
-            volgroups = copy.deepcopy(self.data[VOLGROUP_PATH].values())
+            volgroups = copy.deepcopy(list(self.data[VOLGROUP_PATH].values()))
             return { "volumeAccessGroups" : volgroups }
 
     def CreateVolumeAccessGroup(self, methodParams, ip="", endpoint="", apiVersion=""):
@@ -1407,7 +1412,7 @@ class FakeCluster(object):
 
     def ListAccounts(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
-            return { "accounts" : copy.deepcopy(self.data[ACCOUNT_PATH].values()) }
+            return { "accounts" : copy.deepcopy(list(self.data[ACCOUNT_PATH].values())) }
 
     def AddAccount(self, methodParams, ip="", endpoint="", apiVersion=""):
         name = methodParams.get("username", None)
@@ -1520,10 +1525,12 @@ class FakeCluster(object):
             # Increase the size of the volume
             if "totalSize" in methodParams and methodParams["totalSize"] != volume["totalSize"]:
                 newsize = methodParams["totalSize"]
+                assert isinstance(newsize, int) and not isinstance(newsize, bool)
+
                 if newsize < volume["totalSize"]:
                     raise SolidFireApiError("ModifyVolume", methodParams, ip, endpoint, "xVolumeShrinkProhibited", 500, "Lowering a volume size is not allowed.")
                 if newsize % 4096 != 0:
-                    newsize = (newsize/4096 + 1) * 4096
+                    newsize = (newsize // 4096 + 1) * 4096
                 assert newsize % 4096 == 0
                 volume["totalSize"] = newsize
 
@@ -1568,6 +1575,7 @@ class FakeCluster(object):
             account = self.data[ACCOUNT_PATH][account_id]
 
             size = methodParams.get("newSize", volume["totalSize"])
+            assert isinstance(size, int) and not isinstance(size, bool)
             access = methodParams.get("access", "readWrite")
 
             clone_id = self._GetNextIDUnlocked()
@@ -1620,6 +1628,7 @@ class FakeCluster(object):
         size = methodParams.get("totalSize", None)
         if not size:
             raise SolidFireApiError("CreateVolume", methodParams, ip, endpoint, "xMissingParameter", 500, "Missing member=[totalSize]")
+        assert isinstance(size, int) and not isinstance(size, bool)
         enable512e = methodParams.get("enable512e", False)
         qos = methodParams.get("qos", {})
         min_iops = qos.get("minIOPS", 50)
@@ -1657,6 +1666,7 @@ class FakeCluster(object):
         size = methodParams.get("totalSize", None)
         if not size:
             raise SolidFireApiError("CreateMultipleVolumes", methodParams, ip, endpoint, "xMissingParameter", 500, "Missing member=[totalSize]")
+        assert isinstance(size, int) and not isinstance(size, bool)
         enable512e = methodParams.get("enable512e", False)
         qos = methodParams.get("qos", {})
         min_iops = qos.get("minIOPS", 50)
@@ -1685,7 +1695,7 @@ class FakeCluster(object):
                 self.data[ACCOUNT_PATH][account_id] = account
                 new_vol_map[vol_id] = vol
 
-            return { "volumeIDs" : new_vol_map.keys(), "volumes" : copy.deepcopy(new_vol_map.values()) }
+            return { "volumeIDs" : list(new_vol_map.keys()), "volumes" : copy.deepcopy(list(new_vol_map.values())) }
 
     def DeleteVolume(self, methodParams, ip="", endpoint="", apiVersion=""):
         volume_id = methodParams.get("volumeID", None)
@@ -1721,7 +1731,7 @@ class FakeCluster(object):
                 self.data[DELETED_VOLUMES_PATH][volume_id] = vol
                 del self.data[VOLUME_PATH][volume_id]
 
-            return { "volumeIDs" : volume_map.keys(), "volumes" : copy.deepcopy(volume_map.values()) }
+            return { "volumeIDs" : list(volume_map.keys()), "volumes" : copy.deepcopy(list(volume_map.values())) }
 
     def PurgeDeletedVolume(self, methodParams, ip="", endpoint="", apiVersion=""):
         volume_id = methodParams.get("volumeID", None)
@@ -1773,13 +1783,13 @@ class FakeCluster(object):
             allvolumes = self.data[VOLUME_PATH]
             allvolumes.update(self.data[DELETED_VOLUMES_PATH])
 
-            account_volumes = [ vol for vol_id, vol in allvolumes.iteritems() if vol_id in account["volumes"]]
+            account_volumes = [ vol for vol_id, vol in allvolumes.items() if vol_id in account["volumes"]]
             return { "volumes" : copy.deepcopy(account_volumes) }
 
     def ListDeletedVolumes(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
             volumes = self.data[DELETED_VOLUMES_PATH]
-            return { "volumes" : copy.deepcopy(volumes.values()) }
+            return { "volumes" : copy.deepcopy(list(volumes.values())) }
 
     def ModifyVolumePair(self, methodParams, ip="", endpoint="", apiVersion=""):
         volume_id = methodParams.get("volumeID", None)
@@ -1810,23 +1820,23 @@ class FakeCluster(object):
     def ListDrives(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
             alldrives = self.data[DRIVES_PATH]
-            return { "drives" : copy.deepcopy(alldrives.values()) }
+            return { "drives" : copy.deepcopy(list(alldrives.values())) }
 
     def ListActiveNodes(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
             nodes = self.data[ACTIVE_NODES_PATH]
-            return { "nodes" : copy.deepcopy(nodes.values()) }
+            return { "nodes" : copy.deepcopy(list(nodes.values())) }
 
     def ListPendingNodes(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
             nodes = self.data[PENDING_NODES_PATH]
-            return { "pendingNodes" : copy.deepcopy(nodes.values()) }
+            return { "pendingNodes" : copy.deepcopy(list(nodes.values())) }
 
     def ListAllNodes(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
             nodes = self.data[ACTIVE_NODES_PATH]
             pending_nodes = self.data[PENDING_NODES_PATH]
-            return { "nodes" : copy.deepcopy(nodes.values()), "pendingNodes" : copy.deepcopy(pending_nodes.values()) }
+            return { "nodes" : copy.deepcopy(list(nodes.values())), "pendingNodes" : copy.deepcopy(list(pending_nodes.values())) }
 
     def AddDrives(self, methodParams, ip="", endpoint="", apiVersion=""):
         drives_to_add = methodParams.get("drives")
@@ -1841,7 +1851,7 @@ class FakeCluster(object):
                 else:
                     drive_id = int(drive)
 
-                if drive_id not in alldrives.keys():
+                if drive_id not in list(alldrives.keys()):
                     raise SolidFireApiError("AddDrives", methodParams, ip, endpoint, "xDriveIDDoesNotExist", 500, "Drive {} does not exist".format(drive_id))
 
                 alldrives[drive_id]["status"] = "active"
@@ -1874,7 +1884,7 @@ class FakeCluster(object):
                 else:
                     drive_id = int(drive)
 
-                if drive_id not in alldrives.keys():
+                if drive_id not in list(alldrives.keys()):
                     raise SolidFireApiError("RemoveDrives", methodParams, ip, endpoint, "xDriveIDDoesNotExist", 500, "Drive {} does not exist".format(drive_id))
 
                 alldrives[drive_id]["status"] = "available"
@@ -1932,7 +1942,7 @@ class FakeCluster(object):
             drives = self.data[DRIVES_PATH]
             retmap = []
             for pending_id in node_ids:
-                if pending_id not in pending_nodes.keys():
+                if pending_id not in list(pending_nodes.keys()):
                     raise SolidFireApiError("AddNodes", methodParams, ip, endpoint, "xDBNoSuchPath", 500, "DBClient operation requested on a non-existent path at [/pendingnodes/{}]".format(pending_id))
                 node = pending_nodes.pop(pending_id)
 
@@ -1960,7 +1970,7 @@ class FakeCluster(object):
 
                 # Create drives for the node
                 if node["platformInfo"]["nodeType"] != "FC0025":
-                    for idx in xrange(self.data[DRIVES_PER_NODE_PATH]):
+                    for idx in range(self.data[DRIVES_PER_NODE_PATH]):
                         drive_id = self._GetNextID()
                         drives[drive_id] = {
                             "attributes": { },
@@ -1983,7 +1993,7 @@ class FakeCluster(object):
     def ListClusterAdmins(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
             admins = self.data[ADMINS_PATH]
-            return {"clusterAdmins" : copy.deepcopy(admins.values()) }
+            return {"clusterAdmins" : copy.deepcopy(list(admins.values())) }
 
     def GetClusterMasterNodeID(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
@@ -2014,7 +2024,7 @@ class FakeCluster(object):
 
     def SetConstants(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
-            for key, value in methodParams.iteritems():
+            for key, value in methodParams.items():
                 self.data[CONSTANTS_PATH][key] = value
 
     def SetRepositories(self, methodParams, ip="", endpoint="", apiVersion=""):
@@ -2072,8 +2082,8 @@ class FakeCluster(object):
     def GetRawStats(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
             result = {}
-            node_count = len(self.data[ACTIVE_NODES_PATH].keys())
-            for idx in xrange(node_count):
+            node_count = len(list(self.data[ACTIVE_NODES_PATH].keys()))
+            for idx in range(node_count):
                 key = "service-{}".format(idx)
                 result[key] = {}
                 result[key]["scacheBytesInUse"] = 0
@@ -2083,14 +2093,14 @@ class FakeCluster(object):
     def GetServiceStatus(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
             result = {}
-            node_count = len(self.data[ACTIVE_NODES_PATH].keys())
+            node_count = len(list(self.data[ACTIVE_NODES_PATH].keys()))
 
-            status = {idx : True for idx in xrange(node_count * self.data[DRIVES_PER_NODE_PATH])}
+            status = {idx : True for idx in range(node_count * self.data[DRIVES_PER_NODE_PATH])}
             return { "success" : status }
 
     def ListVolumeStatsByVolume(self, methodParams, ip="", endpoint="", apiVersion=""):
         with self.dataLock:
-            node_count = len(self.data[ACTIVE_NODES_PATH].keys())
+            node_count = len(list(self.data[ACTIVE_NODES_PATH].keys()))
             stats = []
             for volume in self.data[VOLUME_PATH].values():
                 stats.append({
@@ -2293,7 +2303,7 @@ class FakeCluster(object):
         with self.dataLock:
             nodes = self.data[ACTIVE_NODES_PATH]
             node_id = 0
-            for node in nodes.itervalues():
+            for node in six.itervalues(nodes):
                 if node["mip"] == nodeIP:
                     node_id = node["nodeID"]
                     break

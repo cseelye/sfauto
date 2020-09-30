@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 Client objects and data structures
 """
@@ -15,6 +15,7 @@ from . import shellutil
 from . import util
 from . import SSHConnection, ClientError, ClientCommandError,ClientAuthorizationError, ClientRefusedError, ClientConnectionError
 from .logutil import GetLogger
+import six
 
 class OSType(object):
     """Enumeration of known client types"""
@@ -23,7 +24,7 @@ class OSType(object):
 def _prefix(logfn):
     """Add the client IP to a log message"""
     def wrapped(self, message):
-        if isinstance(message, basestring):
+        if isinstance(message, six.string_types):
             message = message.rstrip()
             if not message:
                 message = "  <empty msg>"
@@ -32,7 +33,7 @@ def _prefix(logfn):
     return wrapped
 
 #pylint: disable=method-hidden,protected-access
-class SFClient:
+class SFClient(object):
     """Common interactions with a client"""
 
     def __init__(self, clientIP, clientUser, clientPass, clientTypeHint=None):
@@ -68,7 +69,7 @@ class SFClient:
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs
@@ -518,7 +519,7 @@ class SFClient:
                     name = m.group(5)
                     if "loopback" in name.lower():
                         continue
-                    if name not in interfaces.keys():
+                    if name not in list(interfaces.keys()):
                         continue
                     interfaces[name]["index"] = index
 
@@ -561,7 +562,7 @@ class SFClient:
 
             for name in interfaces.keys():
                 output = []
-                for k,v in interfaces[name].iteritems():
+                for k,v in interfaces[name].items():
                     output.append(str(k) + "=" + str(v))
                 self._debug(",".join(output))
 
@@ -574,7 +575,7 @@ class SFClient:
                 if not interface_name:
                     raise ClientError("Could not find interface with MAC '{}'".format(interfaceMAC))
             if interfaceName:
-                if interfaceName not in interfaces.keys():
+                if interfaceName not in list(interfaces.keys()):
                     raise ClientError("Could not find interface '" + interfaceName + "'")
                 interface_name = interfaceName
             interface_index = interfaces[interface_name]["index"]
@@ -621,7 +622,7 @@ class SFClient:
 
             for name in ifaces.keys():
                 output = []
-                for k,v in ifaces[name].iteritems():
+                for k,v in ifaces[name].items():
                     output.append(str(k) + "=" + str(v))
                 self._debug(",".join(output))
 
@@ -633,7 +634,7 @@ class SFClient:
                 if not interface_name:
                     raise ClientError("Could not find interface with MAC '{}'".format(interfaceMAC))
             if interfaceName:
-                if interfaceName not in ifaces.keys():
+                if interfaceName not in list(ifaces.keys()):
                     raise ClientError("Could not find interface '{}'".format(interfaceName))
                 interface_name = interfaceName
 
@@ -685,7 +686,7 @@ class SFClient:
 
                 # Back up old config file
                 self._debug("Backing up old ifcfg file")
-                self.ExecuteCommand("cp {} {}.bak".format(interface_conf_file, interface_conf_file))
+                self.ExecuteCommand("cp {interface_conf_file} {interface_conf_file}.bak".format(interface_conf_file=interface_conf_file))
 
                 # Copy the file locally to work on.  If something goes wrong, we can raise an exception and bail without leaving a partially configured file around
                 self.ExecuteCommand("cp {} ifcfg".format(interface_conf_file))
@@ -774,7 +775,7 @@ class SFClient:
             self.ExecuteCommand("svcadm restart svc:/system/identity:node")
 
             # make sure hosts file is correct
-            self.ExecuteCommand("echo -e \"::1 {} localhost\\n127.0.0.1 {} localhost loghost\" > /etc/inet/hosts".format(newHostname, newHostname))
+            self.ExecuteCommand("echo -e \"::1 {newHostname} localhost\\n127.0.0.1 {newHostname} localhost loghost\" > /etc/inet/hosts".format(newHostname=newHostname))
 
         elif self.remoteOS == OSType.Linux:
             self._info("Setting hostname to {}".format(newHostname))
@@ -1158,7 +1159,7 @@ class SFClient:
             ifaceName:              the name of the iSCSI iface to use
         """
         if self.remoteOS == OSType.Windows:
-            if not self.chapCredentials.has_key(portalAddress):
+            if portalAddress not in self.chapCredentials:
                 raise ClientError("Please setup CHAP for this portal before trying to discover or login")
             self.ExecuteCommand("diskapp.exe --refresh_targets")
             if expectedTargetCount <= 0:
@@ -1217,7 +1218,7 @@ class SFClient:
         if self.remoteOS == OSType.Windows:
             if targetList != None and len(targetList) > 0:
                 raise ClientError("target_list is not implemented for Windows")
-            if not self.chapCredentials.has_key(portalAddress):
+            if portalAddress not in self.chapCredentials:
                 raise ClientError("Please setup CHAP for this portal before trying to discover or login")
             chap_user = self.chapCredentials[portalAddress][0]
             chap_secret = self.chapCredentials[portalAddress][1]
@@ -1589,7 +1590,7 @@ class SFClient:
                 devs_by_length[length].append(volume["device"])
                 devices.append(volume["device"])
             sorted_devs = []
-            for length in sorted(devs_by_length.keys(), key=int):
+            for length in sorted(list(devs_by_length.keys()), key=int):
                 devs_by_length[length].sort()
                 sorted_devs += devs_by_length[length]
 
@@ -1672,7 +1673,7 @@ class SFClient:
                     new_volume["device"] = "/dev/" + m.group(1)
                     #_, stdout, _ = self.ExecuteCommand("cat /sys/block/" + m.group(1) + "/queue/hw_sector_size")
                     #new_volume["sectors"] = stdout.strip()
-                    if m.group(1) in sectors.keys():
+                    if m.group(1) in list(sectors.keys()):
                         new_volume["sectors"] = sectors[m.group(1)]
                     else:
                         new_volume["sectors"] = 0
@@ -1729,8 +1730,8 @@ class SFClient:
         elif self.remoteOS == OSType.Linux:
             volumes = self.GetVolumeSummary()
             sort = "iqn" # or device, portal, state
-            self._info("Found {} iSCSI volumes".format(len(volumes.keys())))
-            for _, volume in sorted(volumes.iteritems(), key=lambda (k,v): v[sort]):
+            self._info("Found {} iSCSI volumes".format(len(list(volumes.keys()))))
+            for _, volume in sorted(volumes.items(), key=lambda vol: vol[1][sort]):
                 outstr = "    {} -> {}, SID: {}, SectorSize: {}, Portal: {}".format(volume["iqn"], volume["device"], volume["sid"], volume["sectors"], volume["portal"])
                 if "state" in volume:
                     outstr += ", Session: {}".format(volume["state"])
@@ -1888,7 +1889,7 @@ class SFClient:
 
             for name in ifaces.keys():
                 output = []
-                for k,v in ifaces[name].iteritems():
+                for k,v in ifaces[name].items():
                     output.append(str(k) + "=" + str(v))
                 self._debug(",".join(output))
 
@@ -1900,7 +1901,7 @@ class SFClient:
                 if not interface_name:
                     raise ClientError("Could not find interface with MAC '{}'".format(interfaceMAC))
             if interfaceName:
-                if interfaceName not in ifaces.keys():
+                if interfaceName not in list(ifaces.keys()):
                     raise ClientError("Could not find interface '{}'".format(interfaceName))
                 interface_name = interfaceName
 

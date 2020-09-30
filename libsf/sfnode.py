@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 SolidFire node object and related data structures
 """
@@ -10,7 +10,7 @@ from . import netutil
 from . import sfdefaults
 from . import threadutil
 from . import util
-from . import SSHConnection, SolidFireClusterAPI, SolidFireBootstrapAPI, SolidFireNodeAPI, SolidFireError, UnknownObjectError, TimeoutError
+from . import SSHConnection, SolidFireClusterAPI, SolidFireBootstrapAPI, SolidFireNodeAPI, SolidFireError, UnknownObjectError, SFTimeoutError
 from .shellutil import Shell
 from .logutil import GetLogger
 from .virtutil import VirtualMachine
@@ -75,7 +75,7 @@ class SFNode(object):
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs
@@ -323,7 +323,7 @@ class SFNode(object):
             if self.GetPowerState() == "off":
                 break
             if time.time() - start_time > timeout:
-                raise TimeoutError("Timeout waiting for node {} to power off".format(self.ipAddress))
+                raise SFTimeoutError("Timeout waiting for node {} to power off".format(self.ipAddress))
             time.sleep(2 * sfdefaults.TIME_SECOND)
 
     def WaitForOn(self, timeout=300):
@@ -336,7 +336,7 @@ class SFNode(object):
             if self.GetPowerState() == "on":
                 break
             if time.time() - start_time > timeout:
-                raise TimeoutError("Timeout waiting for node {} to power on".format(self.ipAddress))
+                raise SFTimeoutError("Timeout waiting for node {} to power on".format(self.ipAddress))
             time.sleep(2 * sfdefaults.TIME_SECOND)
 
     def WaitForPing(self, timeout=300):
@@ -352,7 +352,7 @@ class SFNode(object):
             time.sleep(sfdefaults.TIME_SECOND)
             current_time = time.time()
             if current_time - start_time >= timeout:
-                raise TimeoutError("Timeout waiting for node {} to come up".format(self.ipAddress))
+                raise SFTimeoutError("Timeout waiting for node {} to come up".format(self.ipAddress))
 
     def WaitForUp(self, timeout=600, initialWait=0):
         """
@@ -369,7 +369,7 @@ class SFNode(object):
             time.sleep(sfdefaults.TIME_SECOND)
             current_time = time.time()
             if current_time - start_time >= timeout:
-                raise TimeoutError("Timeout waiting for node {} to come up".format(self.ipAddress))
+                raise SFTimeoutError("Timeout waiting for node {} to come up".format(self.ipAddress))
 
         self.WaitForNodeAPI()
 
@@ -507,7 +507,7 @@ class SFNode(object):
         result = pool.Post(self.api.Call, "SetNetworkConfig", params)
         try:
             result.GetWithTimeout(30)
-        except TimeoutError:
+        except SFTimeoutError:
             pass
 
         # Wait for the network to be up on the new IP

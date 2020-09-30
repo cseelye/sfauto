@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """
 SolidFire cluster objects and data structures
 """
@@ -9,12 +9,13 @@ import re
 import time
 from . import sfdefaults
 from . import util
-from . import SolidFireClusterAPI, GetHighestAPIVersion, SolidFireError, TimeoutError, UnknownObjectError
+from . import SolidFireClusterAPI, GetHighestAPIVersion, SolidFireError, SFTimeoutError, UnknownObjectError
 from .sfvolgroup import SFVolGroup
 from .sfaccount import SFAccount
 from .sfnode import DriveType, SFNode
 from .sfclusterpair import SFClusterPair
 from .logutil import GetLogger
+import six
 
 class StartClusterPairInfo(object):
     def __init__(self, jsonResult=None):
@@ -67,7 +68,7 @@ class SFCluster(object):
 
     def __getstate__(self):
         attrs = {}
-        for key, value in self.__dict__.iteritems():
+        for key, value in self.__dict__.items():
             if key not in self._unpicklable:
                 attrs[key] = value
         return attrs
@@ -122,7 +123,7 @@ class SFCluster(object):
             if ("GCStarted" in event["message"]):
                 gc_info = GCInfo()
                 gc_info.StartTime = util.ParseTimestamp(event['timeOfReport'])
-                if isinstance(event["details"], basestring):
+                if isinstance(event["details"], six.string_types):
                     m = re.search(r"GC generation:(\d+).+participatingSServices={(.+)}.+eligibleBSs={(.+)}", event["details"])
                     if m:
                         gc_info.Generation = int(m.group(1))
@@ -149,7 +150,7 @@ class SFCluster(object):
                         gc_objects[gc_info.Generation] = gc_info
 
             if ("GCCompleted" in event["message"]):
-                if isinstance(event["details"], basestring):
+                if isinstance(event["details"], six.string_types):
                     pieces = event["details"].split(" ")
                     generation = int(pieces[0])
                     blocks_discarded = int(pieces[1])
@@ -240,7 +241,7 @@ class SFCluster(object):
         while not started:
             time.sleep(sfdefaults.TIME_SECOND * 3)
             if time.time() - wait_start > 120:
-                raise TimeoutError("Timeout waiting for GC to start")
+                raise SFTimeoutError("Timeout waiting for GC to start")
 
             event_list = self.api.CallWithRetry('ListEvents', {})
             for event in event_list["events"]:
@@ -275,7 +276,7 @@ class SFCluster(object):
                     continue
                 elif gc_info.EndTime <= 0:
                     if time.time() - gc_info.StartTime > 60 * timeout:
-                        raise TimeoutError("Timeout waiting for GC to finish")
+                        raise SFTimeoutError("Timeout waiting for GC to finish")
                     break
                 else:
                     return gc_info
@@ -679,27 +680,27 @@ class SFCluster(object):
             source_account = self.FindAccount(accountName=accountName,
                                               accountID=accountID)
             # Only active, undeleted volumes in this account
-            source_volumes = {vid : source_volumes[vid] for vid in source_account.volumes if vid in source_volumes.keys() and source_volumes[vid]["status"] == "active"}
+            source_volumes = {vid : source_volumes[vid] for vid in source_account.volumes if vid in list(source_volumes.keys()) and source_volumes[vid]["status"] == "active"}
 
         # Narrow down to just a volume group
         if volgroupName or volgroupID:
             source_group = self.FindVolumeAccessGroup(volgroupName=volgroupName,
                                                       volgroupID=volgroupID)
             # Only active, undeleted volumes in this group
-            source_volumes = {vid : source_volumes[vid] for vid in source_group.volumes if vid in source_volumes.keys() and source_volumes[vid]["status"] == "active"}
+            source_volumes = {vid : source_volumes[vid] for vid in source_group.volumes if vid in list(source_volumes.keys()) and source_volumes[vid]["status"] == "active"}
 
         found_volumes = {}
 
         if volumeID:
             volume_ids = util.ItemList(int)(volumeID)
             found_volumes = {vol["volumeID"] : vol for vol in source_volumes.values() if vol["volumeID"] in volume_ids}
-            if len(found_volumes.keys()) != len(volume_ids):
+            if len(list(found_volumes.keys())) != len(volume_ids):
                 raise UnknownObjectError("Could not find all specified volume IDs")
 
         elif volumeName:
             volume_names = util.ItemList(str)(volumeName)
             found_volumes = {vol["volumeID"] : vol for vol in source_volumes.values() if vol["name"] in volume_names}
-            if len(found_volumes.keys()) != len(volume_names):
+            if len(list(found_volumes.keys())) != len(volume_names):
                 raise UnknownObjectError("Could not find all specified volume names")
 
         elif volumeRegex:
@@ -832,7 +833,7 @@ class SFCluster(object):
                 break
 
             if time.time() - start_time >= timeout:
-                raise TimeoutError("Timed out waiting for available drives [timeout={}s]".format(timeout))
+                raise SFTimeoutError("Timed out waiting for available drives [timeout={}s]".format(timeout))
 
             time.sleep(sfdefaults.TIME_SECOND * 10)
 
@@ -1296,7 +1297,7 @@ class SFCluster(object):
                     break
                 time.sleep(sfdefaults.TIME_SECOND)
                 if time.time() - start_time > timeout:
-                    raise TimeoutError("Timeout waiting for syncing on volume {}".format(volumeID))
+                    raise SFTimeoutError("Timeout waiting for syncing on volume {}".format(volumeID))
 
     def CreateVLAN(self, tag, addressStart, addressCount, netmask, svip, namespace=False):
         """

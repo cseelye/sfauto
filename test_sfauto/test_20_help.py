@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #pylint: skip-file
 
 import os
@@ -6,7 +6,7 @@ import pytest
 import subprocess
 
 
-class TestHelp:
+class TestHelp(object):
 
     def test_ShortHelp(self, scriptfiles_parametrize):
         """ Test the abbreviated help for each script """

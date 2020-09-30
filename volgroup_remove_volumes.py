@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will remove volumes from an existing volume access group
@@ -8,25 +8,42 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType, NameOrID
+from libsf.util import ValidateAndDefault, NameOrID, IPv4AddressType, OptionalValueType, ItemList, SolidFireIDType, PositiveIntegerType, BoolType, StrType
 from libsf import sfdefaults
 from libsf import SolidFireError, UnknownObjectError
 
 @logargs
-def RemoveVolumesFromVolgroup(volgroup_name=None,
-                         volgroup_id=0,
-                         volume_names=None,
-                         volume_ids=None,
-                         volume_prefix=None,
-                         volume_regex=None,
-                         volume_count=0,
-                         source_account=None,
-                         source_account_id=None,
-                         test=False,
-                         strict=False,
-                         mvip=sfdefaults.mvip,
-                         username=sfdefaults.username,
-                         password=sfdefaults.password):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "volgroup_name" : (OptionalValueType(StrType), None),
+    "volgroup_id" : (OptionalValueType(SolidFireIDType), None),
+    "volume_names" : (OptionalValueType(ItemList(StrType, allowEmpty=True)), None),
+    "volume_ids" : (OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)), None),
+    "volume_prefix" : (OptionalValueType(StrType), None),
+    "volume_regex" : (OptionalValueType(StrType), None),
+    "volume_count" : (OptionalValueType(PositiveIntegerType), None),
+    "source_account" : (OptionalValueType(StrType), None),
+    "source_account_id" : (OptionalValueType(SolidFireIDType), None),
+    "test" : (BoolType, False),
+    "strict" : (BoolType, False),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
+def RemoveVolumesFromVolgroup(volgroup_name,
+                              volgroup_id,
+                              volume_names,
+                              volume_ids,
+                              volume_prefix,
+                              volume_regex,
+                              volume_count,
+                              source_account,
+                              source_account_id,
+                              test,
+                              strict,
+                              mvip,
+                              username,
+                              password):
     """
     Remove volumes from a volume access group
 
@@ -47,14 +64,7 @@ def RemoveVolumesFromVolgroup(volgroup_name=None,
         password:           the admin password of the cluster
     """
     log = GetLogger()
-
-    # Validate args
     NameOrID(volgroup_name, volgroup_id, "volume group")
-    ValidateArgs(locals(), {
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
 
     cluster = SFCluster(mvip, username, password)
 
@@ -79,7 +89,7 @@ def RemoveVolumesFromVolgroup(volgroup_name=None,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    if len(match_volumes.keys()) <= 0:
+    if len(list(match_volumes.keys())) <= 0:
         if strict:
             log.error("No matching volumes were found in group")
             return False
@@ -87,7 +97,7 @@ def RemoveVolumesFromVolgroup(volgroup_name=None,
             log.passed("No matching volumes were found in group")
             return True
 
-    log.info("{} volumes will be removed from group {}: {}".format(len(match_volumes.keys()), volgroup.name, ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
+    log.info("{} volumes will be removed from group {}: {}".format(len(list(match_volumes.keys())), volgroup.name, ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
 
     if test:
         log.warning("Test option set; volumes will not be removed")
@@ -96,7 +106,7 @@ def RemoveVolumesFromVolgroup(volgroup_name=None,
     # Remove the volumes
     log.info("Removing volumes from group")
     try:
-        volgroup.RemoveVolumes(match_volumes.keys())
+        volgroup.RemoveVolumes(list(match_volumes.keys()))
     except SolidFireError as e:
         log.error("Failed to modify group: " + str(e))
         return False

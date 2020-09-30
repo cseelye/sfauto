@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will display the sfapp binary version on the nodes
@@ -79,7 +79,7 @@ def _NodeThread(node_ip, username, password):
     node = SFNode(node_ip, clusterUsername=username, clusterPassword=password)
     ver = node.GetSfappVersion()
 
-    log.info(" ".join(["{}={}".format(key, value) for key, value in ver.iteritems()]))
+    log.info(" ".join(["{}={}".format(key, value) for key, value in ver.items()]))
 
 
 if __name__ == '__main__':

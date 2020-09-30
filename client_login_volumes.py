@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will log in to iSCSI volumes on the clients
@@ -13,7 +13,6 @@ from libsf.util import ValidateAndDefault, IPv4AddressType, ItemList, SelectionT
 from libsf import sfdefaults
 from libsf import SolidFireError
 from libsf import threadutil
-
 
 @logargs
 @ValidateAndDefault({
@@ -154,7 +153,7 @@ def _ClientThread(client_ip, client_user, client_pass, auth_type, account_name, 
     # List out volumes and their info
     log.info("Gathering info about connected volumes")
     volumes = client.GetVolumeSummary()
-    for _, volume in sorted(volumes.iteritems(), key=lambda (k, v): v["iqn"]):
+    for _, volume in sorted(volumes.items(), key=lambda vol: vol[1]["iqn"]):
         log.info("   {} -> {}, SID: {}, SectorSize: {}, Portal: {}, State: {}".format(volume["iqn"], volume["device"], volume["sid"], volume["sectors"], volume["portal"], volume["state"]))
 
 

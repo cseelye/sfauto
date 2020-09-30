@@ -1,6 +1,7 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #pylint: skip-file
 
+from __future__ import print_function
 import pytest
 import random
 from libsf import SolidFireAPIError
@@ -12,7 +13,7 @@ from .testutil import RandomString, RandomIP
 class TestVolumeCreate(object):
 
     def test_negative_VolumeCreateNoAccount(self):
-        print
+        print()
         from volume_create import VolumeCreate
         assert not VolumeCreate(volume_size=random.randint(1, 8000),
                              volume_name=RandomString(random.randint(1, 64)),
@@ -20,7 +21,7 @@ class TestVolumeCreate(object):
                              account_id=9999)
 
     def test_negative_VolumeCreateAccountSearchFailure(self):
-        print
+        print()
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         from volume_create import VolumeCreate
@@ -31,7 +32,7 @@ class TestVolumeCreate(object):
                                  account_id=existing_id)
 
     def test_negative_VolumeCreateSingleFailure(self):
-        print
+        print()
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         from volume_create import VolumeCreate
@@ -42,7 +43,7 @@ class TestVolumeCreate(object):
                                  account_id=existing_id)
 
     def test_negative_VolumeCreateFailure(self):
-        print
+        print()
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         from volume_create import VolumeCreate
@@ -53,7 +54,7 @@ class TestVolumeCreate(object):
                                  account_id=existing_id)
 
     def test_VolumeCreateSingle(self):
-        print
+        print()
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         from volume_create import VolumeCreate
@@ -63,7 +64,7 @@ class TestVolumeCreate(object):
                              account_id=existing_id)
 
     def test_VolumeCreateSingleExplicit(self):
-        print
+        print()
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         from volume_create import VolumeCreate
@@ -74,7 +75,7 @@ class TestVolumeCreate(object):
                              account_id=existing_id)
 
     def test_VolumeCreateGiBExplicit(self):
-        print
+        print()
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         from volume_create import VolumeCreate
@@ -85,7 +86,7 @@ class TestVolumeCreate(object):
                              account_id=existing_id)
 
     def test_VolumeCreateWaitExplicit(self):
-        print
+        print()
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         from volume_create import VolumeCreate
@@ -97,7 +98,7 @@ class TestVolumeCreate(object):
                              account_id=existing_id)
 
     def test_VolumeCreateWithAllOptions(self):
-        print
+        print()
         accounts = globalconfig.cluster.ListAccounts({})["accounts"]
         existing_id = accounts[random.randint(0, len(accounts)-1)]["accountID"]
         max_iops = random.randint(5000, 90000)
@@ -120,31 +121,31 @@ class TestVolumeCreate(object):
 class TestVolumeDelete(object):
 
     def test_VolumeDeleteNoMatches(self):
-        print
+        print()
         from volume_delete import VolumeDelete
         assert VolumeDelete(volume_prefix="nomatchingvolumes")
 
     def test_negative_VolumeDeleteNoArgs(self):
-        print
+        print()
         from volume_delete import VolumeDelete
         assert not VolumeDelete()
 
     def test_VolumeDeleteTestMode(self):
-        print
+        print()
         volume_ids = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
         assert VolumeDelete(volume_ids=random.sample(volume_ids, random.randint(2, 15)),
                              test=True)
 
     def test_negative_VolumeDeleteFailure(self):
-        print
+        print()
         volume_names = [vol["name"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
         with APIFailure("DeleteVolumes"):
             assert not VolumeDelete(volume_names=random.sample(volume_names, random.randint(2, 15)))
 
     def test_negative_VolumeDeleteFailurePreFluorine(self):
-        print
+        print()
         volume_ids = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
         with APIVersion(8.0):
@@ -152,35 +153,35 @@ class TestVolumeDelete(object):
                 assert not VolumeDelete(volume_ids=random.sample(volume_ids, random.randint(2, 15)))
 
     def test_negative_VolumeDeleteSearchFailure(self):
-        print
+        print()
         volume_ids = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
         with APIFailure("ListActiveVolumes"):
             assert not VolumeDelete(volume_ids=random.sample(volume_ids, random.randint(2, 15)))
 
     def test_DeleteSingleVolume(self):
-        print
+        print()
         volume_names = [vol["name"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
-        assert VolumeDelete(volume_names=volume_names[random.randint(0, len(volume_names))],
+        assert VolumeDelete(volume_names=volume_names[random.randint(0, len(volume_names)-1)],
                              purge=True)
 
     def test_VolumeDeleteNoPurge(self):
-        print
+        print()
         volume_ids = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
         assert VolumeDelete(volume_ids=random.sample(volume_ids, random.randint(2, 15)),
                              purge=False)
 
     def test_VolumeDelete(self):
-        print
+        print()
         volume_names = [vol["name"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
         assert VolumeDelete(volume_names=random.sample(volume_names, random.randint(2, 15)),
                              purge=random.choice([True, False]))
 
     def test_VolumeDeletePreFluorine(self):
-        print
+        print()
         volume_ids = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         from volume_delete import VolumeDelete
         with APIVersion(8.0):
@@ -191,13 +192,13 @@ class TestVolumeDelete(object):
 class TestPurgeVolumes(object):
 
     def test_negative_VolumePurgeSearchFailure(self):
-        print
+        print()
         from volume_purge import VolumePurge
         with APIFailure("ListDeletedVolumes"):
             assert not VolumePurge()
 
     def test_negative_VolumePurgeFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_delete import VolumeDelete
         assert VolumeDelete(volume_ids=volume_ids,
@@ -207,7 +208,7 @@ class TestPurgeVolumes(object):
             assert not VolumePurge()
 
     def test_negative_VolumePurgeFailurePreFluorine(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_delete import VolumeDelete
         assert VolumeDelete(volume_ids=volume_ids,
@@ -218,7 +219,7 @@ class TestPurgeVolumes(object):
                 assert not VolumePurge()
 
     def test_VolumePurge(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_delete import VolumeDelete
         assert VolumeDelete(volume_ids=volume_ids,
@@ -227,7 +228,7 @@ class TestPurgeVolumes(object):
         assert VolumePurge()
 
     def test_VolumePurgeNoVolumes(self):
-        print
+        print()
         from volume_purge import VolumePurge
         assert VolumePurge()
         assert VolumePurge()
@@ -236,13 +237,13 @@ class TestPurgeVolumes(object):
 class TestVolumeExtend(object):
 
     def test_VolumeExtendNoMatch(self):
-        print
+        print()
         from volume_extend import VolumeExtend
         assert not VolumeExtend(new_size=random.randint(2, 8000),
                                  volume_names=["nomatch", "doesntexist","invalid"])
 
     def test_VolumeExtendTestMode(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_extend import VolumeExtend
         assert VolumeExtend(new_size=random.randint(2, 8000),
@@ -250,7 +251,7 @@ class TestVolumeExtend(object):
                              test=True)
 
     def test_VolumeExtend(self):
-        print
+        print()
         volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["totalSize"] < 200 * 1000 * 1000 * 1000]
         volume_ids = random.sample(volumes, random.randint(2, min(15, len(volumes))))
         from volume_extend import VolumeExtend
@@ -258,7 +259,7 @@ class TestVolumeExtend(object):
                              volume_ids=volume_ids)
 
     def test_negative_VolumeExtendSmaller(self):
-        print
+        print()
         volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["totalSize"] > 1 * 1000 * 1000 * 1000]
         volume_ids = random.sample(volumes, random.randint(2, min(15, len(volumes))))
         from volume_extend import VolumeExtend
@@ -266,7 +267,7 @@ class TestVolumeExtend(object):
                              volume_ids=volume_ids)
 
     def test_VolumeExtendGiB(self):
-        print
+        print()
         volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["totalSize"] < 150 * 1024 * 1024 * 1024]
         volume_ids = random.sample(volumes, random.randint(2, min(15, len(volumes))))
         from volume_extend import VolumeExtend
@@ -275,11 +276,11 @@ class TestVolumeExtend(object):
                              volume_ids=volume_ids)
 
     def test_negative_VolumeExtendFailure(self):
-        print
+        print()
         volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["totalSize"] < 150 * 1000 * 1000 * 1000]
         if len(volumes) < 3:
-            print "small volumes = {}".format(volumes)
-            print "all volumes = {}".format(globalconfig.cluster.ListActiveVolumes({})["volumes"])
+            print("small volumes = {}".format(volumes))
+            print("all volumes = {}".format(globalconfig.cluster.ListActiveVolumes({})["volumes"]))
         volume_ids = random.sample(volumes, random.randint(2, min(15, len(volumes))))
         from volume_extend import VolumeExtend
         with APIFailure("ModifyVolume"):
@@ -287,7 +288,7 @@ class TestVolumeExtend(object):
                                      volume_ids=volume_ids)
 
     def test_negative_VolumeExtendSearchFailure(self):
-        print
+        print()
         volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["totalSize"] < 150 * 1000 * 1000 * 1000]
         volume_ids = random.sample(volumes, random.randint(2, min(15, len(volumes))))
         from volume_extend import VolumeExtend
@@ -299,7 +300,7 @@ class TestVolumeExtend(object):
 class TestVolumeSetQos(object):
 
     def test_VolumeSetQos(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_set_qos import VolumeSetQos
         assert VolumeSetQos(volume_ids=volume_ids,
@@ -308,7 +309,7 @@ class TestVolumeSetQos(object):
                             burst_iops=random.randint(91000,100000))
 
     def test_VolumeSetQosTestMode(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_set_qos import VolumeSetQos
         assert VolumeSetQos(volume_ids=volume_ids,
@@ -317,7 +318,7 @@ class TestVolumeSetQos(object):
                             burst_iops=random.randint(91000,100000))
 
     def test_VolumeSetQosNoMatch(self):
-        print
+        print()
         from volume_set_qos import VolumeSetQos
         assert not VolumeSetQos(volume_names=["nomatch", "doesntexist","invalid"],
                                 min_iops=random.randint(50, 1000),
@@ -325,7 +326,7 @@ class TestVolumeSetQos(object):
                                 burst_iops=random.randint(91000,100000))
 
     def test_negative_SetVolumeQoSFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_set_qos import VolumeSetQos
         with APIFailure("ModifyVolume"):
@@ -335,7 +336,7 @@ class TestVolumeSetQos(object):
                                     burst_iops=random.randint(91000,100000))
 
     def test_negative_SetVolumeQoSSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_set_qos import VolumeSetQos
         with APIFailure("ListActiveVolumes"):
@@ -345,32 +346,32 @@ class TestVolumeSetQos(object):
 class TestVolumeLock(object):
 
     def test_VolumeLock(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_lock import VolumeLock
         assert VolumeLock(volume_ids=volume_ids)
 
     def test_VolumeLockTestMode(self):
-        print
+        print()
         volume_names = random.sample([vol["name"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_lock import VolumeLock
         assert VolumeLock(volume_names=volume_names,
                              test=True)
 
     def test_VolumeLockNoMatch(self):
-        print
+        print()
         from volume_lock import VolumeLock
         assert not VolumeLock(volume_names=["nomatch", "doesntexist","invalid"])
 
     def test_negative_VolumeLockFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_lock import VolumeLock
         with APIFailure("ModifyVolume"):
             assert not VolumeLock(volume_ids=volume_ids)
 
     def test_negative_VolumeLockSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_lock import VolumeLock
         with APIFailure("ListActiveVolumes"):
@@ -380,32 +381,32 @@ class TestVolumeLock(object):
 class TestVolumeUnlock(object):
 
     def test_VolumeUnlock(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_unlock import VolumeUnlock
         assert VolumeUnlock(volume_ids=volume_ids)
 
     def test_VolumeUnlockTestMode(self):
-        print
+        print()
         volume_names = random.sample([vol["name"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_unlock import VolumeUnlock
         assert VolumeUnlock(volume_names=volume_names,
                              test=True)
 
     def test_VolumeUnlockNoMatch(self):
-        print
+        print()
         from volume_unlock import VolumeUnlock
         assert not VolumeUnlock(volume_names=["nomatch", "doesntexist","invalid"])
 
     def test_negative_VolumeUnlockFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_unlock import VolumeUnlock
         with APIFailure("ModifyVolume"):
             assert not VolumeUnlock(volume_ids=volume_ids)
 
     def test_negative_VolumeUnlockSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_unlock import VolumeUnlock
         with APIFailure("ListActiveVolumes"):
@@ -415,7 +416,7 @@ class TestVolumeUnlock(object):
 class TestVolumeSetAttributes(object):
 
     def test_VolumeSetAttribute(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_set_attribute import VolumeSetAttribute
         assert VolumeSetAttribute(volume_ids=volume_ids,
@@ -423,7 +424,7 @@ class TestVolumeSetAttributes(object):
                                    attribute_value=RandomString(64))
 
     def test_VolumeSetAttributeTestMode(self):
-        print
+        print()
         volume_names = random.sample([vol["name"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_set_attribute import VolumeSetAttribute
         assert VolumeSetAttribute(volume_names=volume_names,
@@ -432,14 +433,14 @@ class TestVolumeSetAttributes(object):
                                    test=True)
 
     def test_VolumeSetAttributeNoMatch(self):
-        print
+        print()
         from volume_set_attribute import VolumeSetAttribute
         assert VolumeSetAttribute(volume_names=["nomatch", "doesntexist","invalid"],
                                    attribute_name=RandomString(32),
                                    attribute_value=RandomString(64))
 
     def test_VolumeSetAttributeFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_set_attribute import VolumeSetAttribute
         with APIFailure("ModifyVolume"):
@@ -448,7 +449,7 @@ class TestVolumeSetAttributes(object):
                                        attribute_value=RandomString(64))
 
     def test_VolumeSetAttributeSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 15))
         from volume_set_attribute import VolumeSetAttribute
         with APIFailure("ListActiveVolumes"):
@@ -460,12 +461,12 @@ class TestVolumeSetAttributes(object):
 class TestGetVolumeIQN(object):
 
     def test_negative_GetVolumeIQNNoVolumeName(self):
-        print
+        print()
         from volume_get_iqn import GetVolumeIQN
         assert not GetVolumeIQN(volume_name=RandomString(random.randint(8, 64)))
 
     def test_negative_GetVolumeIQNNoVolumeID(self):
-        print
+        print()
         volume_ids = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]]
         while True:
             non_id = random.randint(1, 20000)
@@ -476,37 +477,37 @@ class TestGetVolumeIQN(object):
         assert not GetVolumeIQN(volume_id=non_id)
 
     def test_negative_GetVolumeIQNSearchFailure(self):
-        print
+        print()
         from volume_get_iqn import GetVolumeIQN
         with APIFailure("ListActiveVolumes"):
             assert not GetVolumeIQN(volume_name=RandomString(random.randint(1, 64)))
 
     def test_GetVolumeIQN(self):
-        print
+        print()
         volume_name = random.choice([vol["name"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]])
         from volume_get_iqn import GetVolumeIQN
         assert GetVolumeIQN(volume_name=volume_name)
 
     def test_GetVolumeIQNBash(self, capsys):
-        print
+        print()
         volume = random.choice(globalconfig.cluster.ListActiveVolumes({})["volumes"])
         from volume_get_iqn import GetVolumeIQN
         assert GetVolumeIQN(volume_id=volume["volumeID"], output_format="bash")
         out, _ = capsys.readouterr()
         out = out.strip()
-        print out
+        print(out)
         assert len(out.split("\n")) == 1
         assert out.startswith("iqn")
         assert out.endswith("{}.{}".format(volume["name"], volume["volumeID"]))
 
     def test_GetVolumeIQNJson(self, capsys):
-        print
+        print()
         volume = random.choice(globalconfig.cluster.ListActiveVolumes({})["volumes"])
         from volume_get_iqn import GetVolumeIQN
         assert GetVolumeIQN(volume_name=volume["name"], output_format="json")
         out, _ = capsys.readouterr()
         out = out.strip()
-        print out
+        print(out)
         assert len(out.split("\n")) == 1
         import json
         iqn = json.loads(out)["iqn"]
@@ -517,7 +518,7 @@ class TestGetVolumeIQN(object):
 class TestVolumeClone(object):
 
     def test_negative_VolumeCloneLimitsFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         from volume_clone import VolumeClone
         with APIFailure("GetLimits"):
@@ -525,7 +526,7 @@ class TestVolumeClone(object):
                                     volume_ids=volume_ids)
 
     def test_negative_VolumeCloneNewAccountNoAccount(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         from volume_clone import VolumeClone
         assert not VolumeClone(clone_count=random.randint(2, 5),
@@ -533,7 +534,7 @@ class TestVolumeClone(object):
                                 dest_account_id=9999)
 
     def test_negative_VolumeCloneNewAccountSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         from volume_clone import VolumeClone
         with APIFailure("ListAccounts"):
@@ -542,7 +543,7 @@ class TestVolumeClone(object):
                                     dest_account_id=2)
 
     def test_negative_VolumeCloneVolumeSearchFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         from volume_clone import VolumeClone
         with APIFailure("ListActiveVolumes"):
@@ -550,7 +551,7 @@ class TestVolumeClone(object):
                                     volume_ids=volume_ids)
 
     def test_VolumeCloneTest(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         from volume_clone import VolumeClone
         assert VolumeClone(clone_count=random.randint(2, 5),
@@ -558,7 +559,7 @@ class TestVolumeClone(object):
                             test=True)
 
     def test_negative_VolumeCloneFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         from volume_clone import VolumeClone
         with APIFailure("CloneVolume"):
@@ -566,20 +567,20 @@ class TestVolumeClone(object):
                                     volume_ids=volume_ids)
 
     def test_VolumeClone(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         from volume_clone import VolumeClone
         assert VolumeClone(clone_count=random.randint(2, 5),
                             volume_ids=volume_ids)
 
     def test_VolumeCloneNewAccount(self):
-        print
-        print "all volumes = {}".format(globalconfig.cluster.ListActiveVolumes({})["volumes"])
-        print "all accounts = {}".format(globalconfig.cluster.ListAccounts({})["accounts"])
+        print()
+        print("all volumes = {}".format(globalconfig.cluster.ListActiveVolumes({})["volumes"]))
+        print("all accounts = {}".format(globalconfig.cluster.ListAccounts({})["accounts"]))
         new_account = random.choice([account["accountID"] for account in globalconfig.cluster.ListAccounts({})["accounts"]])
         source_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["accountID"] != new_account]
-        print "new_account = {}".format(new_account)
-        print "source_volumes = {}".format(source_volumes)
+        print("new_account = {}".format(new_account))
+        print("source_volumes = {}".format(source_volumes))
         volume_ids = random.sample(source_volumes, random.randint(1, min(5, len(source_volumes))))
         from volume_clone import VolumeClone
         assert VolumeClone(clone_count=random.randint(2, 5),
@@ -587,7 +588,7 @@ class TestVolumeClone(object):
                             dest_account_id=new_account)
 
     def test_VolumeCloneNewSize(self):
-        print
+        print()
         clone_size = random.randint(800, 2000)
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if vol["totalSize"] < clone_size*1000*1000*1000], random.randint(2, 5))
         from volume_clone import VolumeClone
@@ -599,7 +600,7 @@ class TestVolumeClone(object):
 class TestRemoteRepPauseVolume(object):
 
     def test_negative_RemoteRepPauseVolumeSearchFailure(self):
-        print
+        print()
         paired_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if "volumePairs" in vol and vol["volumePairs"]]
         volume_ids = random.sample(paired_volumes, random.randint(2, min(15, len(paired_volumes)-1)))
         from remoterep_pause_volume import RemoteRepPauseVolume
@@ -607,12 +608,12 @@ class TestRemoteRepPauseVolume(object):
             assert not RemoteRepPauseVolume(volume_ids=volume_ids)
 
     def test_RemoteRepPauseVolumeNoVolumes(self):
-        print
+        print()
         from remoterep_pause_volume import RemoteRepPauseVolume
         assert RemoteRepPauseVolume(volume_prefix="nomatch")
 
     def test_RemoteRepPauseVolumeTestMode(self):
-        print
+        print()
         paired_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if "volumePairs" in vol and vol["volumePairs"]]
         volume_ids = random.sample(paired_volumes, random.randint(2, min(15, len(paired_volumes)-1)))
         from remoterep_pause_volume import RemoteRepPauseVolume
@@ -620,7 +621,7 @@ class TestRemoteRepPauseVolume(object):
                                       test=True)
 
     def test_negative_RemoteRepPauseVolumeFailure(self):
-        print
+        print()
         paired_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if "volumePairs" in vol and vol["volumePairs"]]
         volume_ids = random.sample(paired_volumes, random.randint(2, min(15, len(paired_volumes)-1)))
         from remoterep_pause_volume import RemoteRepPauseVolume
@@ -628,7 +629,7 @@ class TestRemoteRepPauseVolume(object):
             assert not RemoteRepPauseVolume(volume_ids=volume_ids)
 
     def test_RemoteRepPauseVolume(self):
-        print
+        print()
         paired_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if "volumePairs" in vol and vol["volumePairs"]]
         volume_ids = random.sample(paired_volumes, random.randint(2, min(15, len(paired_volumes)-1)))
         from remoterep_pause_volume import RemoteRepPauseVolume
@@ -638,7 +639,7 @@ class TestRemoteRepPauseVolume(object):
 class TestRemoteRepResumeVolume(object):
 
     def test_negative_RemoteRepResumeVolumeSearchFailure(self):
-        print
+        print()
         paired_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if "volumePairs" in vol and vol["volumePairs"]]
         volume_ids = random.sample(paired_volumes, random.randint(2, min(15, len(paired_volumes)-1)))
         from remoterep_resume_volume import RemoteRepResumeVolume
@@ -646,12 +647,12 @@ class TestRemoteRepResumeVolume(object):
             assert not RemoteRepResumeVolume(volume_ids=volume_ids)
 
     def test_RemoteRepResumeVolumeNoVolumes(self):
-        print
+        print()
         from remoterep_resume_volume import RemoteRepResumeVolume
         assert RemoteRepResumeVolume(volume_prefix="nomatch")
 
     def test_RemoteRepResumeVolumeTestMode(self):
-        print
+        print()
         paired_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if "volumePairs" in vol and vol["volumePairs"]]
         volume_ids = random.sample(paired_volumes, random.randint(2, min(15, len(paired_volumes)-1)))
         from remoterep_resume_volume import RemoteRepResumeVolume
@@ -659,7 +660,7 @@ class TestRemoteRepResumeVolume(object):
                                        test=True)
 
     def test_negative_RemoteRepResumeVolumeFailure(self):
-        print
+        print()
         paired_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if "volumePairs" in vol and vol["volumePairs"]]
         volume_ids = random.sample(paired_volumes, random.randint(2, min(15, len(paired_volumes)-1)))
         from remoterep_resume_volume import RemoteRepResumeVolume
@@ -667,7 +668,7 @@ class TestRemoteRepResumeVolume(object):
             assert not RemoteRepResumeVolume(volume_ids=volume_ids)
 
     def test_RemoteRepResumeVolume(self):
-        print
+        print()
         paired_volumes = [vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"] if "volumePairs" in vol and vol["volumePairs"]]
         volume_ids = random.sample(paired_volumes, random.randint(2, min(15, len(paired_volumes)-1)))
         from remoterep_resume_volume import RemoteRepResumeVolume
@@ -677,7 +678,7 @@ class TestRemoteRepResumeVolume(object):
 class TestForceWoleSync(object):
 
     def test_VolumeForceWholeSyncWait(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         
         from volume_force_whole_sync import VolumeForceWholeSync
@@ -685,7 +686,7 @@ class TestForceWoleSync(object):
                               wait=True)
 
     def test_VolumeForceWholeSyncNoWait(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         
         from volume_force_whole_sync import VolumeForceWholeSync
@@ -693,21 +694,21 @@ class TestForceWoleSync(object):
                               wait=False)
 
     def test_negative_NoVolumes(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         
         from volume_force_whole_sync import VolumeForceWholeSync
         assert not VolumeForceWholeSync(volume_ids=999999)
 
     def test_negative_NoMatch(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         
         from volume_force_whole_sync import VolumeForceWholeSync
         assert VolumeForceWholeSync(volume_regex="nomatch")
 
     def test_TestMode(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         
         from volume_force_whole_sync import VolumeForceWholeSync
@@ -715,7 +716,7 @@ class TestForceWoleSync(object):
                               test=True)
 
     def test_negative_APIFailure(self):
-        print
+        print()
         volume_ids = random.sample([vol["volumeID"] for vol in globalconfig.cluster.ListActiveVolumes({})["volumes"]], random.randint(2, 5))
         
         from volume_force_whole_sync import VolumeForceWholeSync

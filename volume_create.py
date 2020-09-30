@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will create volumes for an account
@@ -8,29 +8,49 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType, NameOrID, PositiveNonZeroIntegerType, PositiveIntegerType, OptionalValueType, SolidFireBurstIOPSType, SolidFireMaxIOPSType, SolidFireMinIOPSType, BoolType, SolidFireIDType
+from libsf.util import ValidateAndDefault, StrType, IPv4AddressType, NameOrID, PositiveNonZeroIntegerType, PositiveIntegerType, OptionalValueType, SolidFireBurstIOPSType, SolidFireMaxIOPSType, SolidFireMinIOPSType, BoolType, SolidFireIDType
 from libsf import sfdefaults
 from libsf import SolidFireError, UnknownObjectError
 import time
 
 @logargs
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "volume_size" : (PositiveNonZeroIntegerType, None),
+    "volume_prefix" : (OptionalValueType(StrType), None),
+    "volume_name" : (OptionalValueType(StrType), None),
+    "volume_count" : (PositiveNonZeroIntegerType, None),
+    "volume_start" : (PositiveNonZeroIntegerType, 1),
+    "min_iops" : (SolidFireMinIOPSType, sfdefaults.min_iops),
+    "max_iops" : (SolidFireMaxIOPSType, sfdefaults.max_iops),
+    "burst_iops" : (SolidFireBurstIOPSType, sfdefaults.burst_iops),
+    "enable512e" : (BoolType, False),
+    "account_name" : (OptionalValueType(StrType), None),
+    "account_id" : (OptionalValueType(SolidFireIDType), None),
+    "gib" : (BoolType, False),
+    "create_single" : (BoolType, False),
+    "wait" : (PositiveIntegerType, 0),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
 def VolumeCreate(volume_size,
-                 volume_prefix=None,
-                 volume_name=None,
-                 volume_count=0,
-                 volume_start=1,
-                 min_iops=100,
-                 max_iops=100000,
-                 burst_iops=100000,
-                 enable512e=False,
-                 account_name=None,
-                 account_id=None,
-                 gib=False,
-                 create_single=False,
-                 wait=0,
-                 mvip=sfdefaults.mvip,
-                 username=sfdefaults.username,
-                 password=sfdefaults.password):
+                 volume_prefix,
+                 volume_name,
+                 volume_count,
+                 volume_start,
+                 min_iops,
+                 max_iops,
+                 burst_iops,
+                 enable512e,
+                 account_name,
+                 account_id,
+                 gib,
+                 create_single,
+                 wait,
+                 mvip,
+                 username,
+                 password):
     """
     Create volumes
 
@@ -54,33 +74,7 @@ def VolumeCreate(volume_size,
         password:           the admin password of the cluster
     """
     log = GetLogger()
-
-    # Validate args
     NameOrID(account_name, account_id, "account")
-    allargs = ValidateArgs(locals(), {
-        "volume_size" : PositiveNonZeroIntegerType,
-        "volume_prefix" : OptionalValueType(str),
-        "volume_name" : OptionalValueType(str),
-        "volume_count" : PositiveNonZeroIntegerType,
-        "volume_start" : PositiveNonZeroIntegerType,
-        "min_iops" : SolidFireMinIOPSType,
-        "max_iops" : SolidFireMaxIOPSType,
-        "burst_iops" : SolidFireBurstIOPSType,
-        "enable512e" : BoolType,
-        "account_name" : OptionalValueType(str),
-        "account_id" : OptionalValueType(SolidFireIDType),
-        "gib" : BoolType,
-        "create_single" : BoolType,
-        "wait" : OptionalValueType(PositiveIntegerType),
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
-    # Update locals now that they are validated and typed
-    for argname in allargs.keys():
-        #pylint: disable=exec-used
-        exec("{argname} = allargs['{argname}']".format(argname=argname)) in globals(), locals()
-        #pylint: enable=exec-used
 
     cluster = SFCluster(mvip, username, password)
 

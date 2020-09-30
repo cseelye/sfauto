@@ -1,14 +1,14 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #pylint: disable=protected-access
 
 import random
 import string
 
 def RandomString(length):
-    return "".join(random.choice(string.ascii_letters + string.digits) for i in xrange(length))
+    return "".join(random.choice(string.ascii_letters + string.digits) for i in range(length))
 
 def RandomIQN():
-    return "iqn.{}.{}.{}.{}:{}".format("".join(random.choice(string.digits) for i in xrange(4)),
+    return "iqn.{}.{}.{}.{}:{}".format("".join(random.choice(string.digits) for i in range(4)),
                                        RandomString(3),
                                        RandomString(8),
                                        RandomString(3),
@@ -27,7 +27,7 @@ def RandomIP():
 def RandomSequence(length, distinctFrom=None):
     distinct_from = distinctFrom or []
     seq = []
-    for _ in xrange(length):
+    for _ in range(length):
         while True:
             el = random.randint(1, length * 1000)
             if el not in seq and el not in distinct_from:

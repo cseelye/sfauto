@@ -1,0 +1,10 @@
+{
+    "files.exclude": {
+        "**/*.pyc": true
+    },
+    "outline.showEnumMembers": false,
+    "outline.showBooleans": false,
+    "outline.showArrays": false,
+    "outline.showVariables": false,
+    "python.pythonPath": "/usr/bin/python3"
+}

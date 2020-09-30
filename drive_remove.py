@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will remove active drives from the cluster
@@ -58,7 +58,7 @@ def DriveRemove(node_ips,
     except SolidFireError as e:
         log.error("Failed to list nodes: {}".format(e))
         return False
-    if not all({ip: ip in nodeip2nodeid.keys() for ip in node_ips}.values()):
+    if not all({ip: ip in list(nodeip2nodeid.keys()) for ip in node_ips}.values()):
         log.error("Could not find all node IPs in cluster")
         return False
 

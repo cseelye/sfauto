@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will change the LUN assignments for volumes in a volume access group
@@ -14,20 +14,31 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, NameOrID, IPv4AddressType, SelectionType, OptionalValueType, IntegerRangeType
+from libsf.util import ValidateAndDefault, NameOrID, IPv4AddressType, SelectionType, OptionalValueType, SolidFireIDType, IntegerRangeType, StrType
 from libsf import sfdefaults
 from libsf import SolidFireError, UnknownObjectError, InvalidArgumentError
 import random
 
 @logargs
-def ModifyVolgroupLunAssignments(method='seq',
-                                 lun_min=0,
-                                 lun_max=16383,
-                                 volgroup_name=None,
-                                 volgroup_id=0,
-                                 mvip=sfdefaults.mvip,
-                                 username=sfdefaults.username,
-                                 password=sfdefaults.password):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "method" : (SelectionType(sfdefaults.all_numbering_types), sfdefaults.all_numbering_types[0]),
+    "lun_min" : (OptionalValueType(IntegerRangeType(0, 16383)), 0),
+    "lun_max" : (OptionalValueType(IntegerRangeType(0, 16383)), 16383),
+    "volgroup_name" : (OptionalValueType(StrType), None),
+    "volgroup_id" : (OptionalValueType(SolidFireIDType), None),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
+def ModifyVolgroupLunAssignments(method,
+                                 lun_min,
+                                 lun_max,
+                                 volgroup_name,
+                                 volgroup_id,
+                                 mvip,
+                                 username,
+                                 password):
 
     """
     Renumber LUNS in the specified volume access group
@@ -36,14 +47,6 @@ def ModifyVolgroupLunAssignments(method='seq',
 
     # Validate args
     NameOrID(volgroup_name, volgroup_id, "volume group")
-    ValidateArgs(locals(), {
-        "method" : SelectionType(sfdefaults.all_numbering_types),
-        "lun_min" : OptionalValueType(IntegerRangeType(0, 16383)),
-        "lun_max" : OptionalValueType(IntegerRangeType(0, 16383)),
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None,
-    })
     if lun_max < lun_min:
         raise InvalidArgumentError("lun_min must be <= lun_max")
 
@@ -89,7 +92,7 @@ def ModifyVolgroupLunAssignments(method='seq',
             lun_assignments.append({'volumeID' : volume_id, 'lun' : lun})
             lun -= 1
     elif method == 'rand':
-        luns = range(lun_min, lun_max+1)
+        luns = list(range(lun_min, lun_max+1))
         random.shuffle(luns)
         for i, volume_id in enumerate(volgroup.volumes):
             lun_assignments.append({'volumeID' : volume_id, 'lun' : luns[i]})

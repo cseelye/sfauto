@@ -1,7 +1,8 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #pylint: skip-file
 
 #import multiprocessing
+from __future__ import print_function
 import os
 import pytest
 import subprocess
@@ -14,7 +15,7 @@ def test_pylint_scripts(scriptfiles_parametrize):
     stdout, stderr = process.communicate()
     retcode = process.returncode
     if retcode != 0 and stdout:
-        print stdout
+        print(stdout)
 
     # pylint return codes are a bitmap of:
     # 0 : no errors
@@ -34,7 +35,7 @@ def test_pylint_libs(libfiles_parametrize):
     stdout, stderr = process.communicate()
     retcode = process.returncode
     if retcode != 0 and stdout:
-        print stdout
+        print(stdout)
 
     # pylint return codes are a bitmap of:
     # 0 : no errors

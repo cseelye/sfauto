@@ -1,9 +1,10 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """This module provides utility classes and functions for threading/multiprocessing"""
 
+from __future__ import print_function
 from .logutil import GetLogger
 from . import sfdefaults as _sfdefaults
-from . import SolidFireError, TimeoutError
+from . import SolidFireError, SFTimeoutError
 
 import fcntl as _fcntl
 import functools as _functools
@@ -12,6 +13,7 @@ import multiprocessing.pool as _multiprocessing_pool
 import sys as _sys
 import threading as _threading
 import traceback as _traceback
+from io import open
 
 # Helpful multiprocessing debug for threadpools
 # from logging import DEBUG as _DEBUG_LEVEL
@@ -76,7 +78,7 @@ class AsyncResult(object):
         try:
             return self.result.get(timeout)
         except _multiprocessing.TimeoutError as e:
-            raise TimeoutError("Timeout waiting for thread to complete", innerException=e)
+            SFTimeoutError("Timeout waiting for thread to complete", innerException=e)
 
     def Wait(self, timeout):
         """
@@ -174,7 +176,7 @@ def threadwrapper(func):
         try:
             return func(*args, **kwargs)
         except (KeyboardInterrupt, SystemExit):
-            print "KeyboardInterrupt/SystemExit in thread {}".format(_threading.current_thread().name)
+            print("KeyboardInterrupt/SystemExit in thread {}".format(_threading.current_thread().name))
             raise
         except:
             # For exceptions from child threads/processes, we want to extract and store the original traceback, otherwise it may
@@ -186,14 +188,14 @@ def threadwrapper(func):
                 ex_val.originalTraceback = str_tb
                 raise
             log = GetLogger()
-            log.debug(_traceback.format_exc(ex_val))
-            raise SolidFireError, ("{}: {}".format(ex_type.__name__, ex_val), str_tb), ex_tb
+            log.debug(str_tb)
+            raise SolidFireError("{}: {}".format(ex_type.__name__, ex_val), str_tb)
         finally:
             _threading.current_thread().name = orig_name
 
     return wrapper
 
-class LockFile:
+class LockFile(object):
     def __init__(self, lockname):
         self.lockFile = "/var/tmp/{}.lockfile".format(lockname)
         self.fd = open(self.lockFile, "w")

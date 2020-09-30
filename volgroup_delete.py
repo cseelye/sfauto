@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will delete a volume access group
@@ -8,17 +8,26 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, NameOrID, IPv4AddressType
+from libsf.util import ValidateAndDefault, NameOrID, IPv4AddressType, StrType, OptionalValueType, SolidFireIDType, BoolType
 from libsf import sfdefaults
 from libsf import SolidFireError, UnknownObjectError
 
 @logargs
-def DeleteVolgroup(volgroup_name=None,
-                     volgroup_id=0,
-                     strict=False,
-                     mvip=sfdefaults.mvip,
-                     username=sfdefaults.username,
-                     password=sfdefaults.password):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "volgroup_name" : (OptionalValueType(StrType), None),
+    "volgroup_id" : (OptionalValueType(SolidFireIDType), None),
+    "strict" : (BoolType, False),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
+def DeleteVolgroup(volgroup_name,
+                   volgroup_id,
+                   strict,
+                   mvip,
+                   username,
+                   password):
     """
     Delete a volume access group
 
@@ -31,14 +40,7 @@ def DeleteVolgroup(volgroup_name=None,
         password:       the admin password of the cluster
     """
     log = GetLogger()
-
-    # Validate args
     NameOrID(volgroup_name, volgroup_id, "volume group")
-    ValidateArgs(locals(), {
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None,
-    })
 
     # Find the group
     log.info("Searching for volume groups")

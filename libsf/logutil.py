@@ -1,8 +1,9 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 """Ready to use logging"""
 
 #pylint: disable=protected-access
 
+from __future__ import print_function
 import functools
 import logging
 import logging.handlers
@@ -10,6 +11,7 @@ import multiprocessing
 import os
 import platform
 import re
+import six
 import socket
 import sys
 import threading
@@ -188,7 +190,7 @@ class MultiFormatter(logging.Formatter):
 
     def format(self, record):
         # Trim any trailing whitespace
-        if isinstance(record.msg, basestring):
+        if isinstance(record.msg, six.string_types):
             record.msg = record.msg.rstrip()
             if not record.msg:
                 record.msg = "  <empty msg>"
@@ -262,7 +264,7 @@ class MultiFormatter(logging.Formatter):
         lines = []
         remain = str(message)
         while len(remain) > length:
-            index = str.rfind(remain, ' ', 0, length)
+            index = remain.rfind(' ', 0, length)
             if index <= 0:
                 index = length - 1
             lines.append(remain[:index])
@@ -272,7 +274,7 @@ class MultiFormatter(logging.Formatter):
 
 class FormatOptions(object):
     """Enumerated list of formatting options"""
-    NONE, TIME, LEVEL = (2**x for x in xrange(3))
+    NONE, TIME, LEVEL = (2**x for x in range(3))
 
     # Map format enums to format strings
     formatMap = {
@@ -288,7 +290,7 @@ class PrintLogger(object):
     #pylint: disable=unused-argument
     def printer(self, *args, **kwargs):
         if args:
-            print args[0]
+            print(args[0])
     #pylint: enable=unused-argument
     def __getattr__(self, name):
         return self.printer
@@ -337,7 +339,7 @@ def logargs(func):
         if args and kwargs:
             msg += ", "
         if kwargs:
-            msg += ", ".join(["{}={}".format(name, val) for name, val in kwargs.iteritems()])
+            msg += ", ".join(["{}={}".format(name, val) for name, val in kwargs.items()])
         msg += ")"
         log.debug2(msg)
         return func(*args, **kwargs)
@@ -378,8 +380,8 @@ def GetLogger(name="sfauto", logConfig=None):
     if not logConfig:
         logConfig = defaultConfig
     else:
-        for key, value in defaultConfig.iteritems():
-            if key not in logConfig.keys():
+        for key, value in defaultConfig.items():
+            if key not in list(logConfig.keys()):
                 logConfig[key] = value
 
     logging.raiseExceptions = False
@@ -393,7 +395,7 @@ def GetLogger(name="sfauto", logConfig=None):
         return sflog
 
     # Add the custom log levels to the logger
-    for name, level in vars(CustomLogLevels).iteritems():
+    for name, level in vars(CustomLogLevels).items():
         if name.startswith("_"):
             continue
         logging.addLevelName(name, level)

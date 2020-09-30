@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will resume replication on a list of volumes
@@ -12,6 +12,7 @@ from libsf.util import ValidateAndDefault, StrType, IPv4AddressType, BoolType, O
 from libsf import sfdefaults
 from libsf import threadutil
 from libsf import SolidFireError, UnknownObjectError
+import six
 
 @logargs
 @ValidateAndDefault({
@@ -68,7 +69,7 @@ def RemoteRepResumeVolume(volume_names,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    replicating_volumes = [vol for vol in match_volumes.itervalues() if "volumePairs" in vol and vol["volumePairs"]]
+    replicating_volumes = [vol for vol in six.itervalues(match_volumes) if "volumePairs" in vol and vol["volumePairs"]]
 
     if len(replicating_volumes) <= 0:
         log.warning("No matching volumes")

@@ -1,9 +1,10 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 import multiprocessing
 import os
-import cPickle as pickle
+import six.moves.cPickle as pickle
 import threading
+from io import open
 
 class MultiprocessDatastore(object):
 

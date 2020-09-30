@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will delete a list of volumes
@@ -8,23 +8,38 @@ from libsf.apputil import PythonApp
 from libsf.argutil import SFArgumentParser, GetFirstLine, SFArgFormatter
 from libsf.logutil import GetLogger, logargs
 from libsf.sfcluster import SFCluster
-from libsf.util import ValidateArgs, IPv4AddressType, OptionalValueType, BoolType, ItemList, SolidFireIDType, PositiveIntegerType
+from libsf.util import ValidateAndDefault, IPv4AddressType, OptionalValueType, ItemList, SolidFireIDType, PositiveIntegerType, BoolType, StrType
 from libsf import sfdefaults
 from libsf import SolidFireError, UnknownObjectError
 
 @logargs
-def VolumeDelete(volume_names=None,
-                  volume_ids=None,
-                  volume_prefix=None,
-                  volume_regex=None,
-                  volume_count=0,
-                  source_account=None,
-                  source_account_id=None,
-                  test=False,
-                  purge=False,
-                  mvip=sfdefaults.mvip,
-                  username=sfdefaults.username,
-                  password=sfdefaults.password):
+@ValidateAndDefault({
+    # "arg_name" : (arg_type, arg_default)
+    "volume_names" : (OptionalValueType(ItemList(StrType, allowEmpty=True)), None),
+    "volume_ids" : (OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)), None),
+    "volume_prefix" : (OptionalValueType(StrType), None),
+    "volume_regex" : (OptionalValueType(StrType), None),
+    "volume_count" : (OptionalValueType(PositiveIntegerType), None),
+    "source_account" : (OptionalValueType(StrType), None),
+    "source_account_id" : (OptionalValueType(SolidFireIDType), None),
+    "test" : (BoolType, False),
+    "purge" : (BoolType, False),
+    "mvip" : (IPv4AddressType, sfdefaults.mvip),
+    "username" : (StrType, sfdefaults.username),
+    "password" : (StrType, sfdefaults.password),
+})
+def VolumeDelete(volume_names,
+                  volume_ids,
+                  volume_prefix,
+                  volume_regex,
+                  volume_count,
+                  source_account,
+                  source_account_id,
+                  test,
+                  purge,
+                  mvip,
+                  username,
+                  password):
     """
     Delete volumes from the cluster
 
@@ -44,27 +59,6 @@ def VolumeDelete(volume_names=None,
     """
     log = GetLogger()
 
-    # Validate args
-    allargs = ValidateArgs(locals(), {
-        "volume_names" : OptionalValueType(ItemList(str, allowEmpty=True)),
-        "volume_ids" : OptionalValueType(ItemList(SolidFireIDType, allowEmpty=True)),
-        "volume_prefix" : OptionalValueType(str),
-        "volume_regex" : OptionalValueType(str),
-        "volume_count" : OptionalValueType(PositiveIntegerType),
-        "source_account" : OptionalValueType(str),
-        "source_account_id" : OptionalValueType(SolidFireIDType),
-        "test" : BoolType,
-        "purge" : BoolType,
-        "mvip" : IPv4AddressType,
-        "username" : None,
-        "password" : None
-    })
-    # Update locals now that they are validated and typed
-    for argname in allargs.keys():
-        #pylint: disable=exec-used
-        exec("{argname} = allargs['{argname}']".format(argname=argname)) in globals(), locals()
-        #pylint: enable=exec-used
-
     cluster = SFCluster(mvip, username, password)
 
     # Get a list of volumes to delete
@@ -77,24 +71,24 @@ def VolumeDelete(volume_names=None,
         log.error("Failed to search for volumes: {}".format(e))
         return False
 
-    if len(match_volumes.keys()) <= 0:
+    if len(list(match_volumes.keys())) <= 0:
         log.warning("No matching volumes")
         return True
 
-    log.info("{} volumes will be deleted: {}".format(len(match_volumes.keys()), ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
+    log.info("{} volumes will be deleted: {}".format(len(list(match_volumes.keys())), ",".join(sorted([vol["name"] for vol in match_volumes.values()]))))
 
     if test:
         log.warning("Test option set; volumes will not be deleted")
         return True
 
-    log.info("Deleting {} volumes...".format(len(match_volumes.keys())))
+    log.info("Deleting {} volumes...".format(len(list(match_volumes.keys()))))
     try:
-        cluster.DeleteVolumes(volumeIDs=match_volumes.keys(), purge=purge)
+        cluster.DeleteVolumes(volumeIDs=list(match_volumes.keys()), purge=purge)
     except SolidFireError as e:
         log.error("Failed to delete volumes: {}".format(e))
         return False
 
-    log.passed("Successfully deleted {} volumes".format(len(match_volumes.keys())))
+    log.passed("Successfully deleted {} volumes".format(len(list(match_volumes.keys()))))
     return True
 
 if __name__ == '__main__':

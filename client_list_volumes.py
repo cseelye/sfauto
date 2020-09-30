@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will show the volumes connected to a client
@@ -12,6 +12,7 @@ from libsf import sfdefaults
 from libsf import SolidFireError
 import json
 import sys
+import six
 
 @logargs
 @ValidateAndDefault({
@@ -48,16 +49,16 @@ def GetClientVolumes(client_ip,
         return False
 
     if output_format and output_format == "bash":
-        sys.stdout.write(" ".join([volume["iqn"] for volume in volumes.itervalues()]) + "\n")
+        sys.stdout.write(" ".join([volume["iqn"] for volume in six.itervalues(volumes)]) + "\n")
         sys.stdout.flush()
     elif output_format and output_format == "json":
         sys.stdout.write(json.dumps({"volumes" : volumes}) + "\n")
         sys.stdout.flush()
     else:
-        log.info("Found {} iSCSI volumes on {}".format(len(volumes.keys()), client.hostname))
-        for _, volume in sorted(volumes.iteritems(), key=lambda (k, v): v[sort]):
+        log.info("Found {} iSCSI volumes on {}".format(len(list(volumes.keys())), client.hostname))
+        for _, volume in sorted(six.iteritems(volumes), key=lambda vol: vol[1][sort]):
             for key in ["sid", "state"]:
-                if key not in volume.keys():
+                if key not in list(volume.keys()):
                     volume[key] = "unknown"
             log.info("   {} -> {}, SID: {}, SectorSize: {}, Portal: {}, State: {}".format(volume["iqn"], volume["device"], volume["sid"], volume["sectors"], volume["portal"], volume["state"]))
 

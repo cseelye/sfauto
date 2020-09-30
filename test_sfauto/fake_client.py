@@ -1,6 +1,7 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #pylint: skip-file
 
+from __future__ import print_function
 from .testutil import RandomString, RandomIP, RandomSequence
 from . import globalconfig
 from libsf import shellutil, netutil
@@ -11,6 +12,7 @@ import random
 import re
 import string
 import threading
+import six
 
 def FakeShellCommand(command, timeout=1800):
     """Intercept local shell commands to inject responses"""
@@ -176,7 +178,7 @@ class FakeClientRegister(object):
 
     def GetClientIPs(self):
         with self.lock:
-            return copy.deepcopy(self.clients.keys())
+            return copy.deepcopy(list(self.clients.keys()))
 
     def CreateClient(self, hostname=None, ipAddress=None, osType=None, osDistro=None):
         with self.lock:
@@ -238,7 +240,7 @@ class FakeClientRegister(object):
         with self.lock:
             keys = [CLIENT_ALL, clientIP]
             for key in keys:
-                if key in self.commandErrors.keys():
+                if key in list(self.commandErrors.keys()):
                     for comm in self.commandErrors[key].keys():
                         if comm == command:
                             return self.commandErrors[key][comm]
@@ -387,7 +389,7 @@ class FakeClient(object):
             self.portal = RandomIP()
             volume_ids = RandomSequence(volumeCount)
             cluster_id = RandomString(4).lower()
-            for idx in xrange(1, volumeCount+1):
+            for idx in range(1, volumeCount+1):
                 iqn = "iqn.2010-01.com.solidfire:{}.v-{:0>5d}.{}".format(cluster_id, volume_ids[idx-1], volume_ids[idx-1])
 
                 device = self.GetNextDiskName()
@@ -408,7 +410,7 @@ class FakeClient(object):
         volume_ids = RandomSequence(volumeCount)
         cluster_id = RandomString(4).lower()
         if volumeCount > 0:
-            for idx in xrange(1, volumeCount+1):
+            for idx in range(1, volumeCount+1):
                 iqn = "iqn.2010-01.com.solidfire:{}.v-{:0>5d}.{}".format(cluster_id, volume_ids[idx-1], volume_ids[idx-1])
                 self.fakeDiscovery.append(iqn)
         globalconfig.clients.UpdateClient(self.ip, self)
@@ -453,9 +455,9 @@ class FakeClient(object):
 
     def set_chap_username(self, command):
         m = re.search(r"sed 's/#\*\\s\*discovery\\\.sendtargets\\\.auth\\\.username\\s\*=\.\*/discovery\\\.sendtargets\\\.auth\\\.username = (\S+)/g", command)
-        print "CALL TO SET CHAP USERNAME"
+        print("CALL TO SET CHAP USERNAME")
         if m:
-            print "SETTING CHAP USERNAME"
+            print("SETTING CHAP USERNAME")
             self.chapUsername = m.group(1)
             globalconfig.clients.UpdateClient(self.ip, self)
         return (0, "", "")
@@ -468,7 +470,7 @@ class FakeClient(object):
         return (0, "", "")
 
     def iscsiadm_discovery(self, command):
-        m = re.search("iscsiadm -m discovery -t sendtargets -p (\S+)", command)
+        m = re.search(r"iscsiadm -m discovery -t sendtargets -p (\S+)", command)
         if m:
             self.portal = m.group(1)
             self.discoveredTargets = []
@@ -511,7 +513,7 @@ class FakeClient(object):
         m = re.search(r"iscsiadm -m node -l -T (\S+)", command)
         if m:
             target_iqn = m.group(1)
-            for iqn in self.volumes.itervalues():
+            for iqn in six.itervalues(self.volumes):
                 if iqn == target_iqn:
                     return (0, "", "")
 
@@ -535,7 +537,7 @@ class FakeClient(object):
 
         idx = 1
         session_details = []
-        for device, iqn in self.volumes.iteritems():
+        for device, iqn in self.volumes.items():
             session_details.append("Target: {}".format(iqn))
             session_details.append("        Current Portal: {}:3260,1".format(self.portal))
             session_details.append("        Persistent Portal: {}:3260,1".format(self.portal))

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 """
 This action will count the number of drives in the given state and compare to the expected number
@@ -17,7 +17,7 @@ from libsf import SolidFireError
 @ValidateAndDefault({
     "expected" : (CountType(allowZero=True), None),
     "state" : (SelectionType(sfdefaults.all_drive_states), None),
-    "compare" : (SelectionType(sfdefaults.all_compare_ops.keys()), "eq"),
+    "compare" : (SelectionType(list(sfdefaults.all_compare_ops.keys())), "eq"),
     "mvip" : (IPv4AddressType, sfdefaults.mvip),
     "username" : (StrType, sfdefaults.username),
     "password" : (StrType, sfdefaults.password),
