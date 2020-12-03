@@ -6,6 +6,7 @@ from .logutil import GetLogger
 from . import sfdefaults as _sfdefaults
 from . import SolidFireError, SFTimeoutError
 
+import atexit
 import fcntl as _fcntl
 import functools as _functools
 import multiprocessing as _multiprocessing
@@ -109,6 +110,7 @@ class ThreadPool(object):
         else:
             self.threadPool = _multiprocessing_pool.ThreadPool(processes=maxThreads)
         self.results = []
+        atexit.register(self.threadPool.close)
 
     def Post(self, threadFunc, *args, **kwargs):
         """
