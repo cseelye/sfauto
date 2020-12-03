@@ -591,9 +591,9 @@ class SolidFireAPI(object):
         except AttributeError:
             pass
 
-        api_call = json.dumps({'method': methodName, 'params': methodParams, 'id': self._GetReqid()})
+        api_call = json.dumps({'method': methodName, 'params': methodParams, 'id': self._GetReqid()}).encode()
         request = six.moves.urllib.request.Request(endpoint, api_call)
-        request.add_header('Content-Type', 'application/json-rpc')
+        request.add_header('Content-Type', b'application/json-rpc')
         request.add_header('Authorization', b"Basic " + base64.b64encode('{}:{}'.format(self.username, self.password).encode()).strip())
 
         self.log.debug('API call {} on {}'.format(api_call, endpoint))
